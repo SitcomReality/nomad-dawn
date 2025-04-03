@@ -1,5 +1,5 @@
 import InputManager from './InputManager.js';
-import Renderer from './Renderer.js';
+import Renderer from '../rendering/Renderer.js';
 import World from '../world/World.js';
 import EntityManager from '../entities/EntityManager.js';
 import Player from '../entities/Player.js';

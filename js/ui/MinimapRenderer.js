@@ -31,7 +31,7 @@ export default class MinimapRenderer {
         this.ctx = this.minimapCanvas.getContext('2d');
     }
 
-    render(world, player, entities, camera, canvasWidth, canvasHeight) {
+    render(world, player, entities, camera) {
         if (!this.ctx || !world || !player || !camera) return;
 
         const mCtx = this.ctx;
@@ -123,14 +123,14 @@ export default class MinimapRenderer {
         }
 
         // Draw player view area (camera frustum representation)
-        const viewWidth = canvasWidth / camera.zoom * minimapScale;
-        const viewHeight = canvasHeight / camera.zoom * minimapScale;
+        const viewWidth = 1 / camera.zoom * minimapSize * minimapScale;
+        const viewHeight = 1 / camera.zoom * minimapSize * minimapScale;
 
         mCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         mCtx.lineWidth = 1;
         mCtx.strokeRect(
-            centerX - viewWidth / 2,
-            centerY - viewHeight / 2,
+            minimapSize / 2 - viewWidth / 2,
+            minimapSize / 2 - viewHeight / 2,
             viewWidth,
             viewHeight
         );
@@ -144,9 +144,9 @@ export default class MinimapRenderer {
         mCtx.textAlign = 'center';
         mCtx.textBaseline = 'middle';
 
-        mCtx.fillText('N', centerX, 8);
-        mCtx.fillText('S', centerX, minimapSize - 8);
-        mCtx.fillText('W', 8, centerY);
-        mCtx.fillText('E', minimapSize - 8, centerY);
+        mCtx.fillText('N', minimapSize / 2, 8);
+        mCtx.fillText('S', minimapSize / 2, minimapSize - 8);
+        mCtx.fillText('W', 8, minimapSize / 2);
+        mCtx.fillText('E', minimapSize - 8, minimapSize / 2);
     }
 }
