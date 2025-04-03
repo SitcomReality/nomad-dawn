@@ -401,13 +401,16 @@ export default class Game {
             
             // Update debug stats
             if (this.debug) {
+                 // Check if performance.memory exists before trying to access it
+                 const memoryUsage = performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : 'N/A';
+
                  this.debug.updateStats({
                     fps: fps || 0,
                     frameTime: averageFrameTime ? averageFrameTime.toFixed(2) : '0.00',
                     entityCount: this.entities ? this.entities.count() : 0,
                     playerPosition: this.player ? `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : 'N/A',
-                    memory: performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : 'N/A',
-                    activeChunks: this.world ? this.world.activeChunkIds.size : 'N/A'
+                    memory: memoryUsage, // Use the checked value
+                    activeChunks: this.world ? this.world.chunkManager.activeChunkIds.size : 'N/A' // Access via chunkManager
                 });
             }
             
