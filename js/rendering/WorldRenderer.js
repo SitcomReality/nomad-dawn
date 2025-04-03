@@ -121,21 +121,26 @@ export default class WorldRenderer {
 
         // --- Shadow Rendering (using new logic) ---
         const light = this.renderer.lightingSystem;
-        const drawSize = spriteDrawScaleFactor * baseScreenSize; // Use final draw size for shadow scale
+        // Use final draw size for shadow scale consistency
+        const drawSize = finalDrawWidth; 
 
         if (light.enabled && light.shadowVisibility > 0 && obj.collides !== false) {
             const shadowAlpha = 0.3 * light.shadowVisibility; // Fade shadow with visibility
 
             // Base shadow size & position calculation
-            const baseShadowDisplacement = drawSize * 0.3;
-            const baseVerticalOffset = drawSize * 0.1; // Default slight downward offset
+            // Double horizontal displacement for longer shadows
+            const baseShadowDisplacement = drawSize * 0.6;
+            // Reduce base vertical offset (move shadow up slightly at midday)
+            const baseVerticalOffset = drawSize * 0.075;
+            // Keep additional offset based on factor
             const additionalVerticalOffset = drawSize * 0.1 * light.shadowVerticalOffsetFactor; // Lower at dawn/dusk
             const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * baseShadowDisplacement;
             const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
             // Shadow shape calculation
-            const baseWidthRadius = drawSize * 0.3; // Base radius at noon
-            const baseHeightRadius = drawSize * 0.25; // Base radius at noon
+            const baseWidthRadius = drawSize * 0.3; // Base width radius at noon
+            const baseHeightRadius = drawSize * 0.25; // Base height radius at noon
+            // Use factors calculated in Renderer
             const shadowWidth = baseWidthRadius * light.shadowWidthFactor;
             const shadowHeight = baseHeightRadius * light.shadowHeightFactor;
 

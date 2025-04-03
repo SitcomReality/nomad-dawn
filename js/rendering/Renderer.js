@@ -175,8 +175,9 @@ export default class Renderer {
             this.lightingSystem.shadowVisibility = 0; // No shadow when disabled
             this.lightingSystem.shadowHorizontalOffsetFactor = 0;
             this.lightingSystem.shadowVerticalOffsetFactor = 1;
-            this.lightingSystem.shadowWidthFactor = 1;
-            this.lightingSystem.shadowHeightFactor = 1;
+            // Reset factors to base values when disabled
+            this.lightingSystem.shadowWidthFactor = 1.0;
+            this.lightingSystem.shadowHeightFactor = 1.0;
             return;
         }
 
@@ -189,15 +190,14 @@ export default class Renderer {
         // Horizontal Offset (-1 at 0, 0 at 0.5, +1 at 1)
         this.lightingSystem.shadowHorizontalOffsetFactor = Math.cos(time * Math.PI);
 
-        // Vertical Offset (1 at 0/1, 0 at 0.5) - makes shadow lower at dawn/dusk
+        // Vertical Offset Factor (1 at 0/1, 0 at 0.5) - used for shape and Y pos adjustment
         this.lightingSystem.shadowVerticalOffsetFactor = Math.abs(Math.cos(time * Math.PI));
 
         // Shape Factors (wider at dawn/dusk, circular at noon)
-        // Base width ~0.3, height ~0.25 at noon
-        // Width factor: 1 at noon, 1.33 at extremes -> 1.0 + abs(cos) * 0.33
-        this.lightingSystem.shadowWidthFactor = 1.0 + this.lightingSystem.shadowVerticalOffsetFactor * 0.33;
-        // Height factor: 1 at noon, 0.8 at extremes -> 1.0 - abs(cos) * 0.2
-        this.lightingSystem.shadowHeightFactor = 1.0 - this.lightingSystem.shadowVerticalOffsetFactor * 0.2;
+        // Width factor: Aiming for ~2x wider at extremes compared to noon (1.0)
+        this.lightingSystem.shadowWidthFactor = 1.0 + this.lightingSystem.shadowVerticalOffsetFactor * 1.0; // Increases up to 2.0
+        // Height factor: Squash more at extremes
+        this.lightingSystem.shadowHeightFactor = 1.0 - this.lightingSystem.shadowVerticalOffsetFactor * 0.4; // Decreases down to 0.6
 
 
         // --- Ambient Light & Color (Copied from previous implementation, seems fine) ---

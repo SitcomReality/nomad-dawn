@@ -52,15 +52,19 @@ export default class EntityRenderer {
             const shadowAlpha = 0.3 * light.shadowVisibility; // Fade shadow with visibility
 
             // Base shadow size & position calculation
-            const baseShadowDisplacement = screenSize * 0.3;
-            const baseVerticalOffset = screenSize * 0.1; // Default slight downward offset
+            // Double horizontal displacement for longer shadows
+            const baseShadowDisplacement = screenSize * 0.6;
+            // Reduce base vertical offset (move shadow up slightly at midday)
+            const baseVerticalOffset = screenSize * 0.075; 
+            // Keep additional offset based on factor
             const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor; // Lower at dawn/dusk
             const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * baseShadowDisplacement;
             const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
             // Shadow shape calculation
-            const baseWidthRadius = screenSize * 0.3; // Base radius at noon
-            const baseHeightRadius = screenSize * 0.25; // Base radius at noon
+            const baseWidthRadius = screenSize * 0.3; // Base width radius at noon
+            const baseHeightRadius = screenSize * 0.25; // Base height radius at noon
+            // Use factors calculated in Renderer
             const shadowWidth = baseWidthRadius * light.shadowWidthFactor;
             const shadowHeight = baseHeightRadius * light.shadowHeightFactor;
 
