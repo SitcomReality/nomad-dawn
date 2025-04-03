@@ -162,18 +162,43 @@ export default class Game {
     }
 
     handlePresenceUpdateRequest(updateRequest, fromClientId) {
-        // Handle incoming presence update requests
-        if (updateRequest.type === 'damage') {
-            this.player.takeDamage(updateRequest.amount);
-            
-            // Update our network presence with new health
-            this.network.updatePresence({
-                health: this.player.health,
-                dead: this.player.health <= 0
-            });
+        // Handle incoming presence update requests targeting this client
+        if (!this.player) return; // Should not happen if initialized correctly
+
+        switch (updateRequest.type) {
+            case 'damage':
+                this.player.takeDamage(updateRequest.amount);
+                
+                // Update our network presence with new health
+                this.network.updatePresence({
+                    health: this.player.health,
+                    dead: this.player.health <= 0
+                    // Add other relevant fields if needed
+                });
+                
+                // Optionally trigger local damage effect
+                this.renderer.createEffect('damage_taken', this.player.x, this.player.y);
+                break;
+
+             case 'give_resource':
+                 if (updateRequest.resourceType && updateRequest.amount > 0) {
+                     if (this.player.addResource(updateRequest.resourceType, updateRequest.amount)) {
+                         // Resource added successfully, update presence
+                         this.network.updatePresence({
+                             resources: this.player.resources
+                         });
+                          // Optionally show feedback to the player
+                         this.debug.log(`Received ${updateRequest.amount} ${updateRequest.resourceType} from ${fromClientId}`);
+                     } else {
+                          console.warn(`Failed to add resource type: ${updateRequest.resourceType}`);
+                     }
+                 }
+                 break;
+
+            default:
+                 this.debug.log(`Received unknown presence update request type: ${updateRequest.type} from ${fromClientId}`);
+                 break;
         }
-        
-        // Handle other types of presence update requests as needed
     }
     
     handleNetworkEvent(eventData) {
@@ -216,10 +241,23 @@ export default class Game {
                         'explosion', 
                         eventData.x || 0, 
                         eventData.y || 0, 
-                        eventData.size || 1
+                        { size: eventData.size || 1 } // Pass size via options
                     );
                 }
                 break;
+
+            // Example: Handle resource collection confirmation/broadcast if needed
+            // case 'resource_collected_event':
+            //     if (eventData.playerId === this.player.id) {
+            //          // Confirmation for self, maybe update UI state
+            //     } else {
+            //          // Another player collected, maybe play a sound
+            //          const resource = this.world.resources[eventData.resourceId]; // Might already be removed by roomState sync
+            //          if (resource && this.renderer) {
+            //               this.renderer.createEffect('collect_remote', resource.x, resource.y, { color: resource.color });
+            //          }
+            //     }
+            //     break;
                 
             default:
                 // this.debug.log('Unknown event received:', eventData); // Can be noisy

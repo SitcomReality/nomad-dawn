@@ -428,46 +428,112 @@ export default class World {
     }
     
     updateResourcesFromNetwork(networkResources) {
-        // Update resource locations and amounts
-        for (const [id, data] of Object.entries(networkResources)) {
+        // Keep track of resource IDs present in the network update
+        const networkResourceIds = new Set(Object.keys(networkResources));
+        
+        // Update resource locations and amounts from network data
+        for (const id in networkResources) {
+            const data = networkResources[id];
+            const existingResource = this.resources[id];
+            
             if (data === null) {
-                // Resource was deleted
-                delete this.resources[id];
-                continue;
+                // Resource was deleted/collected
+                if (existingResource) {
+                    // Remove from the relevant chunk's resource list
+                    const chunkId = this.getChunkId(existingResource.x, existingResource.y);
+                    if (this.chunks[chunkId] && this.chunks[chunkId].resources) {
+                        this.chunks[chunkId].resources = this.chunks[chunkId].resources.filter(r => r.id !== id);
+                    }
+                     // Add visual effect if collected by another player? Or handle via events.
+
+                    // Remove from the global resource map
+                    delete this.resources[id];
+                    // console.log(`Removed resource ${id} from world via network update.`); // Debugging
+                }
+                continue; // Go to next resource in network data
             }
             
             // Update or create resource
-            if (!this.resources[id]) {
+            if (!existingResource) {
+                // New resource added to the world state
                 this.resources[id] = {
                     id,
-                    type: 'resource',
+                    type: 'resource', // Ensure type is set
                     ...data
                 };
+                 // Make sure the resource is added to the correct chunk
+                 this.addResourceToChunk(this.resources[id]);
+                 // console.log(`Added new resource ${id} from network state.`); // Debugging
             } else {
-                // Update existing resource
-                Object.assign(this.resources[id], data);
-            }
-            
-            // Make sure the resource is in the right chunk
-            const chunkId = this.getChunkId(this.resources[id].x, this.resources[id].y);
-            if (!this.chunks[chunkId]) {
-                // Generate the chunk if needed
-                this.generateChunk(
-                    Math.floor(this.resources[id].x / this.chunkSize) * this.chunkSize,
-                    Math.floor(this.resources[id].y / this.chunkSize) * this.chunkSize
-                );
-            }
-            
-            // Add resource to chunk if not already there
-            const chunk = this.chunks[chunkId];
-            if (chunk) {
-                const resourceInChunk = chunk.resources.find(r => r.id === id);
-                if (!resourceInChunk) {
-                    chunk.resources.push(this.resources[id]);
-                }
+                // Update existing resource properties
+                Object.assign(existingResource, data);
+                 // Ensure it's still in the correct chunk (in case it somehow moved)
+                 // This usually shouldn't happen for static resources, but good practice
+                 this.updateResourceChunkLocation(existingResource);
+                 // console.log(`Updated resource ${id} from network state.`); // Debugging
             }
         }
+
+        // Optional: Prune local resources that are no longer in the network state
+        // This handles cases where a resource might disappear without a specific null update
+        // for (const localId in this.resources) {
+        //     if (!networkResourceIds.has(localId)) {
+        //         console.warn(`Resource ${localId} exists locally but not in network state. Removing.`);
+        //         const resToRemove = this.resources[localId];
+        //         const chunkId = this.getChunkId(resToRemove.x, resToRemove.y);
+        //          if (this.chunks[chunkId] && this.chunks[chunkId].resources) {
+        //              this.chunks[chunkId].resources = this.chunks[chunkId].resources.filter(r => r.id !== localId);
+        //          }
+        //         delete this.resources[localId];
+        //     }
+        // }
     }
+
+    addResourceToChunk(resource) {
+         const chunkId = this.getChunkId(resource.x, resource.y);
+         if (!this.chunks[chunkId]) {
+             // Generate the chunk if it doesn't exist when a resource needs to be added
+             // This might happen if network state updates faster than chunk loading
+             this.generateChunk(
+                 Math.floor(resource.x / this.chunkSize) * this.chunkSize,
+                 Math.floor(resource.y / this.chunkSize) * this.chunkSize
+             );
+         }
+         const chunk = this.chunks[chunkId];
+         if (chunk && chunk.resources && !chunk.resources.some(r => r.id === resource.id)) {
+             chunk.resources.push(resource);
+         } else if (!chunk) {
+              console.warn(`Attempted to add resource ${resource.id} to non-existent chunk ${chunkId}`);
+         }
+    }
+
+     updateResourceChunkLocation(resource) {
+         const currentChunkId = this.getChunkId(resource.x, resource.y);
+         let foundInCorrectChunk = false;
+
+         // Check if it's in the correct chunk's list
+         if (this.chunks[currentChunkId] && this.chunks[currentChunkId].resources) {
+              if (this.chunks[currentChunkId].resources.some(r => r.id === resource.id)) {
+                 foundInCorrectChunk = true;
+              }
+         }
+
+          // If not in the correct chunk, remove from any incorrect chunk and add to the correct one
+         if (!foundInCorrectChunk) {
+             // Remove from any chunk it might be incorrectly listed in
+             for (const chunkId in this.chunks) {
+                 if (this.chunks[chunkId].resources) {
+                     const initialLength = this.chunks[chunkId].resources.length;
+                     this.chunks[chunkId].resources = this.chunks[chunkId].resources.filter(r => r.id !== resource.id);
+                     // if (this.chunks[chunkId].resources.length < initialLength) {
+                     //     console.log(`Removed resource ${resource.id} from incorrect chunk ${chunkId}`); // Debug
+                     // }
+                 }
+             }
+              // Add to the correct chunk
+             this.addResourceToChunk(resource);
+         }
+     }
     
     updateWorldObjectsFromNetwork(worldObjects) {
         // Update world objects like buildings, etc.
@@ -477,4 +543,3 @@ export default class World {
         }
     }
 }
-

@@ -367,19 +367,20 @@ export default class Renderer {
         }
     }
     
-    createEffect(type, x, y, size = 1) {
+    createEffect(type, x, y, options = {}) { 
         // Create a new visual effect
         const screenPos = this.worldToScreen(x, y);
         
         let effect;
         switch (type) {
             case 'explosion':
+                const explosionSize = (options.size || 1) * this.camera.zoom;
                 effect = {
                     type,
                     x: screenPos.x,
                     y: screenPos.y,
-                    size: size * this.camera.zoom,
-                    duration: 500, // milliseconds
+                    size: explosionSize,
+                    duration: options.duration || 500, 
                     startTime: performance.now(),
                     update: (ctx, currentTime, delta) => {
                         const progress = (currentTime - effect.startTime) / effect.duration;
@@ -409,6 +410,62 @@ export default class Renderer {
                     }
                 };
                 break;
+
+             case 'collect':
+                 const collectSize = (options.size || 10) * this.camera.zoom; 
+                 const collectColor = options.color || '#ffff00'; 
+                 effect = {
+                     type,
+                     x: screenPos.x,
+                     y: screenPos.y,
+                     size: collectSize,
+                     color: collectColor,
+                     particleCount: 5,
+                     particles: [],
+                     duration: options.duration || 300, 
+                     startTime: performance.now(),
+                     init: () => { 
+                         for (let i = 0; i < effect.particleCount; i++) {
+                             const angle = Math.random() * Math.PI * 2;
+                             const speed = effect.size * (0.5 + Math.random() * 0.5); 
+                             effect.particles.push({
+                                 ox: 0, 
+                                 oy: 0, 
+                                 vx: Math.cos(angle) * speed,
+                                 vy: Math.sin(angle) * speed,
+                                 alpha: 1.0
+                             });
+                         }
+                     },
+                     update: (ctx, currentTime, delta) => {
+                         const elapsed = currentTime - effect.startTime;
+                         const progress = elapsed / effect.duration;
+                         if (progress >= 1) return false; // Remove effect when done
+
+                         if (!effect.particles.length) effect.init(); 
+
+                         ctx.save();
+                         ctx.fillStyle = effect.color;
+
+                         for (const p of effect.particles) {
+                             // Update particle position (elapsed time in seconds)
+                             p.ox += p.vx * (delta / 1000);
+                             p.oy += p.vy * (delta / 1000);
+                             p.alpha = 1.0 - progress; // Fade out
+
+                             if (p.alpha <= 0) continue;
+
+                             ctx.globalAlpha = p.alpha;
+                             ctx.beginPath();
+                             ctx.fillRect(effect.x + p.ox - 1, effect.y + p.oy - 1, 3, 3);
+                             ctx.restore();
+                         }
+                         
+                         ctx.restore();
+                         return true; // Keep effect alive
+                     }
+                 };
+                 break;
                 
             default:
                 console.warn(`Unknown effect type: ${type}`);
@@ -421,12 +478,11 @@ export default class Renderer {
     
     renderEffects() {
         const currentTime = performance.now();
-        const delta = currentTime - this.lastFrameTime; // Use pre-calculated delta if available, or calculate here
-        this.lastFrameTime = currentTime; // Update last frame time for next effect calculation
+        const delta = currentTime - this.lastFrameTime; 
+        this.lastFrameTime = currentTime; 
         
         // Update and render all active effects
         this.effects = this.effects.filter(effect => {
-            // Pass context for drawing
             return effect.update(this.ctx, currentTime, delta);
         });
     }

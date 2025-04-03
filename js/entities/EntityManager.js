@@ -91,67 +91,73 @@ export default class EntityManager {
             }
             
             const data = presenceData[clientId];
-            let entity = this.playerEntities[clientId];
+            let entity = this.playerEntities[clientId]; // Use specific map for players
+            const peerInfo = (window.room && window.room.peers) ? window.room.peers[clientId] : null; // Get peer info once
             
             if (!entity) {
                 // Create new remote player entity if it doesn't exist
-                // console.log(`Creating remote player entity for ${clientId}`); // Debugging creation
-                const peerInfo = (window.room && window.room.peers) ? window.room.peers[clientId] : null;
-                entity = {
-                    id: clientId,
-                    type: 'player', // Assume presence data is for players unless specified otherwise
-                    name: peerInfo ? peerInfo.username : `Player ${clientId.substring(0, 4)}`,
-                    x: data.x !== undefined ? data.x : 0, // Use received data or default
-                    y: data.y !== undefined ? data.y : 0,
-                    angle: data.angle !== undefined ? data.angle : 0,
-                    speed: data.speed !== undefined ? data.speed : 0, // Store speed for potential interpolation
-                    size: data.size !== undefined ? data.size : 20, // Use remote size if provided
-                    color: '#5af', // Default remote player color
-                    health: data.health !== undefined ? data.health : 100,
-                    maxHealth: data.maxHealth !== undefined ? data.maxHealth : 100,
-                    resources: data.resources || {}, // Sync resources if provided
-                    vehicleId: data.vehicleId !== undefined ? data.vehicleId : null,
-                    // Remote player update logic (interpolation/prediction)
-                    // Store target state for interpolation
-                    _targetX: data.x !== undefined ? data.x : 0,
-                    _targetY: data.y !== undefined ? data.y : 0,
-                    _targetAngle: data.angle !== undefined ? data.angle : 0,
-                    update(deltaTime) {
-                        // Simple interpolation towards target state
-                        const lerpFactor = 0.2; // Adjust for smoothness
-                        this.x += (this._targetX - this.x) * lerpFactor;
-                        this.y += (this._targetY - this.y) * lerpFactor;
-
-                        // Interpolate angle carefully (handle wrapping)
-                        const angleDiff = this.normalizeAngle(this._targetAngle - this.angle);
-                        this.angle = this.normalizeAngle(this.angle + angleDiff * lerpFactor);
-                    },
-                    // Helper to normalize angle for interpolation
-                     normalizeAngle(angle) {
-                        while (angle <= -Math.PI) angle += 2 * Math.PI;
-                        while (angle > Math.PI) angle -= 2 * Math.PI;
-                        return angle;
-                    }
-                };
+                 // console.log(`Creating remote player entity for ${clientId}`); // Debugging creation
                 
-                this.add(entity);
+                // Create a Player instance for remote players too, for consistency
+                 entity = new Player(clientId, window.game); // Assuming 'game' is globally accessible or passed appropriately
+                
+                // Set initial properties from network data and peer info
+                 entity.name = peerInfo ? peerInfo.username : `Player ${clientId.substring(0, 4)}`;
+                 entity.x = data.x !== undefined ? data.x : 0;
+                 entity.y = data.y !== undefined ? data.y : 0;
+                 entity.angle = data.angle !== undefined ? data.angle : 0;
+                 entity.speed = data.speed !== undefined ? data.speed : 0;
+                 entity.size = data.size !== undefined ? data.size : entity.size; // Use default from Player class if not provided
+                 entity.health = data.health !== undefined ? data.health : entity.maxHealth; // Use default maxHealth if health missing
+                 entity.maxHealth = data.maxHealth !== undefined ? data.maxHealth : entity.maxHealth;
+                 entity.resources = data.resources || {}; // Use default from Player class if not provided
+                 entity.vehicleId = data.vehicleId !== undefined ? data.vehicleId : null;
+                 entity.color = '#5af'; // Remote player color override
+
+                // Store target state for interpolation
+                entity._targetX = entity.x;
+                entity._targetY = entity.y;
+                entity._targetAngle = entity.angle;
+                 entity._lastUpdateTime = performance.now(); // Track last update time
+
+                 // Override the update method for remote player interpolation
+                 entity.update = function(deltaTime) {
+                     // Interpolate towards target state
+                     // Using a fixed factor can feel jerky, time-based is better
+                     const now = performance.now();
+                      // Estimate time since last *network* update arrived for this player
+                      // This is tricky because we only know when we processed it.
+                      // Let's stick to simpler lerp for now, or use a library later.
+                     const lerpFactor = 0.2; // Adjust for smoothness
+
+                     this.x += (this._targetX - this.x) * lerpFactor;
+                     this.y += (this._targetY - this.y) * lerpFactor;
+
+                     // Interpolate angle carefully (handle wrapping)
+                     const angleDiff = this.normalizeAngle(this._targetAngle - this.angle);
+                      // Ensure normalizeAngle is accessible (it's on Player prototype)
+                     this.angle = Player.prototype.normalizeAngle.call(this, this.angle + angleDiff * lerpFactor); 
+                 };
+                
+                this.add(entity); // Add the fully configured remote player
             } else {
                 // Update existing remote player entity
                 // Update target positions for interpolation
-                entity._targetX = data.x !== undefined ? data.x : entity._targetX;
-                entity._targetY = data.y !== undefined ? data.y : entity._targetY;
-                entity._targetAngle = data.angle !== undefined ? data.angle : entity._targetAngle;
+                 entity._targetX = data.x !== undefined ? data.x : entity._targetX;
+                 entity._targetY = data.y !== undefined ? data.y : entity._targetY;
+                 entity._targetAngle = data.angle !== undefined ? data.angle : entity._targetAngle;
+                 entity._lastUpdateTime = performance.now();
 
                 // Update other properties directly (non-interpolated)
                 entity.speed = data.speed !== undefined ? data.speed : entity.speed;
-                entity.health = data.health !== undefined ? data.health : entity.health;
-                entity.maxHealth = data.maxHealth !== undefined ? data.maxHealth : entity.maxHealth;
-                entity.resources = data.resources || entity.resources;
-                entity.vehicleId = data.vehicleId !== undefined ? data.vehicleId : entity.vehicleId;
-                 entity.size = data.size !== undefined ? data.size : entity.size;
+                 // Only update health/resources if they are present in the update
+                 if (data.health !== undefined) entity.health = data.health;
+                 if (data.maxHealth !== undefined) entity.maxHealth = data.maxHealth;
+                 if (data.resources) entity.resources = data.resources; // Overwrite if present
+                 if (data.vehicleId !== undefined) entity.vehicleId = data.vehicleId;
+                 if (data.size !== undefined) entity.size = data.size;
 
                  // Update name if peer info is available and different
-                 const peerInfo = (window.room && window.room.peers) ? window.room.peers[clientId] : null;
                  if (peerInfo && entity.name !== peerInfo.username) {
                      entity.name = peerInfo.username;
                  }
