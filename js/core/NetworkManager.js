@@ -60,7 +60,13 @@ export default class NetworkManager {
     subscribeRoomState(callback) {
         if (!this.connected || !this.room) return () => {};
         
-        return this.room.subscribeRoomState(callback);
+        return this.room.subscribeRoomState((roomState) => {
+            try {
+                callback(roomState);
+            } catch (error) {
+                this.game.debug.error('Error in room state handler:', error);
+            }
+        });
     }
     
     // Subscribe to presence update requests
@@ -114,4 +120,3 @@ export default class NetworkManager {
         return !!this.room.peers[clientId];
     }
 }
-

@@ -110,7 +110,9 @@ export default class Game {
         
         // Handle room state updates (world objects, resources, etc.)
         this.network.subscribeRoomState((roomState) => {
-            this.world.syncFromNetworkState(roomState);
+            if (this.world) {
+                this.world.syncFromNetworkState(roomState);
+            }
         });
         
         // Handle presence update requests (damage, resource transfers, etc.)
@@ -295,4 +297,3 @@ export default class Game {
         }
     }
 }
-
