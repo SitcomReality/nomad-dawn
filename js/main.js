@@ -1,10 +1,6 @@
 import Game from './core/Game.js';
 import { DebugUtils } from './utils/DebugUtils.js';
-// Import perlin noise library for world generation if needed elsewhere,
-// or ensure it's loaded globally before Game/World initialization.
-// import perlin from 'perlin'; // Assuming perlin is installed or available via import map
 
-// Initialize and start the game
 document.addEventListener('DOMContentLoaded', async () => {
     const loadingScreen = document.getElementById('loading-screen');
     try {

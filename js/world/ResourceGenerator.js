@@ -9,7 +9,7 @@ export default class ResourceGenerator {
                 baseAmount: 50,
                 size: 15,
                 density: 1.0,
-                spriteCellId: 'metal'
+                spriteCellId: 'metal_lump'
             },
             'energy': {
                 name: 'Energy Crystals',
@@ -17,7 +17,7 @@ export default class ResourceGenerator {
                 baseAmount: 40,
                 size: 12,
                 density: 0.8,
-                spriteCellId: 'energy'
+                spriteCellId: 'battery_car'
             },
             'food': {
                 name: 'Food Source',
@@ -25,7 +25,7 @@ export default class ResourceGenerator {
                 baseAmount: 60,
                 size: 14,
                 density: 1.2,
-                spriteCellId: 'food'
+                spriteCellId: 'food_fruit'
             },
             'uranium': {
                 name: 'Uranium',
@@ -35,7 +35,7 @@ export default class ResourceGenerator {
                 density: 0.2,
                 isRare: true,
                 clusterSize: 3,
-                spriteCellId: 'uranium'
+                spriteCellId: 'barrel_toxic'
             },
             'silicon': {
                 name: 'Pure Silicon',
@@ -45,7 +45,7 @@ export default class ResourceGenerator {
                 density: 0.3,
                 isRare: true,
                 clusterSize: 4,
-                spriteCellId: 'silicon'
+                spriteCellId: 'metal_ingots'
             },
             'crystal': {
                 name: 'Crystal Formation',

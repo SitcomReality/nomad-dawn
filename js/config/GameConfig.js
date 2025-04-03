@@ -206,25 +206,25 @@ export const Config = {
     // Maps a logical name to its cell coordinates (col, row) starting from 0,0 top-left
     SPRITE_CELLS: {
         // Row 0
-        'tree_pine': { sheet: 'env_sprites', col: 0, row: 0 },
-        'tree_round': { sheet: 'env_sprites', col: 1, row: 0 },
-        'shrub_round': { sheet: 'env_sprites', col: 2, row: 0 },
-        'cactus_tall': { sheet: 'env_sprites', col: 3, row: 0 },
+        'tree_pine': { sheet: 'environmental', col: 0, row: 0 },
+        'tree_round': { sheet: 'environmental', col: 1, row: 0 },
+        'shrub_round': { sheet: 'environmental', col: 2, row: 0 },
+        'cactus_tall': { sheet: 'environmental', col: 3, row: 0 },
         // Row 1
-        'flowers_pink': { sheet: 'env_sprites', col: 0, row: 1 },
-        'rock_medium': { sheet: 'env_sprites', col: 1, row: 1 },
-        'boulder_large': { sheet: 'env_sprites', col: 2, row: 1 },
-        'pebbles_small': { sheet: 'env_sprites', col: 3, row: 1 },
+        'flowers_pink': { sheet: 'environmental', col: 0, row: 1 },
+        'rock_medium': { sheet: 'environmental', col: 1, row: 1 },
+        'boulder_large': { sheet: 'environmental', col: 2, row: 1 },
+        'pebbles_small': { sheet: 'environmental', col: 3, row: 1 },
         // Row 2
-        'barrel_toxic': { sheet: 'env_sprites', col: 0, row: 2 },
-        'barrel_fuel': { sheet: 'env_sprites', col: 1, row: 2 },
-        'food_meat': { sheet: 'env_sprites', col: 2, row: 2 },
-        'food_fruit': { sheet: 'env_sprites', col: 3, row: 2 },
+        'barrel_toxic': { sheet: 'environmental', col: 0, row: 2 },
+        'barrel_fuel': { sheet: 'environmental', col: 1, row: 2 },
+        'food_meat': { sheet: 'environmental', col: 2, row: 2 },
+        'food_fruit': { sheet: 'environmental', col: 3, row: 2 },
         // Row 3
-        'battery_car': { sheet: 'env_sprites', col: 0, row: 3 },
-        'tire': { sheet: 'env_sprites', col: 1, row: 3 },
-        'metal_ingots': { sheet: 'env_sprites', col: 2, row: 3 },
-        'metal_lump': { sheet: 'env_sprites', col: 3, row: 3 }
+        'battery_car': { sheet: 'environmental', col: 0, row: 3 },
+        'tire': { sheet: 'environmental', col: 1, row: 3 },
+        'metal_ingots': { sheet: 'environmental', col: 2, row: 3 },
+        'metal_lump': { sheet: 'environmental', col: 3, row: 3 }
     },
 
     // Define Feature Types with Sprite Info (if not already defined elsewhere)

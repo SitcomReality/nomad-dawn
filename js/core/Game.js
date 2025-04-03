@@ -84,7 +84,6 @@ export default class Game {
     async loadAssets() {
         try {
             const assetsToLoad = [
-                // { type: 'texture', id: 'player_sprite', url: '/assets/player.png' },
             ];
 
             // Add spritesheets from config

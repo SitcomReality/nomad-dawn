@@ -157,7 +157,7 @@ export default class SpriteManager {
         ctx.restore();
         return true;
     }
-    
+
     getTintedSprite(spriteCellId, tintColor) {
         const cacheKey = `${spriteCellId}_tint_${tintColor.r}_${tintColor.g}_${tintColor.b}`;
         
