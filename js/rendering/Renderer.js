@@ -5,10 +5,11 @@ import UIRenderer from './UIRenderer.js';
 import SpriteManager from './SpriteManager.js';
 
 export default class Renderer {
-    constructor(canvas, game) {
+    // Pass game instance to constructor
+    constructor(canvas, game) { 
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
-        this.game = game;
+        this.game = game; // Store game reference
         this.resizeCanvas();
         this.setupResizeListener();
         
@@ -18,10 +19,12 @@ export default class Renderer {
             y: 0,
             zoom: 1,
             targetZoom: 1,
-            zoomSpeed: 0.1
+            zoomSpeed: 0.1,
+            // Add target reference for following
+            target: null 
         };
         
-        // Initialize specialized renderers
+        // Initialize specialized renderers (pass game instance)
         this.spriteManager = new SpriteManager(this, game);
         this.worldRenderer = new WorldRenderer(this, game);
         this.entityRenderer = new EntityRenderer(this, game);
@@ -61,20 +64,31 @@ export default class Renderer {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
     
-    // Update camera position to follow a target (usually the player)
-    updateCamera(targetX, targetY, targetZoom = null) {
-        // Smoothly interpolate camera position to target
-        this.camera.x += (targetX - this.camera.x) * 0.1;
-        this.camera.y += (targetY - this.camera.y) * 0.1;
-        
-        // Update zoom if provided
-        if (targetZoom !== null) {
-            // Clamp zoom level
-            this.camera.targetZoom = Math.max(0.2, Math.min(3, targetZoom));
+    // Update camera position to follow a target (entity or fixed point)
+    updateCamera(target = null) {
+        // Update target if provided
+        if (target) {
+             this.camera.target = target;
         }
+        
+        // Determine target coordinates
+        const targetX = this.camera.target ? this.camera.target.x : 0;
+        const targetY = this.camera.target ? this.camera.target.y : 0;
+        
+        // Smoothly interpolate camera position to target
+        // Use a faster interpolation if target is null (e.g., recentering in guest mode)
+        const lerpFactor = this.camera.target ? 0.1 : 0.05; 
+        this.camera.x += (targetX - this.camera.x) * lerpFactor;
+        this.camera.y += (targetY - this.camera.y) * lerpFactor;
         
         // Smoothly interpolate zoom
         this.camera.zoom += (this.camera.targetZoom - this.camera.zoom) * this.camera.zoomSpeed;
+    }
+
+    // Set target zoom level (can be called externally, e.g., by mouse wheel input)
+    setTargetZoom(targetZoom) {
+         // Clamp zoom level
+         this.camera.targetZoom = Math.max(0.2, Math.min(3, targetZoom));
     }
     
     // Convert world coordinates to screen coordinates
@@ -92,75 +106,69 @@ export default class Renderer {
     }
     
     // Main render function that delegates to specialized renderers
-    renderWorld(world, player) {
-        if (!world || !player) return;
+    // Now takes cameraTarget directly instead of player
+    renderWorld(world, cameraTarget) { 
+        if (!world) return;
         
-        // Update camera to follow player
-        this.updateCamera(player.x, player.y);
+        // Update camera to follow the target (passed from Game.render)
+        this.updateCamera(cameraTarget); 
         
         // Calculate view dimensions in world coordinates
         const viewWidthWorld = this.canvas.width / this.camera.zoom;
         const viewHeightWorld = this.canvas.height / this.camera.zoom;
         
         // Use specialized world renderer
-        this.worldRenderer.render(world, player, viewWidthWorld, viewHeightWorld);
+        // Pass cameraTarget coordinates for chunk loading/visibility checks
+        this.worldRenderer.render(world, cameraTarget, viewWidthWorld, viewHeightWorld); 
     }
     
-    renderEntities(entities, player) {
-        this.entityRenderer.render(entities, player);
+    // Takes localPlayer (can be null) for highlighting purposes
+    renderEntities(entities, localPlayer) { 
+        this.entityRenderer.render(entities, localPlayer);
     }
     
     renderEffects() {
         const currentTime = performance.now();
         const delta = currentTime - this.lastFrameTime;
         
-        if (delta <= 0) return;
+        // Only update/render if time has passed
+        if (delta <= 0) return; 
         
         this.effectRenderer.render(delta, currentTime);
     }
     
-    renderUI(game) {
+    // Renders canvas UI elements (Minimap)
+    renderUI(game) { 
         this.uiRenderer.render(game);
+    }
+
+    // Renders debug DOM overlay
+    renderDebugInfo(debugData) {
+        this.uiRenderer.renderDebugInfo(debugData);
     }
     
     createEffect(type, x, y, options = {}) {
         this.effectRenderer.createEffect(type, x, y, options);
     }
     
-    renderDebugInfo(debugData) {
-        this.uiRenderer.renderDebugInfo(debugData);
-    }
-    
-    // Future methods for lighting system
+    // --- Lighting System Methods (Keep as placeholders) ---
     setTimeOfDay(time) {
         this.lightingSystem.timeOfDay = Math.max(0, Math.min(1, time));
         this.updateLightingSystem();
     }
     
     updateLightingSystem() {
-        // Will be implemented when day/night cycle is added
-        // Calculate shadow direction, light color, and ambient light based on time of day
+        // ... existing lighting calculation logic ...
         const timeOfDay = this.lightingSystem.timeOfDay;
-        
-        // Example calculations (placeholder for future implementation)
-        // Calculate sun angle (0 = east, 0.25 = south, 0.5 = west, 0.75 = north)
         const sunAngle = (timeOfDay * Math.PI * 2) - Math.PI/2;
-        
-        // Set shadow direction (opposite to sun direction)
         this.lightingSystem.shadowDirection = {
             x: -Math.cos(sunAngle),
             y: -Math.sin(sunAngle)
         };
-        
-        // Calculate shadow length (longest at sunrise/sunset, shortest at noon/midnight)
-        const dayProgress = Math.abs((timeOfDay % 1) - 0.5) * 2; // 0 at noon/midnight, 1 at sunrise/sunset
+        const dayProgress = Math.abs((timeOfDay % 1) - 0.5) * 2;
         this.lightingSystem.shadowLength = 20 * dayProgress;
-        
-        // Set ambient light (brightest at noon, darkest at midnight)
         const dayNightCycle = Math.sin(timeOfDay * Math.PI * 2 - Math.PI/2) * 0.5 + 0.5;
-        this.lightingSystem.ambientLight = Math.max(0.2, dayNightCycle); // Minimum ambient light of 0.2
-        
-        // Set light color (warm at sunrise/sunset, neutral at noon, cool at night)
+        this.lightingSystem.ambientLight = Math.max(0.2, dayNightCycle);
         const r = 255;
         const g = Math.floor(200 + 55 * dayNightCycle);
         const b = Math.floor(150 + 105 * dayNightCycle);

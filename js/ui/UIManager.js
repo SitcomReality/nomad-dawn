@@ -6,7 +6,8 @@ import MenuUI from './MenuUI.js';
 export default class UIManager {
     constructor(game) {
         this.game = game;
-        this.activeUI = null;
+        this.activeUI = null; // Tracks which major UI panel is open (Inventory, Building, Menu)
+        this.isGuestMode = false; // Track guest mode locally
 
         // Initialize UI components
         this.hud = new HUD(game, 'hud');
@@ -19,6 +20,12 @@ export default class UIManager {
 
         // Controls info panel reference
         this.controlsInfo = document.getElementById('controls-info-bottom-left');
+        
+        // HUD Buttons Cache
+        this.toggleControlsBtn = document.getElementById('toggle-controls');
+        this.toggleDebugBtn = document.getElementById('toggle-debug');
+        this.gameMenuBtn = document.getElementById('game-menu-button');
+        // Potentially buttons inside inventory/building UI if needed
 
         // Set up notifications system
         this.notifications = {
@@ -27,69 +34,53 @@ export default class UIManager {
             maxNotifications: 3,
 
             init: () => {
-                // Use existing notifications container
                 this.notifications.container = document.getElementById('notifications-container');
                 if (!this.notifications.container) {
-                    console.error("Notifications container not found!");
-                    // Optionally create it dynamically if needed
-                    // container = document.createElement('div');
-                    // container.id = 'notifications-container';
-                    // document.getElementById('ui-overlay').appendChild(container);
-                    // this.notifications.container = container;
+                    console.error("Notifications container #notifications-container not found!");
                 }
             },
 
             show: (message, type = 'info', duration = 3000) => {
-                if (!this.notifications.container) return; // Guard against missing container
+                if (!this.notifications.container) return; 
 
                 const notification = document.createElement('div');
                 notification.className = `notification notification-${type}`;
-                // Sanitize message before setting innerHTML if message can contain user input
-                // For internally generated messages, this is usually safe.
-                notification.innerHTML = `<div class="notification-content">${message}</div>`;
+                // Basic sanitization - replace < and > to prevent HTML injection
+                const sanitizedMessage = message.replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                notification.innerHTML = `<div class="notification-content">${sanitizedMessage}</div>`;
 
-                // Add to queue
                 this.notifications.queue.push(notification);
-
-                // Manage notifications display
                 this.notifications.update();
 
-                // Auto-remove after duration
                 setTimeout(() => {
                     notification.classList.add('fade-out');
-                    // Wait for fade out animation to complete before removing
                     setTimeout(() => {
                         this.notifications.remove(notification);
-                    }, 300); // Match fade-out animation duration
+                    }, 300); 
                 }, duration);
             },
 
             remove: (notification) => {
-                if (!this.notifications.container) return; // Guard
+                if (!this.notifications.container) return; 
 
                 const index = this.notifications.queue.indexOf(notification);
                 if (index !== -1) {
                     this.notifications.queue.splice(index, 1);
-                    // Check if the notification is still a child before removing
                     if (notification.parentNode === this.notifications.container) {
                         this.notifications.container.removeChild(notification);
                     }
-                    // Update display after removal
                     this.notifications.update();
                 }
             },
 
             update: () => {
-                if (!this.notifications.container) return; // Guard
+                if (!this.notifications.container) return; 
 
-                // Detach existing visible notifications to avoid flicker/re-rendering issues
                 const currentNotifications = Array.from(this.notifications.container.children);
                 currentNotifications.forEach(child => child.remove());
 
-                // Add only the necessary notifications from the queue
                 const visibleNotifications = this.notifications.queue.slice(-this.notifications.maxNotifications);
                 visibleNotifications.forEach(notification => {
-                    // Ensure the notification isn't already scheduled for removal (has fade-out class)
                     if (!notification.classList.contains('fade-out')) {
                         this.notifications.container.appendChild(notification);
                     }
@@ -102,12 +93,36 @@ export default class UIManager {
 
         // Set up key bindings and event listeners
         this.setupEventListeners();
+        
+        // Initial UI state based on potential guest mode
+        this.setGuestMode(this.game.isGuestMode);
+    }
+
+    // Method to update UI elements based on guest mode status
+    setGuestMode(isGuest) {
+        this.isGuestMode = isGuest;
+        // Disable/hide buttons or elements inappropriate for guests
+        // Example: Hide inventory and build buttons if they exist as direct HUD elements
+        // If they are toggled by keys (I, B), the key handler needs the check.
+        // If they are part of the main menu, the menu items could be disabled.
+        
+        // For now, we rely on keydown listener checks, but could hide buttons too:
+        // const inventoryButton = document.getElementById('hud-inventory-button'); // Example ID
+        // if (inventoryButton) inventoryButton.style.display = isGuest ? 'none' : 'block';
+        
+         const buildButton = document.getElementById('hud-build-button'); // Example ID
+         if (buildButton) buildButton.style.display = isGuest ? 'none' : 'block';
+         
+         // Ensure Inventory/Build UIs are hidden if switching to guest mode while open
+         if (isGuest) {
+            if(this.inventory.isVisible) this.inventory.hide();
+            if(this.baseBuilding.isVisible) this.baseBuilding.hide();
+         }
     }
 
     setupEventListeners() {
         // Global key handlers for UI
         document.addEventListener('keydown', (e) => {
-            // Ignore inputs if focus is on an input field
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
                 return;
             }
@@ -121,51 +136,59 @@ export default class UIManager {
                     this.inventory.hide();
                 } else if (this.baseBuilding.isVisible) {
                     this.baseBuilding.hide();
-                } else {
-                    // If no other UI is open, open the menu
+                } else if (!this.isGuestMode) { // Guests cannot open menu with Esc
                     this.menu.show();
                 }
             }
 
-            // Specific UI toggles (only if no main UI is active OR it's the menu key)
-            if (!this.isMajorUIActive() || e.code === 'Escape') {
-                switch (e.code) {
-                    case 'KeyI':
-                        e.preventDefault();
-                        this.inventory.toggle();
-                        break;
-                    case 'KeyB':
-                        e.preventDefault();
-                        this.baseBuilding.toggle(); // BaseBuilding checks proximity internally
-                        break;
+            // Specific UI toggles (prevent if guest)
+            if (!this.isGuestMode) {
+                 if (!this.isMajorUIActive() || e.code === 'Escape') { // Allow Esc even if UI is open
+                    switch (e.code) {
+                        case 'KeyI':
+                            e.preventDefault();
+                            this.inventory.toggle();
+                            break;
+                        case 'KeyB':
+                            e.preventDefault();
+                            this.baseBuilding.toggle(); 
+                            break;
+                    }
                 }
+            } else {
+                 // Guests might still use some keys, but not I or B for core UI
+                 // Example: Allow debug toggle for guests?
+                 if (e.code === 'Backquote' && e.ctrlKey) {
+                     // Debug toggle handled by DebugUtils globally
+                 }
             }
         });
 
         // HUD Button Listeners
-        const toggleControlsBtn = document.getElementById('toggle-controls');
-        const toggleDebugBtn = document.getElementById('toggle-debug');
-        const gameMenuBtn = document.getElementById('game-menu-button');
-
-        if (toggleControlsBtn && this.controlsInfo) {
-            toggleControlsBtn.addEventListener('click', () => {
+        if (this.toggleControlsBtn && this.controlsInfo) {
+            this.toggleControlsBtn.addEventListener('click', () => {
                 const show = this.controlsInfo.classList.toggle('hidden');
-                toggleControlsBtn.classList.toggle('active', !show);
+                this.toggleControlsBtn.classList.toggle('active', !show);
             });
         }
 
-        if (toggleDebugBtn && this.debugOverlay) {
-            toggleDebugBtn.addEventListener('click', () => {
-                const enabled = this.game.debug.toggle(); // Use debug utils toggle
-                toggleDebugBtn.classList.toggle('active', enabled);
+        if (this.toggleDebugBtn && this.debugOverlay) {
+            this.toggleDebugBtn.addEventListener('click', () => {
+                const enabled = this.game.debug.toggle(); 
+                this.toggleDebugBtn.classList.toggle('active', enabled);
             });
             // Initial state sync
-            toggleDebugBtn.classList.toggle('active', this.game.debug.isEnabled());
+            this.toggleDebugBtn.classList.toggle('active', this.game.debug.isEnabled());
         }
 
-        if (gameMenuBtn) {
-            gameMenuBtn.addEventListener('click', () => {
-                this.menu.toggle();
+        if (this.gameMenuBtn) {
+            this.gameMenuBtn.addEventListener('click', () => {
+                 // Guests cannot open the menu via the button
+                 if (!this.isGuestMode) {
+                    this.menu.toggle();
+                 } else {
+                     this.showNotification("Menu unavailable in Guest Mode", "warn");
+                 }
             });
         }
     }
@@ -176,20 +199,19 @@ export default class UIManager {
     }
 
     update() {
-        // Update HUD data
+        // Update HUD data (always update, even for guests to see world state changes reflected)
         this.hud.update();
 
-        // Update specific UI components if they are visible
-        if (this.inventory.isVisible) {
-            this.inventory.update();
+        // Update specific UI components only if they are visible and not in guest mode
+        if (!this.isGuestMode) {
+            if (this.inventory.isVisible) {
+                this.inventory.update();
+            }
+            if (this.baseBuilding.isVisible) {
+                this.baseBuilding.update();
+            }
+            // Menu usually doesn't need per-frame updates
         }
-        if (this.baseBuilding.isVisible) {
-            this.baseBuilding.update();
-        }
-        // Menu might not need frequent updates unless dynamic content is added
-        // if (this.menu.isVisible) {
-        //     this.menu.update();
-        // }
     }
 
     showNotification(message, type = 'info', duration = 3000) {

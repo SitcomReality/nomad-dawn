@@ -27,16 +27,30 @@ export default class MinimapRenderer {
             this.minimapCanvas.width = this.minimapSize;
             this.minimapCanvas.height = this.minimapSize;
             this.minimapElement.appendChild(this.minimapCanvas);
+        } else {
+            // Ensure canvas size matches container if it already exists
+            this.minimapCanvas.width = this.minimapSize;
+            this.minimapCanvas.height = this.minimapSize;
         }
         this.ctx = this.minimapCanvas.getContext('2d');
     }
 
-    render(world, player, entities, camera) {
-        if (!this.ctx || !world || !player || !camera) return;
+    // Modified to accept game state instead of individual parts
+    render(game) { 
+        const world = game.world;
+        const player = game.player; // This can be null in guest mode
+        const entities = game.entities.getAll();
+        const camera = game.renderer.camera;
+
+        if (!this.ctx || !world || !camera) return;
 
         const mCtx = this.ctx;
         const minimapSize = this.minimapSize;
         const minimapScale = this.minimapScale;
+
+        // Determine center point for minimap view
+        const viewCenterX = player ? player.x : 0; // Center on player or origin
+        const viewCenterY = player ? player.y : 0;
 
         // Clear minimap
         mCtx.clearRect(0, 0, minimapSize, minimapSize);
@@ -51,21 +65,21 @@ export default class MinimapRenderer {
         mCtx.stroke();
 
         // Center coordinates on the minimap
-        const centerX = minimapSize / 2;
-        const centerY = minimapSize / 2;
+        const mapCenterX = minimapSize / 2;
+        const mapCenterY = minimapSize / 2;
         const visibleRadius = minimapSize / (2 * minimapScale); // World units visible in minimap radius
 
         // Clip drawing to the circular minimap area
         mCtx.save();
         mCtx.beginPath();
-        mCtx.arc(centerX, centerY, minimapSize / 2, 0, Math.PI * 2);
+        mCtx.arc(mapCenterX, mapCenterY, minimapSize / 2, 0, Math.PI * 2);
         mCtx.clip();
 
-        // Draw world chunks in minimap
-        const chunksToRender = world.getChunksInRadius(player.x, player.y, visibleRadius * 1.5); // Load slightly more chunks
+        // Draw world chunks in minimap centered around view point
+        const chunksToRender = world.getChunksInRadius(viewCenterX, viewCenterY, visibleRadius * 1.5); 
         for (const chunk of chunksToRender) {
-            const mmX = centerX + (chunk.x - player.x) * minimapScale;
-            const mmY = centerY + (chunk.y - player.y) * minimapScale;
+            const mmX = mapCenterX + (chunk.x - viewCenterX) * minimapScale;
+            const mmY = mapCenterY + (chunk.y - viewCenterY) * minimapScale;
             const mmChunkSize = chunk.size * minimapScale;
 
             // Check if chunk is roughly within minimap bounds before drawing
@@ -86,21 +100,22 @@ export default class MinimapRenderer {
 
         // Draw entities
         for (const entity of entities) {
-            // Check if entity is within visible radius
-            const dx = entity.x - player.x;
-            const dy = entity.y - player.y;
+            // Check if entity is within visible radius of the view center
+            const dx = entity.x - viewCenterX;
+            const dy = entity.y - viewCenterY;
             if (dx * dx + dy * dy > visibleRadius * visibleRadius) {
                 continue;
             }
 
-            const mmX = centerX + dx * minimapScale;
-            const mmY = centerY + dy * minimapScale;
+            const mmX = mapCenterX + dx * minimapScale;
+            const mmY = mapCenterY + dy * minimapScale;
 
             // Simple circle representation for entities
             let entityColor = '#f0f'; // Default magenta
             let entityRadius = 2;
 
-            if (entity.id === player.id) { // Current player
+            // Check if the current entity is the local player (even if null overall)
+            if (player && entity.id === player.id) { 
                 entityColor = '#fff'; // White
                 entityRadius = 3;
             } else if (entity.type === 'player') { // Other players
@@ -111,6 +126,8 @@ export default class MinimapRenderer {
             } else if (entity.type === 'resource') { // Resources
                  entityColor = entity.color || '#ff0'; // Resource specific color or yellow
                  entityRadius = 1.5;
+            } else {
+                 continue; // Don't draw unknown entity types on minimap
             }
 
              // Draw entity marker if within bounds
@@ -122,16 +139,17 @@ export default class MinimapRenderer {
              }
         }
 
-        // Draw player view area (camera frustum representation)
-        const viewWidth = 1 / camera.zoom * minimapSize * minimapScale;
-        const viewHeight = 1 / camera.zoom * minimapSize * minimapScale;
+        // Draw player view area (camera frustum representation) - always centered
+        const viewWidth = (1 / camera.zoom) * minimapSize * minimapScale * 2; // Approximate width based on zoom
+        const viewHeight = (1 / camera.zoom) * minimapSize * minimapScale * 2; // Approximate height based on zoom
 
         mCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
         mCtx.lineWidth = 1;
+        // Draw centered view rectangle
         mCtx.strokeRect(
-            minimapSize / 2 - viewWidth / 2,
-            minimapSize / 2 - viewHeight / 2,
-            viewWidth,
+            mapCenterX - viewWidth / 2, 
+            mapCenterY - viewHeight / 2, 
+            viewWidth, 
             viewHeight
         );
 
@@ -144,9 +162,9 @@ export default class MinimapRenderer {
         mCtx.textAlign = 'center';
         mCtx.textBaseline = 'middle';
 
-        mCtx.fillText('N', minimapSize / 2, 8);
-        mCtx.fillText('S', minimapSize / 2, minimapSize - 8);
-        mCtx.fillText('W', 8, minimapSize / 2);
-        mCtx.fillText('E', minimapSize - 8, minimapSize / 2);
+        mCtx.fillText('N', mapCenterX, 8);
+        mCtx.fillText('S', mapCenterX, minimapSize - 8);
+        mCtx.fillText('W', 8, mapCenterY);
+        mCtx.fillText('E', minimapSize - 8, mapCenterY);
     }
 }
