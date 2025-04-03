@@ -36,15 +36,17 @@ export default class Player {
         // Network state tracking
         this._lastNetworkState = this.getNetworkState();
         this._stateChanged = false;
+
+        // Collection cooldown to prevent spamming requests
+        this.lastCollectionTime = 0;
+        this.collectionCooldown = 500; // milliseconds
     }
     
     update(deltaTime, input) {
         if (!input) return;
         
-        // Store previous position to detect changes
-        const prevX = this.x;
-        const prevY = this.y;
-        const prevAngle = this.angle;
+        // Store previous state to detect changes
+        const prevState = { x: this.x, y: this.y, angle: this.angle, health: this.health, resources: { ...this.resources }, vehicleId: this.vehicleId };
         
         // Apply movement based on directional input
         const direction = input.getMovementDirection();
@@ -70,11 +72,14 @@ export default class Player {
             this.y += Math.sin(this.angle) * this.speed * deltaTime;
         }
         
-        // Check for state changes to trigger network updates
+        // Check for state changes compared to previous state *within this frame*
         if (
-            this.x !== prevX ||
-            this.y !== prevY ||
-            this.angle !== prevAngle
+            this.x !== prevState.x ||
+            this.y !== prevState.y ||
+            this.angle !== prevState.angle ||
+            this.health !== prevState.health || // Check other relevant properties
+            this.vehicleId !== prevState.vehicleId ||
+            JSON.stringify(this.resources) !== JSON.stringify(prevState.resources) // Simple resource check
         ) {
             this._stateChanged = true;
         }
@@ -103,12 +108,15 @@ export default class Player {
         return this.health;
     }
     
+    // Adds resource locally and flags state change
     addResource(type, amount) {
         if (this.resources[type] !== undefined) {
             this.resources[type] += amount;
-            this._stateChanged = true;
+            this._stateChanged = true; // Mark state as changed when resources are added
+            // console.log(`Player ${this.id} added ${amount} ${type}. New total: ${this.resources[type]}`); // Debug log
             return true;
         }
+        console.warn(`Player ${this.id} attempted to add unknown resource type: ${type}`);
         return false;
     }
     
@@ -120,19 +128,78 @@ export default class Player {
         return distance < (this.radius + other.radius);
     }
     
+    // Handle collision based on the other entity's type
     onCollision(other) {
-        // Handle collision with other entities
-        if (other.type === 'resource') {
-            // Collect resource
-            this.addResource(other.resourceType, other.amount);
-            // Remove the resource entity
-            this.game.entities.remove(other.id);
-        } else if (other.type === 'vehicle' && !this.insideVehicle) {
-            // Check if can enter vehicle
-            if (input.isKeyDown('KeyE')) {
-                this.enterVehicle(other);
-            }
+        if (!other) return;
+
+        switch(other.type) {
+            case 'resource':
+                // Check cooldown before attempting collection
+                 const now = performance.now();
+                 if (now - this.lastCollectionTime > this.collectionCooldown) {
+                    this.requestCollectResource(other);
+                    this.lastCollectionTime = now; // Update last collection time
+                 }
+                break;
+            case 'vehicle':
+                // Example: Enter vehicle on key press (implementation depends on input access)
+                // if (!this.insideVehicle && this.game.input.isKeyDown('KeyE')) {
+                //     this.enterVehicle(other);
+                // }
+                break;
+            // Add cases for other collidable types (e.g., projectiles, hazards)
+            default:
+                // Handle generic collision if needed
+                break;
         }
+    }
+
+    // Request collection of a resource node via network
+    requestCollectResource(resource) {
+        // Double check resource validity and if it's already marked locally (though network is source of truth)
+        if (!resource || !resource.id || !resource.resourceType || resource.amount <= 0) {
+             // console.warn(`Attempted to collect invalid resource:`, resource); // Debug
+             return;
+        }
+
+        // 1. Optimistically add the resource locally for immediate feedback
+        //    This will be overwritten/confirmed by the presence update anyway.
+        this.addResource(resource.resourceType, resource.amount);
+
+        // 2. Send request to update the *shared* room state, removing the resource
+        //    This is the crucial step for synchronization.
+        this.game.network.updateRoomState({
+            resources: {
+                [resource.id]: null // Use null to signify deletion in room state
+            }
+        });
+
+        // 3. Send an update for *this player's* presence, reflecting the new resource count
+        //    This ensures other players see the updated inventory quickly.
+        this.game.network.updatePresence({
+            resources: this.resources // Send the updated resources object
+        });
+        // Note: _stateChanged will be true because addResource was called,
+        // so the regular presence update might also send this shortly after, which is fine.
+
+        // 4. Trigger a local visual effect for immediate feedback
+        if (this.game.renderer) {
+             // Use resource color for the effect
+            this.game.renderer.createEffect('collect', resource.x, resource.y, { color: resource.color || '#ffff00' });
+        }
+
+        // Optional: Send a broadcast event for sound effects on all clients
+        // this.game.network.send({
+        //     type: 'play_sound',
+        //     soundId: 'collect_resource',
+        //     x: resource.x,
+        //     y: resource.y,
+        //     volume: 0.8
+        // });
+
+        // Local logging
+        this.game.debug.log(`Player ${this.id} collected ${resource.amount} ${resource.resourceType} from ${resource.id}`);
+        this._stateChanged = true; // Ensure state is marked changed after collection attempt
     }
     
     enterVehicle(vehicle) {
@@ -203,32 +270,34 @@ export default class Player {
         };
     }
     
+    // Checks if the current state is significantly different from the last sent state
     hasStateChanged() {
-        if (!this._stateChanged) return false;
-        
-        // Deep compare with last network state
+        // Always return true if the internal flag is set
+        if (this._stateChanged) return true; 
+
+        // Fallback: If flag wasn't set, do a quick check just in case
+        // (This might not be strictly necessary if _stateChanged is managed perfectly)
         const currentState = this.getNetworkState();
         const lastState = this._lastNetworkState;
-        
-        // Check for significant changes (position threshold, etc)
-        const positionThreshold = 0.5;
-        const positionChanged = 
-            Math.abs(currentState.x - lastState.x) > positionThreshold ||
-            Math.abs(currentState.y - lastState.y) > positionThreshold;
+
+        const positionThresholdSq = 1*1; // Use squared distance
+        const dx = currentState.x - lastState.x;
+        const dy = currentState.y - lastState.y;
+        const positionChanged = (dx * dx + dy * dy) > positionThresholdSq;
             
-        const angleThreshold = 0.1;
+        const angleThreshold = 0.1; // Radians
         const angleChanged = Math.abs(this.normalizeAngle(currentState.angle - lastState.angle)) > angleThreshold;
         
         const healthChanged = currentState.health !== lastState.health;
         const vehicleChanged = currentState.vehicleId !== lastState.vehicleId;
         
-        const resourcesChanged = Object.keys(currentState.resources).some(
-            key => currentState.resources[key] !== lastState.resources[key]
-        );
+        // More efficient resource check if resources change frequently
+        const resourcesChanged = JSON.stringify(currentState.resources) !== JSON.stringify(lastState.resources);
         
         return positionChanged || angleChanged || healthChanged || vehicleChanged || resourcesChanged;
     }
     
+    // Stores the current state as the last sent state and resets the change flag
     clearStateChanged() {
         this._lastNetworkState = this.getNetworkState();
         this._stateChanged = false;

@@ -4,18 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Nomad Dawn</title>
-    <!-- Modular CSS: base + ui split from original monolith -->
-    <link rel="stylesheet" href="css/base.css">
-    <link rel="stylesheet" href="css/ui.css">
+    <link rel="stylesheet" href="css/style.css">
     <script type="importmap">
     {
         "imports": {
             "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/",
+            "perlin": "https://cdn.jsdelivr.net/npm/perlin-noise@0.0.1/index.js"
         }
     }
     </script>
-    <script src="https://cdn.jsdelivr.net/npm/noisejs@2.1.0/index.min.js"></script>
 </head>
 <body>
     <div id="game-container">
@@ -29,56 +27,11 @@
                 <p>Connecting to the wastes...</p>
             </div>
             <div id="hud" class="hidden">
-                <div id="player-stats-top-left">
-                    <div class="stat-item" id="hud-health">Health: 100/100</div>
-                    <div class="stat-item" id="hud-position">Position: (0, 0)</div>
-                    <!-- Add more stats as needed -->
-                </div>
-                <div id="resource-display-top-right">
-                    <h3>Resources</h3>
-                    <div id="hud-resources">
-                        <!-- Resource items will be populated here -->
-                        <div class="resource-item">Metal: 0</div>
-                        <div class="resource-item">Energy: 0</div>
-                        <div class="resource-item">Food: 0</div>
-                    </div>
-                </div>
-                <div id="minimap-container">
-                     <div id="minimap"></div>
-                </div>
-                <div id="controls-info-bottom-left" class="hidden">
-                    <h3>Controls</h3>
-                    <ul>
-                        <li>[WASD] / [Arrows]: Move</li>
-                        <li>[Mouse]: Aim</li>
-                        <li>[I]: Inventory</li>
-                        <li>[B]: Build Menu (Near Vehicle)</li>
-                        <li>[Esc]: Menu / Close UI</li>
-                        <li>[Ctrl + `]: Toggle Debug</li>
-                    </ul>
-                </div>
-                <div id="hud-buttons-bottom-right">
-                     <button class="hud-button" id="toggle-controls">Controls</button>
-                     <button class="hud-button" id="toggle-debug">Debug</button>
-                     <button class="hud-button" id="game-menu-button">Menu</button>
-                </div>
+                <div id="resources"></div>
+                <div id="minimap"></div>
+                <div id="player-status"></div>
             </div>
-             <div id="game-menu" class="hidden">
-                 <h2>Game Menu</h2>
-                 <button id="resume-game">Resume</button>
-                 <button id="menu-settings">Settings</button>
-                 <button id="menu-quit">Quit Game</button>
-                 <div class="menu-content">
-                     <!-- Settings or other content could go here -->
-                 </div>
-             </div>
             <div id="debug-overlay" class="hidden"></div>
-             <!-- Inventory UI Container -->
-             <div id="inventory-ui" class="game-ui hidden"></div>
-             <!-- Building UI Container -->
-             <div id="building-ui" class="game-ui hidden"></div>
-             <!-- Notifications Container -->
-             <div id="notifications-container"></div>
         </div>
     </div>
     
@@ -86,3 +39,4 @@
 <script defer src="https://static.cloudflareinsights.com/beacon.min.js/v8c78df7c7c0f484497ecbca7046644da1771523124516" integrity="sha512-8DS7rgIrAmghBFwoOTujcf6D9rXvH8xm8JQ1Ja01h9QX8EzXldiszufYa4IFfKdLUKTTrnSFXLDkUEOTrZQ8Qg==" data-cf-beacon='{"version":"2024.11.0","token":"4c6229722a6346bc8eb5cb0e5eae5d41","server_timing":{"name":{"cfCacheStatus":true,"cfEdge":true,"cfExtPri":true,"cfL4":true,"cfOrigin":true,"cfSpeedBrain":true},"location_startswith":null}}' crossorigin="anonymous"></script>
 </body>
 </html>
+
