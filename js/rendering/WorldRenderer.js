@@ -139,15 +139,6 @@ export default class WorldRenderer {
         // Try to draw using sprite if available
         let spriteDrawn = false;
         if (obj.spriteCellId) {
-            // --- Debug Log Start ---
-            if (this.game?.debug?.isEnabled()) {
-                console.log(`[WorldRenderer] Attempting sprite draw for object:`, {
-                    id: obj.id, type: obj.type, spriteCellId: obj.spriteCellId,
-                    screenX: screenPos.x.toFixed(0), screenY: screenPos.y.toFixed(0),
-                    drawWidth: finalDrawWidth.toFixed(0), drawHeight: finalDrawHeight.toFixed(0) // Log final draw dimensions
-                });
-            }
-            // --- Debug Log End ---
             // Pass shadow and tint options to sprite manager
             spriteDrawn = this.renderer.spriteManager.drawSprite(
                 this.ctx,
@@ -163,22 +154,15 @@ export default class WorldRenderer {
                     // Rotation could be added here if needed: rotation: obj.angle || 0
                 }
             );
-            // --- Debug Log Start ---
-            if (!spriteDrawn && this.game?.debug?.isEnabled()) {
-                console.log(`[WorldRenderer] Sprite draw returned false for ${obj.spriteCellId}`);
-            }
-            // --- Debug Log End ---
         }
 
         // Fallback rendering if sprite not available or failed to draw
         // Fallback size should probably still use baseScreenSize, not the scaled sprite size
         if (!spriteDrawn) {
-            // --- Debug Log Start ---
-            // Only log if we *expected* a sprite but it failed
+            // Only log if we *expected* a sprite but it failed AND debug is enabled
             if (obj.spriteCellId && this.game?.debug?.isEnabled()) {
                 this.game.debug.log(`[WorldRenderer] Fallback rendering used for object with spriteCellId '${obj.spriteCellId}'. ID: ${obj.id}, Type: ${obj.type}`);
             }
-            // --- Debug Log End ---
 
             // Use baseScreenSize for fallback rendering shapes
             const fallbackSize = baseScreenSize;
@@ -266,9 +250,6 @@ export default class WorldRenderer {
                     );
             }
         }
-
-        // Restore context state only after overlays are drawn
-        // ctx.restore(); // Moved to end of function
 
         // Position object name label based on the final drawn size for better placement
         if (obj.name && this.renderer.camera.zoom > 0.6) {
