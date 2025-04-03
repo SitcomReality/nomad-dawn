@@ -78,7 +78,7 @@ export const Config = {
     // Game mechanics
     RESOURCE_RESPAWN_TIME: 300,  // seconds
     PLAYER_HUNGER_RATE: 0.5,     // food units per minute
-    DAY_NIGHT_CYCLE_DURATION_SECONDS: 900, // Total duration for one cycle (day + night)
+    DAY_NIGHT_CYCLE_DURATION_SECONDS: 90, // Total duration for one cycle (day + night)
     
     // Vehicle configuration
     VEHICLE_TYPES: [
