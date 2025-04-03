@@ -4,18 +4,18 @@ export default class EntityRenderer {
         this.game = game;
         this.ctx = renderer.ctx;
     }
-    
+
     render(entities, player) {
         // Sort entities by y position for basic depth sorting
         const sortedEntities = [...entities].sort((a, b) => a.y - b.y);
-        
+
         // Process and render each entity
         for (const entity of sortedEntities) {
             if (!entity) continue;
 
             const screenPos = this.renderer.worldToScreen(entity.x, entity.y);
             const screenSize = (entity.size || 20) * this.renderer.camera.zoom;
-            
+
             // Culling check
             const cullMargin = screenSize;
             if (
@@ -26,22 +26,18 @@ export default class EntityRenderer {
             ) {
                 continue;
             }
-            
-            // Prepare shadow options for future day/night cycle
-            const shadowOptions = {
-                enabled: this.renderer.lightingSystem.enabled,
-                direction: this.renderer.lightingSystem.shadowDirection,
-                length: this.renderer.lightingSystem.shadowLength * screenSize / 30
-            };
-            
-            this.renderEntity(entity, screenPos, screenSize, player, shadowOptions);
+
+            // Extract lighting system for easier access
+            const light = this.renderer.lightingSystem;
+
+            this.renderEntity(entity, screenPos, screenSize, player, light);
             this.renderEntityOverlays(entity, screenPos, screenSize, player);
         }
     }
-    
-    renderEntity(entity, screenPos, screenSize, player, shadowOptions) {
+
+    renderEntity(entity, screenPos, screenSize, player, light) {
         this.ctx.save();
-        
+
         // Highlight the local player entity with a subtle glow
         if (player && entity.id === player.id) {
             this.ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
@@ -50,47 +46,74 @@ export default class EntityRenderer {
             // Slightly dim remote players
             this.ctx.globalAlpha = 0.9;
         }
-        
-        // Apply time-of-day lighting if enabled
-        if (this.renderer.lightingSystem.enabled) {
-            // Modify entity colors based on ambient light
-            // This would be implemented when day/night cycle is added
-        }
-        
-        // Draw shadow if enabled (for day/night cycle)
-        if (shadowOptions.enabled && shadowOptions.length > 0 && entity.type !== 'projectile') {
-            const shadowX = screenPos.x + shadowOptions.direction.x * shadowOptions.length;
-            const shadowY = screenPos.y + shadowOptions.direction.y * shadowOptions.length;
-            
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+
+        // --- Shadow Rendering (using new logic) ---
+        if (light.enabled && light.shadowVisibility > 0 && entity.type !== 'projectile') {
+            const shadowAlpha = 0.3 * light.shadowVisibility; // Fade shadow with visibility
+
+            // Base shadow size & position calculation
+            const baseShadowDisplacement = screenSize * 0.3;
+            const baseVerticalOffset = screenSize * 0.1; // Default slight downward offset
+            const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor; // Lower at dawn/dusk
+            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * baseShadowDisplacement;
+            const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
+
+            // Shadow shape calculation
+            const baseWidthRadius = screenSize * 0.3; // Base radius at noon
+            const baseHeightRadius = screenSize * 0.25; // Base radius at noon
+            const shadowWidth = baseWidthRadius * light.shadowWidthFactor;
+            const shadowHeight = baseHeightRadius * light.shadowHeightFactor;
+
+            this.ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
             this.ctx.beginPath();
             this.ctx.ellipse(
-                shadowX, 
-                shadowY, 
-                screenSize * 0.4, 
-                screenSize * 0.2, 
+                shadowX,
+                shadowY,
+                shadowWidth,
+                shadowHeight,
                 0, 0, Math.PI * 2
             );
             this.ctx.fill();
         }
-        
+
         // Apply entity rotation around its center
         this.ctx.translate(screenPos.x, screenPos.y);
         if (entity.angle !== undefined && entity.angle !== 0) {
             this.ctx.rotate(entity.angle);
         }
-        
+
         // Draw entity shape/sprite
         if (entity.render && typeof entity.render === 'function') {
             // Use entity's custom render method
-            entity.render(this.ctx, 0, 0, screenSize);
+            // Apply tinting if lighting is enabled
+            if (light.enabled && entity.color) {
+                const originalColor = entity.color;
+                entity.color = this.renderer.worldRenderer.adjustColorForLighting(
+                    originalColor,
+                    light.lightColor,
+                    light.ambientLight
+                );
+                entity.render(this.ctx, 0, 0, screenSize);
+                entity.color = originalColor; // Restore original color
+            } else {
+                 entity.render(this.ctx, 0, 0, screenSize);
+            }
         } else {
             // Default entity rendering (circle)
-            this.ctx.fillStyle = entity.color || '#e04f5f';
+             let entityColor = entity.color || '#e04f5f';
+             if (light.enabled) {
+                 entityColor = this.renderer.worldRenderer.adjustColorForLighting(
+                     entityColor,
+                     light.lightColor,
+                     light.ambientLight
+                 );
+             }
+             this.ctx.fillStyle = entityColor;
+
             this.ctx.beginPath();
             this.ctx.arc(0, 0, screenSize / 2, 0, Math.PI * 2);
             this.ctx.fill();
-            
+
             // Default direction indicator
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
             this.ctx.lineWidth = Math.max(1, 2 * this.renderer.camera.zoom);
@@ -99,10 +122,10 @@ export default class EntityRenderer {
             this.ctx.lineTo(screenSize / 2, 0);
             this.ctx.stroke();
         }
-        
+
         this.ctx.restore();
     }
-    
+
     renderEntityOverlays(entity, screenPos, screenSize, player) {
         // Draw entity name/label if applicable and zoomed in
         if (entity.name && this.renderer.camera.zoom > 0.5) {

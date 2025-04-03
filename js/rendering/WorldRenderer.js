@@ -119,15 +119,37 @@ export default class WorldRenderer {
         // Save context state before drawing object AND overlays
         this.ctx.save();
 
-        // Prepare shadow options, potentially scale shadow based on final size?
-        const shadowOptions = {
-            enabled: this.renderer.lightingSystem.enabled,
-            direction: this.renderer.lightingSystem.shadowDirection,
-            length: this.renderer.lightingSystem.shadowLength * finalDrawWidth / 30, // Scale shadow length with draw width
-            targetScreenX: screenPos.x,
-            targetScreenY: screenPos.y,
-            targetScreenSize: finalDrawWidth // Use final draw size for shadow ellipse?
-        };
+        // --- Shadow Rendering (using new logic) ---
+        const light = this.renderer.lightingSystem;
+        const drawSize = spriteDrawScaleFactor * baseScreenSize; // Use final draw size for shadow scale
+
+        if (light.enabled && light.shadowVisibility > 0 && obj.collides !== false) {
+            const shadowAlpha = 0.3 * light.shadowVisibility; // Fade shadow with visibility
+
+            // Base shadow size & position calculation
+            const baseShadowDisplacement = drawSize * 0.3;
+            const baseVerticalOffset = drawSize * 0.1; // Default slight downward offset
+            const additionalVerticalOffset = drawSize * 0.1 * light.shadowVerticalOffsetFactor; // Lower at dawn/dusk
+            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * baseShadowDisplacement;
+            const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
+
+            // Shadow shape calculation
+            const baseWidthRadius = drawSize * 0.3; // Base radius at noon
+            const baseHeightRadius = drawSize * 0.25; // Base radius at noon
+            const shadowWidth = baseWidthRadius * light.shadowWidthFactor;
+            const shadowHeight = baseHeightRadius * light.shadowHeightFactor;
+
+            this.ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
+            this.ctx.beginPath();
+            this.ctx.ellipse(
+                shadowX,
+                shadowY,
+                shadowWidth,
+                shadowHeight,
+                0, 0, Math.PI * 2
+            );
+            this.ctx.fill();
+        }
 
         // Prepare tint options for day/night cycle
         const tintOptions = {
@@ -140,6 +162,7 @@ export default class WorldRenderer {
         let spriteDrawn = false;
         if (obj.spriteCellId) {
             // Pass shadow and tint options to sprite manager
+             // **NOTE:** We drew the shadow already above, so pass enabled: false to sprite manager's shadow option
             spriteDrawn = this.renderer.spriteManager.drawSprite(
                 this.ctx,
                 obj.spriteCellId,
@@ -148,7 +171,7 @@ export default class WorldRenderer {
                 finalDrawWidth,  // Use scaled width
                 finalDrawHeight, // Use scaled height
                 {
-                    shadow: shadowOptions,
+                    shadow: { enabled: false }, // Shadow already drawn
                     tint: tintOptions,
                     smoothing: false // Prefer crisp pixel art look
                     // Rotation could be added here if needed: rotation: obj.angle || 0
@@ -167,24 +190,7 @@ export default class WorldRenderer {
             // Use baseScreenSize for fallback rendering shapes
             const fallbackSize = baseScreenSize;
 
-            // Draw shadow first if lighting is enabled (so it's behind the object)
-            // Adjust shadow based on fallback size
-            if (shadowOptions.enabled && shadowOptions.length > 0) {
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                const shadowLength = this.renderer.lightingSystem.shadowLength * fallbackSize / 30; // Shadow based on fallback size
-                const shadowX = screenPos.x + shadowOptions.direction.x * shadowLength;
-                const shadowY = screenPos.y + shadowOptions.direction.y * shadowLength;
-
-                this.ctx.beginPath();
-                this.ctx.ellipse(
-                    shadowX,
-                    shadowY,
-                    fallbackSize * 0.4, // Basic oval shadow based on fallback size
-                    fallbackSize * 0.2,
-                    0, 0, Math.PI * 2
-                );
-                this.ctx.fill();
-            }
+            // Shadow already drawn above for collidable objects
 
             // Simple object rendering based on type - MAKE SURE TO USE obj.color or FALLBACK
             let fallbackColor = '#888'; // Grey default
@@ -365,9 +371,11 @@ export default class WorldRenderer {
         }
 
         // Apply ambient light and light color
-        r = Math.floor(r * lightColor.r / 255 * ambientLight);
-        g = Math.floor(g * lightColor.g / 255 * ambientLight);
-        b = Math.floor(b * lightColor.b / 255 * ambientLight);
+        // Adjust multiplier slightly - lightColor is already adjusted for intensity
+        r = Math.floor(r * (lightColor.r / 255) * ambientLight);
+        g = Math.floor(g * (lightColor.g / 255) * ambientLight);
+        b = Math.floor(b * (lightColor.b / 255) * ambientLight);
+
 
         // Clamp values
         r = Math.max(0, Math.min(255, r));
