@@ -1,0 +1,133 @@
+/* Base Styles */
+:root {
+    /* Game color palette - to be finalized */
+    --color-primary: #e63946;
+    --color-secondary: #457b9d;
+    --color-accent: #f1faee;
+    --color-dark: #1d3557;
+    --color-light: #a8dadc;
+    --font-main: 'Courier New', monospace;
+    
+    /* Game dimensions */
+    --game-width: 100vw;
+    --game-height: 100vh;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: var(--font-main);
+    background-color: var(--color-dark);
+    color: var(--color-accent);
+    overflow: hidden;
+}
+
+#game-container {
+    position: relative;
+    width: var(--game-width);
+    height: var(--game-height);
+}
+
+#game-canvas {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+#ui-overlay {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+    pointer-events: none;
+}
+
+/* Loading Screen */
+#loading-screen {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background-color: var(--color-dark);
+    pointer-events: auto;
+}
+
+#loading-screen h1 {
+    font-size: 3rem;
+    margin-bottom: 2rem;
+    color: var(--color-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.5rem;
+    text-shadow: 0 0 10px rgba(230, 57, 70, 0.5);
+}
+
+.loading-bar {
+    width: 60%;
+    height: 20px;
+    border: 2px solid var(--color-light);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.loading-progress {
+    height: 100%;
+    width: 0%;
+    background-color: var(--color-secondary);
+    transition: width 0.3s ease;
+}
+
+/* HUD Elements */
+#hud {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    padding: 1rem;
+    width: 100%;
+    height: 100%;
+}
+
+#resources {
+    justify-self: start;
+}
+
+#minimap {
+    justify-self: center;
+    width: 150px;
+    height: 150px;
+    border: 2px solid var(--color-light);
+    border-radius: 50%;
+    overflow: hidden;
+    background-color: rgba(0, 0, 0, 0.5);
+}
+
+#player-status {
+    justify-self: end;
+}
+
+/* Utilities */
+.hidden {
+    display: none !important;
+}
+
+#debug-overlay {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    background-color: rgba(0, 0, 0, 0.7);
+    padding: 10px;
+    border-radius: 5px;
+    font-family: monospace;
+    font-size: 12px;
+    max-width: 300px;
+    max-height: 200px;
+    overflow: auto;
+}
+
