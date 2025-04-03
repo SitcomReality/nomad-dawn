@@ -75,7 +75,8 @@ export default class Game {
             this.world = new World({
                 seed: Math.floor(Math.random() * 999999),
                 size: Config.WORLD_SIZE,
-                chunkSize: Config.CHUNK_SIZE
+                chunkSize: Config.CHUNK_SIZE,
+                debug: this.debug
             });
             
             // Initialize the world (generate starting chunks, etc.)
@@ -83,12 +84,13 @@ export default class Game {
             
             // Position player in the world
             const startPosition = this.world.getRandomSpawnPoint();
-            this.player.setPosition(startPosition.x, startPosition.y);
+            this.player.x = startPosition.x;
+            this.player.y = startPosition.y;
             
             // Sync initial player state to network
             this.network.updatePresence({
-                x: startPosition.x,
-                y: startPosition.y,
+                x: this.player.x,
+                y: this.player.y,
                 vehicleId: null,
                 resources: this.player.resources,
                 health: this.player.health

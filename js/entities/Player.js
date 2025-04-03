@@ -184,6 +184,13 @@ export default class Player {
         ctx.stroke();
     }
     
+    setPosition(x, y) {
+        this.x = x;
+        this.y = y;
+        this._stateChanged = true;
+        return this;
+    }
+    
     getNetworkState() {
         return {
             x: this.x,
@@ -227,4 +234,3 @@ export default class Player {
         this._stateChanged = false;
     }
 }
-
