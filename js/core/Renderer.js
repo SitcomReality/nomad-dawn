@@ -1,3 +1,5 @@
+import MinimapRenderer from '../ui/MinimapRenderer.js';
+
 export default class Renderer {
     constructor(canvas) {
         this.canvas = canvas;
@@ -16,6 +18,12 @@ export default class Renderer {
         
         // Visual effects container
         this.effects = [];
+        
+        // Instantiate the MinimapRenderer
+        this.minimapRenderer = new MinimapRenderer('minimap');
+        
+        // Track last frame time for effects delta calculation
+        this.lastFrameTime = performance.now();
     }
     
     resizeCanvas() {
@@ -87,7 +95,7 @@ export default class Renderer {
         }
         
         // Render grid lines for debugging
-        if (world.debug) {
+        if (world.debug && world.debug.isEnabled && world.debug.isEnabled()) {
             this.renderGrid(world);
         }
     }
@@ -126,7 +134,9 @@ export default class Renderer {
         );
         
         // Render chunk features (trees, rocks, etc.)
-        for (const feature of chunk.features) {
+        // Combine features and resources for rendering
+        const objectsToRender = [...chunk.features, ...chunk.resources];
+        for (const feature of objectsToRender) {
             this.renderWorldObject(feature);
         }
     }
@@ -241,7 +251,7 @@ export default class Renderer {
         for (const entity of sortedEntities) {
             // Skip offscreen entities
             const screenPos = this.worldToScreen(entity.x, entity.y);
-            const screenSize = entity.size * this.camera.zoom;
+            const screenSize = (entity.size || 20) * this.camera.zoom;
             
             if (
                 screenPos.x + screenSize < 0 ||
@@ -256,7 +266,7 @@ export default class Renderer {
             this.ctx.save();
             
             // Highlight the player entity
-            if (entity === player) {
+            if (player && entity.id === player.id) {
                 this.ctx.shadowColor = 'rgba(255, 255, 255, 0.5)';
                 this.ctx.shadowBlur = 10;
             }
@@ -268,7 +278,7 @@ export default class Renderer {
             }
             
             // Draw entity
-            if (entity.render) {
+            if (entity.render && typeof entity.render === 'function') {
                 // Use entity's custom render method if available
                 entity.render(this.ctx, 0, 0, screenSize);
             } else {
@@ -280,6 +290,7 @@ export default class Renderer {
                 
                 // Draw direction indicator
                 this.ctx.strokeStyle = 'white';
+                this.ctx.lineWidth = 1 / this.camera.zoom;
                 this.ctx.beginPath();
                 this.ctx.moveTo(0, 0);
                 this.ctx.lineTo(screenSize / 2, 0);
@@ -296,26 +307,27 @@ export default class Renderer {
                 this.ctx.fillText(entity.name, screenPos.x, screenPos.y - screenSize / 2 - 10);
                 
                 // Draw health bar if entity has health
-                if (entity.health !== undefined && entity.maxHealth !== undefined) {
+                if (entity.health !== undefined && entity.maxHealth !== undefined && entity.maxHealth > 0) {
                     const healthPercent = entity.health / entity.maxHealth;
-                    const barWidth = screenSize;
+                    const barWidth = Math.max(20, screenSize * 0.8);
                     const barHeight = 5;
+                    const barYOffset = screenSize / 2 + 5;
                     
                     // Health bar background
-                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                     this.ctx.fillRect(
                         screenPos.x - barWidth / 2,
-                        screenPos.y - screenSize / 2 - 5,
+                        screenPos.y + barYOffset,
                         barWidth,
                         barHeight
                     );
                     
                     // Health bar fill
-                    this.ctx.fillStyle = healthPercent > 0.5 ? '#2d4' : (healthPercent > 0.25 ? '#fa0' : '#f42');
+                    this.ctx.fillStyle = healthPercent > 0.5 ? '#4caf50' : (healthPercent > 0.25 ? '#ff9800' : '#f44336');
                     this.ctx.fillRect(
                         screenPos.x - barWidth / 2,
-                        screenPos.y - screenSize / 2 - 5,
-                        barWidth * healthPercent,
+                        screenPos.y + barYOffset,
+                        barWidth * Math.max(0, healthPercent),
                         barHeight
                     );
                 }
@@ -341,104 +353,18 @@ export default class Renderer {
                 `;
             }
             
-            // Render minimap
-            this.renderMinimap(game.world, game.player, game.entities.getAll());
-        }
-    }
-    
-    renderMinimap(world, player, entities) {
-        if (!world || !player) return;
-        
-        const minimap = document.getElementById('minimap');
-        if (!minimap) return;
-        
-        const minimapSize = 150;
-        const minimapScale = 0.02; // Scale factor for world to minimap
-        
-        // Create or get minimap canvas
-        let minimapCanvas = minimap.querySelector('canvas');
-        if (!minimapCanvas) {
-            minimapCanvas = document.createElement('canvas');
-            minimapCanvas.width = minimapSize;
-            minimapCanvas.height = minimapSize;
-            minimap.appendChild(minimapCanvas);
-        }
-        
-        const mCtx = minimapCanvas.getContext('2d');
-        
-        // Clear minimap
-        mCtx.clearRect(0, 0, minimapSize, minimapSize);
-        mCtx.fillStyle = '#111';
-        mCtx.fillRect(0, 0, minimapSize, minimapSize);
-        
-        // Draw world chunks in minimap
-        const center = { x: minimapSize / 2, y: minimapSize / 2 };
-        const visibleRadius = minimapSize / 2 / minimapScale;
-        
-        // Draw chunks
-        for (const chunk of world.getChunksInRadius(player.x, player.y, visibleRadius)) {
-            const mmX = center.x + (chunk.x - player.x) * minimapScale;
-            const mmY = center.y + (chunk.y - player.y) * minimapScale;
-            const mmSize = chunk.size * minimapScale;
-            
-            mCtx.fillStyle = chunk.biome ? chunk.biome.color : '#333';
-            mCtx.fillRect(
-                mmX - mmSize / 2,
-                mmY - mmSize / 2,
-                mmSize,
-                mmSize
-            );
-        }
-        
-        // Draw entities
-        for (const entity of entities) {
-            // Skip entities too far from player
-            if (Math.abs(entity.x - player.x) > visibleRadius || 
-                Math.abs(entity.y - player.y) > visibleRadius) {
-                continue;
-            }
-            
-            const mmX = center.x + (entity.x - player.x) * minimapScale;
-            const mmY = center.y + (entity.y - player.y) * minimapScale;
-            
-            // Different colors for different entity types
-            if (entity === player) {
-                mCtx.fillStyle = '#fff';
-                mCtx.beginPath();
-                mCtx.arc(mmX, mmY, 3, 0, Math.PI * 2);
-                mCtx.fill();
-            } else if (entity.type === 'player') {
-                mCtx.fillStyle = '#5af';
-                mCtx.beginPath();
-                mCtx.arc(mmX, mmY, 2, 0, Math.PI * 2);
-                mCtx.fill();
-            } else if (entity.type === 'vehicle') {
-                mCtx.fillStyle = '#fa0';
-                mCtx.fillRect(mmX - 2, mmY - 2, 4, 4);
+            // Render minimap using the dedicated renderer
+            if (this.minimapRenderer && game.world) {
+                this.minimapRenderer.render(
+                    game.world, 
+                    game.player, 
+                    game.entities.getAll(), 
+                    this.camera, 
+                    this.canvas.width, 
+                    this.canvas.height
+                );
             }
         }
-        
-        // Draw player view area
-        const viewWidth = this.canvas.width / this.camera.zoom * minimapScale;
-        const viewHeight = this.canvas.height / this.camera.zoom * minimapScale;
-        
-        mCtx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
-        mCtx.strokeRect(
-            center.x - viewWidth / 2,
-            center.y - viewHeight / 2,
-            viewWidth,
-            viewHeight
-        );
-        
-        // Draw cardinal directions
-        mCtx.fillStyle = 'white';
-        mCtx.font = '10px monospace';
-        mCtx.textAlign = 'center';
-        
-        mCtx.fillText('N', minimapSize / 2, 10);
-        mCtx.fillText('S', minimapSize / 2, minimapSize - 5);
-        mCtx.fillText('W', 8, minimapSize / 2);
-        mCtx.fillText('E', minimapSize - 8, minimapSize / 2);
     }
     
     createEffect(type, x, y, size = 1) {
@@ -453,7 +379,7 @@ export default class Renderer {
                     x: screenPos.x,
                     y: screenPos.y,
                     size: size * this.camera.zoom,
-                    duration: 1000, // milliseconds
+                    duration: 500, // milliseconds
                     startTime: performance.now(),
                     update: (ctx, currentTime, delta) => {
                         const progress = (currentTime - effect.startTime) / effect.duration;
@@ -485,6 +411,7 @@ export default class Renderer {
                 break;
                 
             default:
+                console.warn(`Unknown effect type: ${type}`);
                 return; // Unknown effect type
         }
         
@@ -494,11 +421,12 @@ export default class Renderer {
     
     renderEffects() {
         const currentTime = performance.now();
-        const delta = currentTime - this.lastFrameTime;
-        this.lastFrameTime = currentTime;
+        const delta = currentTime - this.lastFrameTime; // Use pre-calculated delta if available, or calculate here
+        this.lastFrameTime = currentTime; // Update last frame time for next effect calculation
         
         // Update and render all active effects
         this.effects = this.effects.filter(effect => {
+            // Pass context for drawing
             return effect.update(this.ctx, currentTime, delta);
         });
     }
@@ -507,8 +435,10 @@ export default class Renderer {
         const debugOverlay = document.getElementById('debug-overlay');
         if (!debugOverlay) return;
         
-        // Show debug overlay
-        debugOverlay.classList.remove('hidden');
+        // Show debug overlay if enabled
+        const isEnabled = (window.debug && window.debug.isEnabled && window.debug.isEnabled());
+        debugOverlay.classList.toggle('hidden', !isEnabled);
+        if (!isEnabled) return;
         
         // Update debug information
         let debugHTML = '<h3>Debug Info</h3>';
@@ -519,4 +449,3 @@ export default class Renderer {
         debugOverlay.innerHTML = debugHTML;
     }
 }
-
