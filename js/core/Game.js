@@ -7,6 +7,7 @@ import NetworkManager from './NetworkManager.js';
 import ResourceManager from './ResourceManager.js';
 import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
+import Vehicle from '../entities/Vehicle.js';
 
 export default class Game {
     constructor(options) {
@@ -82,10 +83,19 @@ export default class Game {
     
     async loadAssets() {
         try {
-            // Load essential game assets (example)
-            await this.resources.loadAssets([
+            const assetsToLoad = [
                 // { type: 'texture', id: 'player_sprite', url: '/assets/player.png' },
-            ]);
+            ];
+
+            // Add spritesheets from config
+            if (this.config.SPRITESHEET_CONFIG) {
+                for (const key in this.config.SPRITESHEET_CONFIG) {
+                    const sheet = this.config.SPRITESHEET_CONFIG[key];
+                    assetsToLoad.push({ type: 'image', id: sheet.id, url: sheet.url });
+                }
+            }
+
+            await this.resources.loadAssets(assetsToLoad);
             
             this.debug.log('Assets loaded successfully');
             return true;

@@ -15,19 +15,22 @@ export const Config = {
             id: 'metal',
             name: 'Metal',
             color: '#a0a0a0',
-            description: 'Basic building material for structures and vehicles'
+            description: 'Basic building material for structures and vehicles',
+            spriteCellId: 'metal_lump'
         },
         {
             id: 'energy',
             name: 'Energy Crystals',
             color: '#f0e050',
-            description: 'Powers vehicles and advanced structures'
+            description: 'Powers vehicles and advanced structures',
+            spriteCellId: 'battery_car'
         },
         {
             id: 'food',
             name: 'Food Source',
             color: '#50c020',
-            description: 'Required for player survival and healing'
+            description: 'Required for player survival and healing',
+            spriteCellId: 'food_fruit'
         },
         // Rare resources
         {
@@ -35,35 +38,40 @@ export const Config = {
             name: 'Uranium',
             color: '#2ea83b',
             description: 'Highly efficient but dangerous energy source',
-            rare: true
+            rare: true,
+            spriteCellId: 'barrel_toxic'
         },
         {
             id: 'silicon',
             name: 'Pure Silicon',
             color: '#b9d0d7',
             description: 'Used for advanced electronics and solar panels',
-            rare: true
+            rare: true,
+            spriteCellId: 'metal_ingots'
         },
         {
             id: 'crystal',
             name: 'Crystal Formation',
             color: '#9966cc',
             description: 'Exotic material with unique properties',
-            rare: true
+            rare: true,
+            spriteCellId: null
         },
         {
             id: 'medicine',
             name: 'Medicinal Plants',
             color: '#d14a87',
             description: 'Used for crafting advanced medical supplies',
-            rare: true
+            rare: true,
+            spriteCellId: 'flowers_pink'
         },
         {
             id: 'exotic_wood',
             name: 'Exotic Wood',
             color: '#8b4513',
             description: 'Rare material for specialized construction',
-            rare: true
+            rare: true,
+            spriteCellId: 'tree_round'
         }
     ],
     
@@ -180,5 +188,54 @@ export const Config = {
     // Debug settings
     DEBUG_ENABLED: false,
     SHOW_COLLISION_SHAPES: false,
-    SHOW_CHUNK_BOUNDARIES: false
+    SHOW_CHUNK_BOUNDARIES: false,
+
+    // Spritesheet Configuration
+    SPRITESHEET_CONFIG: {
+        environmental: {
+            id: 'env_sprites',
+            url: '/nd_enviro_features_ss.png',
+            spriteWidth: 512,
+            spriteHeight: 512,
+            columns: 4,
+            rows: 4
+        }
+    },
+
+    // Sprite Cell Mappings (using descriptive names)
+    // Maps a logical name to its cell coordinates (col, row) starting from 0,0 top-left
+    SPRITE_CELLS: {
+        // Row 0
+        'tree_pine': { sheet: 'env_sprites', col: 0, row: 0 },
+        'tree_round': { sheet: 'env_sprites', col: 1, row: 0 },
+        'shrub_round': { sheet: 'env_sprites', col: 2, row: 0 },
+        'cactus_tall': { sheet: 'env_sprites', col: 3, row: 0 },
+        // Row 1
+        'flowers_pink': { sheet: 'env_sprites', col: 0, row: 1 },
+        'rock_medium': { sheet: 'env_sprites', col: 1, row: 1 },
+        'boulder_large': { sheet: 'env_sprites', col: 2, row: 1 },
+        'pebbles_small': { sheet: 'env_sprites', col: 3, row: 1 },
+        // Row 2
+        'barrel_toxic': { sheet: 'env_sprites', col: 0, row: 2 },
+        'barrel_fuel': { sheet: 'env_sprites', col: 1, row: 2 },
+        'food_meat': { sheet: 'env_sprites', col: 2, row: 2 },
+        'food_fruit': { sheet: 'env_sprites', col: 3, row: 2 },
+        // Row 3
+        'battery_car': { sheet: 'env_sprites', col: 0, row: 3 },
+        'tire': { sheet: 'env_sprites', col: 1, row: 3 },
+        'metal_ingots': { sheet: 'env_sprites', col: 2, row: 3 },
+        'metal_lump': { sheet: 'env_sprites', col: 3, row: 3 }
+    },
+
+    // Define Feature Types with Sprite Info (if not already defined elsewhere)
+    // We'll integrate this with FeatureGenerator later
+    FEATURE_SPRITES: {
+        'tree': 'tree_pine',
+        'bush': 'shrub_round',
+        'rock': 'rock_medium',
+        'debris': 'tire', // Using tire for generic debris
+        'cactus': 'cactus_tall',
+        'ruin': 'boulder_large', // Using boulder as placeholder for ruin
+        // Add mappings for any other feature types used in FeatureGenerator
+    }
 };

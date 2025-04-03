@@ -6,40 +6,53 @@ export default class FeatureGenerator {
         this.featureDefinitions = {
             'tree': {
                 size: { min: 15, max: 25 },
-                color: '#3d6b35',
+                spriteCellId: 'tree_pine', // Link to sprite cell
                 health: 100,
                 collides: true
             },
             'bush': {
                 size: { min: 8, max: 15 },
-                color: '#4e8745',
+                spriteCellId: 'shrub_round',
                 health: 50,
                 collides: true
             },
             'rock': {
                 size: { min: 10, max: 20 },
-                color: '#999',
+                spriteCellId: 'rock_medium',
                 health: 150,
                 collides: true
             },
             'debris': {
                 size: { min: 12, max: 18 },
-                color: '#b7ae94',
+                spriteCellId: 'tire',
                 health: 80,
                 collides: true
             },
             'cactus': {
                 size: { min: 14, max: 22 },
-                color: '#77a567',
+                spriteCellId: 'cactus_tall',
                 health: 70,
                 collides: true
             },
-            'ruin': {
+            'ruin': { // Using boulder sprite as placeholder
                 size: { min: 18, max: 30 },
-                color: '#a09490',
+                spriteCellId: 'boulder_large',
                 health: 200,
                 collides: true
-            }
+            },
+            // Add other potential features like pebbles if needed by biomes
+            'pebbles': {
+                size: { min: 5, max: 10 },
+                spriteCellId: 'pebbles_small',
+                health: 20, // Less health
+                collides: false // Pebbles might not block movement
+            },
+             'boulder': { // Explicit boulder type if needed distinct from ruin/rock
+                 size: { min: 25, max: 40 },
+                 spriteCellId: 'boulder_large',
+                 health: 300,
+                 collides: true
+             }
         };
     }
     
@@ -77,7 +90,9 @@ export default class FeatureGenerator {
                 size: size,
                 health: featureDef.health,
                 collides: featureDef.collides,
-                color: featureDef.color
+                color: featureDef.color, // Keep color as fallback/tint?
+                spriteCellId: featureDef.spriteCellId, // Pass sprite info
+                name: featureType.charAt(0).toUpperCase() + featureType.slice(1) // Add a name
             };
             
             // Add to chunk features

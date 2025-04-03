@@ -1,9 +1,10 @@
 import MinimapRenderer from '../ui/MinimapRenderer.js';
 
 export default class Renderer {
-    constructor(canvas) {
+    constructor(canvas, game) {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
+        this.game = game;
         this.resizeCanvas();
         this.setupResizeListener();
         
@@ -30,6 +31,9 @@ export default class Renderer {
         
         // Track last frame time for effects delta calculation
         this.lastFrameTime = performance.now();
+        
+        // Cache for sprite config lookups
+        this.spriteConfigCache = {};
     }
     
     resizeCanvas() {
@@ -105,11 +109,13 @@ export default class Renderer {
         
         // Render each visible chunk
         for (const chunk of visibleChunks) {
+            // Chunk culling already happens before this loop
             this.renderChunk(chunk);
         }
         
         // Render grid lines for debugging
-        if (world.debug && world.debug.isEnabled && world.debug.isEnabled()) {
+        // Access debug instance via game object now
+        if (this.game && this.game.debug && this.game.debug.isEnabled()) {
             this.renderGrid(world);
         }
     }
@@ -140,7 +146,8 @@ export default class Renderer {
         this.ctx.fillRect(screenLeft, screenTop, screenSize, screenSize);
         
         // Draw chunk border for debugging
-        if (window.debug && window.debug.isEnabled()) {
+        // Access debug instance via game object now
+        if (this.game && this.game.debug && this.game.debug.isEnabled()) {
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(screenLeft, screenTop, screenSize, screenSize);
@@ -237,46 +244,82 @@ export default class Renderer {
         
         this.ctx.save(); // Save context state before drawing object
 
-        // Simple object rendering based on type
-        switch (obj.type) {
-            case 'tree':
-            case 'rock':
-            case 'bush':
-            case 'cactus':
-            case 'ruin':
-            case 'debris':
-                // Use circle for most features for simplicity
-                this.ctx.fillStyle = obj.color || '#f0f'; // Default color if missing
-                this.ctx.beginPath();
-                this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
-                this.ctx.fill();
-                break;
-                
-            case 'resource':
-                // Enhanced resource rendering
-                this.ctx.fillStyle = obj.color || '#ff0';
-                this.ctx.beginPath();
-                this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
-                this.ctx.fill();
-                
-                 // Inner highlight for visual interest
-                 this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-                 this.ctx.beginPath();
-                 this.ctx.arc(screenPos.x - screenSize * 0.1, screenPos.y - screenSize * 0.1,
-                             screenSize * 0.25, 0, Math.PI * 2);
-                 this.ctx.fill();
+        // --- Sprite Rendering ---
+        let spriteDrawn = false;
+        if (obj.spriteCellId) {
+            const spriteConfig = this.getSpriteRenderConfig(obj.spriteCellId);
+            if (spriteConfig) {
+                const drawWidth = screenSize;
+                const drawHeight = screenSize;
+                const drawX = screenPos.x - drawWidth / 2;
+                const drawY = screenPos.y - drawHeight / 2;
+
+                this.ctx.imageSmoothingEnabled = false; // Use nearest-neighbor for pixel art if desired
+                this.ctx.drawImage(
+                    spriteConfig.image,
+                    spriteConfig.sx, spriteConfig.sy, spriteConfig.sw, spriteConfig.sh,
+                    drawX, drawY, drawWidth, drawHeight
+                );
+                spriteDrawn = true;
+            }
+        }
+
+         // Simple object rendering based on type
+         switch (obj.type) {
+             case 'tree':
+             case 'rock':
+             case 'bush':
+             case 'cactus':
+             case 'ruin':
+             case 'debris':
+                 if (!spriteDrawn) {
+                     // Fallback rendering if sprite failed
+                     this.ctx.fillStyle = obj.color || '#f0f'; // Default color if missing
+                     this.ctx.beginPath();
+                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
+                     this.ctx.fill();
+                 }
+                 break;
+                 
+             case 'resource':
+                 if (!spriteDrawn) {
+                     this.ctx.fillStyle = obj.color || '#ff0';
+                     this.ctx.beginPath();
+                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
+                     this.ctx.fill();
+                 }
+                 
+                  // Inner highlight for visual interest
+                  this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                  this.ctx.beginPath();
+                  this.ctx.arc(screenPos.x - screenSize * 0.1, screenPos.y - screenSize * 0.1,
+                              screenSize * 0.25, 0, Math.PI * 2);
+                  this.ctx.fill();
 
                 // Add a glow effect for rare resources (only if zoomed in enough)
                  if (obj.rare && this.camera.zoom > 0.4) {
+                     // Apply glow BEFORE redrawing if sprite was drawn, otherwise draw over fallback
                      this.ctx.shadowColor = obj.color || '#ff0';
                      this.ctx.shadowBlur = screenSize * 0.6; // Slightly larger blur
-                     // Redraw the base slightly smaller to make the glow more apparent
-                     this.ctx.fillStyle = obj.color || '#ff0';
-                     this.ctx.beginPath();
-                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2 * 0.9, 0, Math.PI * 2);
-                     this.ctx.fill();
+                     if (spriteDrawn) {
+                         // If sprite was drawn, re-draw it with the shadow enabled
+                         const spriteConfig = this.getSpriteRenderConfig(obj.spriteCellId);
+                         if(spriteConfig) { // Should exist if spriteDrawn is true
+                             const drawWidth = screenSize * 0.9; // Slightly smaller to enhance glow
+                             const drawHeight = screenSize * 0.9;
+                             const drawX = screenPos.x - drawWidth / 2;
+                             const drawY = screenPos.y - drawHeight / 2;
+                              this.ctx.drawImage(spriteConfig.image, spriteConfig.sx, spriteConfig.sy, spriteConfig.sw, spriteConfig.sh, drawX, drawY, drawWidth, drawHeight);
+                         }
+                     } else {
+                         // If using fallback, draw the circle again
+                         this.ctx.fillStyle = obj.color || '#ff0';
+                         this.ctx.beginPath();
+                         this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2 * 0.9, 0, Math.PI * 2);
+                         this.ctx.fill();
+                     }
 
-                     // Add pulsing effect (subtle)
+                     // Add pulsing outline effect (subtle)
                      const time = performance.now() * 0.0015; // Slightly faster pulse
                      const pulseSize = (Math.sin(time * Math.PI) * 0.05 + 1) * (screenSize / 2); // More subtle size change
                      this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(time * Math.PI) * 0.2})`; // Pulsing alpha
@@ -285,19 +328,21 @@ export default class Renderer {
                      this.ctx.arc(screenPos.x, screenPos.y, pulseSize, 0, Math.PI * 2);
                      this.ctx.stroke();
                  }
-                break;
+                 break;
                 
             default:
-                // Generic square rendering for unknown types
-                this.ctx.fillStyle = obj.color || '#f0f'; // Magenta for unknown
-                this.ctx.fillRect(
-                    screenPos.x - screenSize / 2,
-                    screenPos.y - screenSize / 2,
-                    screenSize,
-                    screenSize
-                );
-        }
-        
+                if (!spriteDrawn) {
+                    // Generic square rendering for unknown types if no sprite
+                    this.ctx.fillStyle = obj.color || '#f0f'; // Magenta for unknown
+                    this.ctx.fillRect(
+                        screenPos.x - screenSize / 2,
+                        screenPos.y - screenSize / 2,
+                        screenSize,
+                        screenSize
+                    );
+                }
+         }
+         
          this.ctx.restore(); // Restore context state (removes shadow, etc.)
 
         // Draw object name label if zoomed in enough
@@ -311,6 +356,37 @@ export default class Renderer {
              this.ctx.shadowBlur = 0; // Reset shadow for other text
             this.ctx.textAlign = 'left'; // Reset alignment
         }
+    }
+    
+    // Pre-calculate or cache sprite config lookups for performance
+    getSpriteRenderConfig(spriteCellId) {
+        if (this.spriteConfigCache[spriteCellId]) {
+            return this.spriteConfigCache[spriteCellId];
+        }
+
+        if (!this.game || !this.game.config || !this.game.config.SPRITE_CELLS || !this.game.config.SPRITESHEET_CONFIG) {
+            return null;
+        }
+
+        const cellInfo = this.game.config.SPRITE_CELLS[spriteCellId];
+        if (!cellInfo) return null;
+
+        const sheetConfig = this.game.config.SPRITESHEET_CONFIG[cellInfo.sheet];
+        if (!sheetConfig) return null;
+
+        const image = this.game.resources.get(sheetConfig.id);
+        if (!image) return null; // Image not loaded yet
+
+        const config = {
+            image: image,
+            sx: cellInfo.col * sheetConfig.spriteWidth,
+            sy: cellInfo.row * sheetConfig.spriteHeight,
+            sw: sheetConfig.spriteWidth,
+            sh: sheetConfig.spriteHeight,
+        };
+        
+        this.spriteConfigCache[spriteCellId] = config; // Cache the result
+        return config;
     }
     
     renderEntities(entities, player) {

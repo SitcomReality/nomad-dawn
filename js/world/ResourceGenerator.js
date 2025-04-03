@@ -8,21 +8,24 @@ export default class ResourceGenerator {
                 color: '#a0a0a0',
                 baseAmount: 50,
                 size: 15,
-                density: 1.0
+                density: 1.0,
+                spriteCellId: 'metal'
             },
             'energy': {
                 name: 'Energy Crystals',
                 color: '#f0e050',
                 baseAmount: 40,
                 size: 12,
-                density: 0.8
+                density: 0.8,
+                spriteCellId: 'energy'
             },
             'food': {
                 name: 'Food Source',
                 color: '#50c020',
                 baseAmount: 60,
                 size: 14,
-                density: 1.2
+                density: 1.2,
+                spriteCellId: 'food'
             },
             'uranium': {
                 name: 'Uranium',
@@ -31,7 +34,8 @@ export default class ResourceGenerator {
                 size: 10,
                 density: 0.2,
                 isRare: true,
-                clusterSize: 3
+                clusterSize: 3,
+                spriteCellId: 'uranium'
             },
             'silicon': {
                 name: 'Pure Silicon',
@@ -40,7 +44,8 @@ export default class ResourceGenerator {
                 size: 12,
                 density: 0.3,
                 isRare: true,
-                clusterSize: 4
+                clusterSize: 4,
+                spriteCellId: 'silicon'
             },
             'crystal': {
                 name: 'Crystal Formation',
@@ -49,7 +54,8 @@ export default class ResourceGenerator {
                 size: 16,
                 density: 0.15,
                 isRare: true,
-                clusterSize: 5
+                clusterSize: 5,
+                spriteCellId: 'crystal'
             },
             'medicine': {
                 name: 'Medicinal Plants',
@@ -58,7 +64,8 @@ export default class ResourceGenerator {
                 size: 11,
                 density: 0.25,
                 isRare: true,
-                clusterSize: 3
+                clusterSize: 3,
+                spriteCellId: 'medicine'
             },
             'exotic_wood': {
                 name: 'Exotic Wood',
@@ -67,7 +74,8 @@ export default class ResourceGenerator {
                 size: 18,
                 density: 0.2,
                 isRare: true,
-                clusterSize: 4
+                clusterSize: 4,
+                spriteCellId: 'exotic_wood'
             }
         };
     }
@@ -104,7 +112,8 @@ export default class ResourceGenerator {
                     size: resourceDef.size + this.rng() * 5 - 2.5,
                     amount: resourceDef.baseAmount + Math.floor(this.rng() * 30 - 15),
                     color: resourceDef.color,
-                    collides: true
+                    collides: true,
+                    spriteCellId: resourceDef.spriteCellId 
                 };
 
                 chunk.resources.push(resource);
@@ -148,7 +157,8 @@ export default class ResourceGenerator {
                 amount: resourceDef.baseAmount + Math.floor(this.rng() * 10),
                 color: resourceDef.color,
                 collides: true,
-                rare: true
+                rare: true,
+                spriteCellId: resourceDef.spriteCellId 
             };
 
             chunk.resources.push(resource);
