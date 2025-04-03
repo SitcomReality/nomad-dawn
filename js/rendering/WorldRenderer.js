@@ -149,12 +149,24 @@ export default class WorldRenderer {
                     shadow: shadowOptions,
                     tint: tintOptions,
                     smoothing: false // Prefer crisp pixel art look
+                    // Rotation could be added here if needed: rotation: obj.angle || 0
                 }
             );
         }
 
         // Fallback rendering if sprite not available or failed to draw
         if (!spriteDrawn) {
+             // --- Debug Log Start ---
+             if (obj.spriteCellId && this.game?.debug?.isEnabled()) {
+                 console.log(`[WorldRenderer] Fallback rendering triggered for object:`, {
+                     id: obj.id,
+                     type: obj.type,
+                     spriteCellId: obj.spriteCellId,
+                     position: { x: obj.x, y: obj.y },
+                 });
+             }
+             // --- Debug Log End ---
+
             // Draw shadow first if lighting is enabled (so it's behind the object)
             if (shadowOptions.enabled && shadowOptions.length > 0) {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
@@ -172,26 +184,18 @@ export default class WorldRenderer {
                 this.ctx.fill();
             }
 
-            // Simple object rendering based on type
+            // Simple object rendering based on type - MAKE SURE TO USE obj.color or FALLBACK
+            let fallbackColor = '#888'; // Grey default
+            if (obj.type === 'resource') fallbackColor = '#ff0'; // Yellow default for resources
+            if (obj.color) fallbackColor = obj.color; // Use object's defined color if available
+
+            this.ctx.fillStyle = this.renderer.lightingSystem.enabled ? 
+                this.adjustColorForLighting(fallbackColor, tintOptions.lightColor, tintOptions.ambientLight) : 
+                fallbackColor; 
+                
+            // Draw shape based on type
             switch (obj.type) {
-                case 'tree':
-                case 'rock':
-                case 'bush':
-                case 'cactus':
-                case 'ruin':
-                case 'debris':
-                    this.ctx.fillStyle = this.renderer.lightingSystem.enabled ? 
-                        this.adjustColorForLighting(obj.color || '#f0f', tintOptions.lightColor, tintOptions.ambientLight) : 
-                        (obj.color || '#888'); // Grey fallback
-                    this.ctx.beginPath();
-                    this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
-                    this.ctx.fill();
-                    break;
-                    
                 case 'resource':
-                    this.ctx.fillStyle = this.renderer.lightingSystem.enabled ? 
-                        this.adjustColorForLighting(obj.color || '#ff0', tintOptions.lightColor, tintOptions.ambientLight) : 
-                        (obj.color || '#ff0');
                     this.ctx.beginPath();
                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                     this.ctx.fill();
@@ -218,12 +222,23 @@ export default class WorldRenderer {
                         this.ctx.stroke();
                     }
                     break;
+                    
+                case 'tree':
+                case 'rock':
+                case 'bush':
+                case 'cactus':
+                case 'ruin':
+                case 'debris':
+                case 'boulder':
+                case 'pebbles':
+                    // Fallback: Draw circle for features
+                    this.ctx.beginPath();
+                    this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    break;
                 
                 default:
-                    // Generic square rendering
-                    this.ctx.fillStyle = this.renderer.lightingSystem.enabled ? 
-                        this.adjustColorForLighting(obj.color || '#f0f', tintOptions.lightColor, tintOptions.ambientLight) : 
-                        (obj.color || '#f0f');
+                    // Generic square rendering for unknown types
                     this.ctx.fillRect(
                         screenPos.x - screenSize / 2,
                         screenPos.y - screenSize / 2,
@@ -314,12 +329,13 @@ export default class WorldRenderer {
             this.ctx.restore(); // Restore styles
         }
     }
-    
-    // Helper method for day/night cycle color adjustments
+
     adjustColorForLighting(colorString, lightColor, ambientLight) {
         // Parse color string to RGB
         let r, g, b;
         
+        if (!colorString) colorString = '#888'; // Default grey if color is undefined
+
         if (colorString.startsWith('#')) {
             // Parse hex color
             const hex = colorString.substring(1);
@@ -329,6 +345,7 @@ export default class WorldRenderer {
         } else if (colorString.startsWith('rgb')) {
             // Parse rgb or rgba color
             const rgb = colorString.match(/\d+/g);
+            if (!rgb || rgb.length < 3) return colorString; // Invalid rgb string
             r = parseInt(rgb[0]);
             g = parseInt(rgb[1]);
             b = parseInt(rgb[2]);
