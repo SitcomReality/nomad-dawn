@@ -4,12 +4,12 @@ export default class WorldRenderer {
         this.game = game;
         this.ctx = renderer.ctx;
     }
-    
+
     render(world, player, viewWidthWorld, viewHeightWorld) {
         // Draw world background
         this.ctx.fillStyle = '#1a1a1a'; // Slightly lighter dark background
         this.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-        
+
         // Apply ambient lighting from lighting system if enabled
         if (this.renderer.lightingSystem.enabled) {
             // Darken the background based on ambient light level
@@ -18,7 +18,7 @@ export default class WorldRenderer {
             this.ctx.fillStyle = `rgb(${bgBrightness}, ${bgBrightness}, ${bgBrightness})`;
             this.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
         }
-        
+
         // Get visible chunks based on player position and screen size
         const visibleChunks = world.getVisibleChunks(
             this.renderer.camera.x,
@@ -26,23 +26,23 @@ export default class WorldRenderer {
             viewWidthWorld,
             viewHeightWorld
         );
-        
+
         // Render each visible chunk
         for (const chunk of visibleChunks) {
             this.renderChunk(chunk);
         }
-        
+
         // Render grid lines for debugging
         if (this.game && this.game.debug && this.game.debug.isEnabled()) {
             this.renderGrid(world);
         }
     }
-    
+
     renderChunk(chunk) {
         // Render chunk terrain and features
         const screenPos = this.renderer.worldToScreen(chunk.x, chunk.y);
         const screenSize = chunk.size * this.renderer.camera.zoom;
-        
+
         // Calculate screen boundaries for culling
         const screenLeft = screenPos.x - screenSize / 2;
         const screenTop = screenPos.y - screenSize / 2;
@@ -58,31 +58,31 @@ export default class WorldRenderer {
         ) {
             return;
         }
-        
+
         // Draw chunk terrain
         let terrainColor = chunk.biome.color;
-        
+
         // Apply time-of-day tinting if lighting system is enabled
         if (this.renderer.lightingSystem.enabled) {
             // Adjust biome color based on light color and ambient light
             const light = this.renderer.lightingSystem;
             terrainColor = this.adjustColorForLighting(
-                terrainColor, 
-                light.lightColor, 
+                terrainColor,
+                light.lightColor,
                 light.ambientLight
             );
         }
-        
+
         this.ctx.fillStyle = terrainColor;
         this.ctx.fillRect(screenLeft, screenTop, screenSize, screenSize);
-        
+
         // Draw chunk border for debugging
         if (this.game && this.game.debug && this.game.debug.isEnabled()) {
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(screenLeft, screenTop, screenSize, screenSize);
         }
-        
+
         // Render chunk features and resources
         // Combine features and resources for efficient rendering loop
         const objectsToRender = [...(chunk.features || []), ...(chunk.resources || [])];
@@ -95,7 +95,7 @@ export default class WorldRenderer {
             this.renderWorldObject(obj);
         }
     }
-    
+
     renderWorldObject(obj) {
         if (!obj) return; // Guard against null/undefined objects
 
@@ -112,9 +112,9 @@ export default class WorldRenderer {
         ) {
             return;
         }
-        
+
         // Save context state before drawing object AND overlays
-        this.ctx.save(); 
+        this.ctx.save();
 
         // Prepare shadow options for future day/night cycle
         const shadowOptions = {
@@ -137,6 +137,15 @@ export default class WorldRenderer {
         // Try to draw using sprite if available
         let spriteDrawn = false;
         if (obj.spriteCellId) {
+             // --- Debug Log Start ---
+             if (this.game?.debug?.isEnabled()) {
+                 console.log(`[WorldRenderer] Attempting sprite draw for object:`, {
+                     id: obj.id, type: obj.type, spriteCellId: obj.spriteCellId,
+                     screenX: screenPos.x.toFixed(0), screenY: screenPos.y.toFixed(0),
+                     screenSize: screenSize.toFixed(0)
+                 });
+             }
+             // --- Debug Log End ---
              // Pass shadow and tint options to sprite manager
             spriteDrawn = this.renderer.spriteManager.drawSprite(
                 this.ctx,
@@ -152,18 +161,19 @@ export default class WorldRenderer {
                     // Rotation could be added here if needed: rotation: obj.angle || 0
                 }
             );
+            // --- Debug Log Start ---
+             if (!spriteDrawn && this.game?.debug?.isEnabled()) {
+                 console.log(`[WorldRenderer] Sprite draw returned false for ${obj.spriteCellId}`);
+             }
+            // --- Debug Log End ---
         }
 
         // Fallback rendering if sprite not available or failed to draw
         if (!spriteDrawn) {
              // --- Debug Log Start ---
+             // Only log if we *expected* a sprite but it failed
              if (obj.spriteCellId && this.game?.debug?.isEnabled()) {
-                 console.log(`[WorldRenderer] Fallback rendering triggered for object:`, {
-                     id: obj.id,
-                     type: obj.type,
-                     spriteCellId: obj.spriteCellId,
-                     position: { x: obj.x, y: obj.y },
-                 });
+                 this.game.debug.log(`[WorldRenderer] Fallback rendering used for object with spriteCellId '${obj.spriteCellId}'. ID: ${obj.id}, Type: ${obj.type}`);
              }
              // --- Debug Log End ---
 
@@ -172,13 +182,13 @@ export default class WorldRenderer {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
                 const shadowX = screenPos.x + shadowOptions.direction.x * shadowOptions.length;
                 const shadowY = screenPos.y + shadowOptions.direction.y * shadowOptions.length;
-                
+
                 this.ctx.beginPath();
                 this.ctx.ellipse(
-                    shadowX, 
-                    shadowY, 
+                    shadowX,
+                    shadowY,
                     screenSize * 0.4, // Basic oval shadow
-                    screenSize * 0.2, 
+                    screenSize * 0.2,
                     0, 0, Math.PI * 2
                 );
                 this.ctx.fill();
@@ -189,17 +199,17 @@ export default class WorldRenderer {
             if (obj.type === 'resource') fallbackColor = '#ff0'; // Yellow default for resources
             if (obj.color) fallbackColor = obj.color; // Use object's defined color if available
 
-            this.ctx.fillStyle = this.renderer.lightingSystem.enabled ? 
-                this.adjustColorForLighting(fallbackColor, tintOptions.lightColor, tintOptions.ambientLight) : 
-                fallbackColor; 
-                
+            this.ctx.fillStyle = this.renderer.lightingSystem.enabled ?
+                this.adjustColorForLighting(fallbackColor, tintOptions.lightColor, tintOptions.ambientLight) :
+                fallbackColor;
+
             // Draw shape based on type
             switch (obj.type) {
                 case 'resource':
                     this.ctx.beginPath();
                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                     this.ctx.fill();
-                    
+
                     // Inner highlight for visual interest
                     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
                     this.ctx.beginPath();
@@ -211,7 +221,7 @@ export default class WorldRenderer {
                     if (obj.rare && this.renderer.camera.zoom > 0.4) {
                         this.ctx.shadowColor = obj.color || '#ff0';
                         this.ctx.shadowBlur = screenSize * 0.6;
-                        
+
                         // Draw a pulsing highlight
                         const time = performance.now() * 0.0015;
                         const pulseSize = (Math.sin(time * Math.PI) * 0.05 + 1) * (screenSize / 2);
@@ -220,9 +230,10 @@ export default class WorldRenderer {
                         this.ctx.beginPath();
                         this.ctx.arc(screenPos.x, screenPos.y, pulseSize, 0, Math.PI * 2);
                         this.ctx.stroke();
+                         this.ctx.shadowBlur = 0; // Reset shadow
                     }
                     break;
-                    
+
                 case 'tree':
                 case 'rock':
                 case 'bush':
@@ -236,7 +247,7 @@ export default class WorldRenderer {
                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                     this.ctx.fill();
                     break;
-                
+
                 default:
                     // Generic square rendering for unknown types
                     this.ctx.fillRect(
@@ -247,7 +258,7 @@ export default class WorldRenderer {
                     );
             }
         }
-        
+
         // Restore context state only after overlays are drawn
         // ctx.restore(); // Moved to end of function
 
@@ -263,13 +274,13 @@ export default class WorldRenderer {
         }
 
          // Restore context state after drawing object AND overlays
-         this.ctx.restore(); 
+         this.ctx.restore();
     }
-    
+
     renderGrid(world) {
         // Draw world grid for debugging
         const gridSize = world.chunkSize;
-        
+
         // Calculate world boundaries visible on screen
         const worldLeft = this.renderer.camera.x - (this.renderer.canvas.width / 2 / this.renderer.camera.zoom);
         const worldRight = this.renderer.camera.x + (this.renderer.canvas.width / 2 / this.renderer.camera.zoom);
@@ -281,12 +292,12 @@ export default class WorldRenderer {
         const endGridX = Math.ceil(worldRight / gridSize) * gridSize;
         const startGridY = Math.floor(worldTop / gridSize) * gridSize;
         const endGridY = Math.ceil(worldBottom / gridSize) * gridSize;
-        
+
         // Set up grid style
         this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
         this.ctx.lineWidth = 1;
         this.ctx.beginPath();
-        
+
         // Draw vertical lines
         for (let x = startGridX; x <= endGridX; x += gridSize) {
             const screenX = this.renderer.worldToScreen(x, worldTop).x;
@@ -295,7 +306,7 @@ export default class WorldRenderer {
                 this.ctx.lineTo(screenX, this.renderer.canvas.height);
             }
         }
-        
+
         // Draw horizontal lines
         for (let y = startGridY; y <= endGridY; y += gridSize) {
             const screenY = this.renderer.worldToScreen(worldLeft, y).y;
@@ -304,7 +315,7 @@ export default class WorldRenderer {
                 this.ctx.lineTo(this.renderer.canvas.width, screenY);
             }
         }
-        
+
         this.ctx.stroke();
 
         // Draw origin marker if visible
@@ -333,15 +344,24 @@ export default class WorldRenderer {
     adjustColorForLighting(colorString, lightColor, ambientLight) {
         // Parse color string to RGB
         let r, g, b;
-        
+
         if (!colorString) colorString = '#888'; // Default grey if color is undefined
 
         if (colorString.startsWith('#')) {
             // Parse hex color
             const hex = colorString.substring(1);
-            r = parseInt(hex.substring(0, 2), 16);
-            g = parseInt(hex.substring(2, 4), 16);
-            b = parseInt(hex.substring(4, 6), 16);
+            if (hex.length === 3) { // Handle shorthand hex
+                 r = parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
+                 g = parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
+                 b = parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
+            } else if (hex.length === 6) {
+                 r = parseInt(hex.substring(0, 2), 16);
+                 g = parseInt(hex.substring(2, 4), 16);
+                 b = parseInt(hex.substring(4, 6), 16);
+            } else {
+                 return colorString; // Invalid hex
+            }
+
         } else if (colorString.startsWith('rgb')) {
             // Parse rgb or rgba color
             const rgb = colorString.match(/\d+/g);
@@ -353,17 +373,17 @@ export default class WorldRenderer {
             // Default if color can't be parsed
             return colorString;
         }
-        
+
         // Apply ambient light and light color
         r = Math.floor(r * lightColor.r / 255 * ambientLight);
         g = Math.floor(g * lightColor.g / 255 * ambientLight);
         b = Math.floor(b * lightColor.b / 255 * ambientLight);
-        
+
         // Clamp values
         r = Math.max(0, Math.min(255, r));
         g = Math.max(0, Math.min(255, g));
         b = Math.max(0, Math.min(255, b));
-        
+
         return `rgb(${r}, ${g}, ${b})`;
     }
 }

@@ -4,56 +4,103 @@ export default class SpriteManager {
         this.game = game;
         this.spriteCache = {};
     }
-    
+
     getSpriteConfig(spriteCellId) {
+        const debugLog = (message, ...args) => {
+            if (this.game?.debug?.isEnabled()) {
+                console.log(`[SpriteManager][${spriteCellId}] ${message}`, ...args);
+            }
+        };
+        debugLog("Attempting to get sprite config.");
+
         if (this.spriteCache[spriteCellId]) {
+            debugLog("Found in cache.");
             return this.spriteCache[spriteCellId];
         }
 
         if (!this.game || !this.game.config || !this.game.config.SPRITE_CELLS || !this.game.config.SPRITESHEET_CONFIG) {
+            debugLog("Game config or sprite config missing.");
             return null;
         }
 
         const cellInfo = this.game.config.SPRITE_CELLS[spriteCellId];
         if (!cellInfo) {
-            this.game?.debug?.warn(`Sprite cell info not found for ID: ${spriteCellId}`);
+            this.game?.debug?.warn(`[SpriteManager] Sprite cell info not found for ID: ${spriteCellId}`);
+            debugLog("Cell info not found in SPRITE_CELLS.");
             return null;
         }
+        debugLog("Found cell info:", cellInfo);
 
         const sheetConfig = this.game.config.SPRITESHEET_CONFIG[cellInfo.sheet];
         if (!sheetConfig) {
-            this.game?.debug?.warn(`Spritesheet config not found for sheet ID: ${cellInfo.sheet} (from sprite ${spriteCellId})`);
+            this.game?.debug?.warn(`[SpriteManager] Spritesheet config not found for sheet ID: ${cellInfo.sheet} (from sprite ${spriteCellId})`);
+            debugLog(`Spritesheet config '${cellInfo.sheet}' not found in SPRITESHEET_CONFIG.`);
             return null;
         }
+        debugLog("Found sheet config:", sheetConfig);
 
         const image = this.game.resources.get(sheetConfig.id);
         if (!image) {
+            debugLog(`Spritesheet image '${sheetConfig.id}' not found in ResourceManager. Is it loaded?`);
             if (this.game?.debug?.isEnabled()) {
                 // console.log(`[SpriteManager] Spritesheet image not yet loaded: ${sheetConfig.id} (for sprite ${spriteCellId})`);
             }
-            return null; // Image not loaded yet
+            return null; 
+        }
+        debugLog(`Found image asset '${sheetConfig.id}'. Image dimensions: ${image.width}x${image.height}`);
+
+        const sx = cellInfo.col * sheetConfig.spriteWidth;
+        const sy = cellInfo.row * sheetConfig.spriteHeight;
+        const sw = sheetConfig.spriteWidth;
+        const sh = sheetConfig.spriteHeight;
+        debugLog(`Calculated source rect: sx=${sx}, sy=${sy}, sw=${sw}, sh=${sh}`);
+        if (sx + sw > image.width || sy + sh > image.height) {
+            debugLog(`Warning: Calculated source rect exceeds image dimensions!`);
+            this.game?.debug?.warn(`[SpriteManager] Calculated source rect for ${spriteCellId} exceeds image dimensions! sx=${sx}, sy=${sy}, sw=${sw}, sh=${sh}, imgW=${image.width}, imgH=${image.height}`);
         }
 
         const config = {
             image: image,
-            sx: cellInfo.col * sheetConfig.spriteWidth,
-            sy: cellInfo.row * sheetConfig.spriteHeight,
-            sw: sheetConfig.spriteWidth,
-            sh: sheetConfig.spriteHeight,
+            sx: sx,
+            sy: sy,
+            sw: sw,
+            sh: sh,
         };
 
-        this.spriteCache[spriteCellId] = config; // Cache the result
+        this.spriteCache[spriteCellId] = config; 
+        debugLog("Successfully created and cached config.");
         return config;
     }
-    
+
     drawSprite(ctx, spriteCellId, x, y, width, height, options = {}) {
+        const debugLog = (message, ...args) => {
+            if (this.game?.debug?.isEnabled()) {
+                console.log(`[SpriteManager][${spriteCellId}] ${message}`, ...args);
+            }
+        };
+        debugLog(`Attempting to draw at (${x.toFixed(0)}, ${y.toFixed(0)}) with size ${width.toFixed(0)}x${height.toFixed(0)}`);
+
         const spriteConfig = this.getSpriteConfig(spriteCellId);
         if (!spriteConfig) {
+            debugLog("Draw failed: Could not get sprite config.");
             return false; 
         }
-        
+
+        if (!(spriteConfig.image instanceof HTMLImageElement || spriteConfig.image instanceof OffscreenCanvas || spriteConfig.image instanceof HTMLCanvasElement)) {
+            debugLog("Draw failed: spriteConfig.image is not a drawable type.", spriteConfig.image);
+            return false;
+        }
+        if (spriteConfig.image.width === 0 || spriteConfig.image.height === 0) {
+            debugLog("Draw failed: spriteConfig.image has zero dimensions.");
+            return false;
+        }
+        if (spriteConfig.sw === 0 || spriteConfig.sh === 0) {
+            debugLog("Draw failed: spriteConfig has zero source dimensions (sw/sh).");
+            return false;
+        }
+
         ctx.save();
-        
+
         if (options.alpha !== undefined) ctx.globalAlpha = options.alpha;
         if (options.rotation) {
             ctx.translate(x, y);
@@ -93,13 +140,16 @@ export default class SpriteManager {
 
         ctx.imageSmoothingEnabled = options.smoothing !== undefined ? options.smoothing : false;
         try {
+            debugLog(`Drawing with config: sx=${tintedConfig.sx}, sy=${tintedConfig.sy}, sw=${tintedConfig.sw}, sh=${tintedConfig.sh}, dest=(-${(width/2).toFixed(0)}, -${(height/2).toFixed(0)}), dw=${width.toFixed(0)}, dh=${height.toFixed(0)}`);
             ctx.drawImage(
                 tintedConfig.image, 
                 tintedConfig.sx, tintedConfig.sy, tintedConfig.sw, tintedConfig.sh,
                 -width / 2, -height / 2, width, height 
             );
+            debugLog("Draw successful.");
         } catch (e) {
-            this.game?.debug?.error(`Error drawing sprite ${spriteCellId}:`, e);
+            debugLog("Draw failed: drawImage threw an error.", e);
+            this.game?.debug?.error(`[SpriteManager] Error drawing sprite ${spriteCellId}:`, e);
             ctx.restore(); 
             return false;
         }
