@@ -86,6 +86,10 @@ export default class WorldRenderer {
         // Render chunk features and resources
         // Combine features and resources for efficient rendering loop
         const objectsToRender = [...(chunk.features || []), ...(chunk.resources || [])];
+
+        // Sort objects by Y position for basic Z-ordering
+        objectsToRender.sort((a, b) => a.y - b.y);
+
         for (const obj of objectsToRender) {
             // Individual object culling check might be useful for very dense chunks
             this.renderWorldObject(obj);
@@ -99,7 +103,7 @@ export default class WorldRenderer {
         const screenSize = (obj.size || 10) * this.renderer.camera.zoom; // Default size if undefined
 
         // More aggressive culling: check based on radius/half-size
-        const cullMargin = screenSize / 2;
+        const cullMargin = screenSize; // Use full size as margin for simplicity
         if (
             screenPos.x + cullMargin < 0 ||
             screenPos.y + cullMargin < 0 ||
@@ -109,13 +113,18 @@ export default class WorldRenderer {
             return;
         }
         
-        this.ctx.save(); // Save context state before drawing object
+        // Save context state before drawing object AND overlays
+        this.ctx.save(); 
 
         // Prepare shadow options for future day/night cycle
         const shadowOptions = {
             enabled: this.renderer.lightingSystem.enabled,
             direction: this.renderer.lightingSystem.shadowDirection,
-            length: this.renderer.lightingSystem.shadowLength * screenSize / 30
+            length: this.renderer.lightingSystem.shadowLength * screenSize / 30,
+            // We'll pass size info for potential scaling
+            targetScreenX: screenPos.x,
+            targetScreenY: screenPos.y,
+            targetScreenSize: screenSize
         };
 
         // Prepare tint options for day/night cycle
@@ -128,22 +137,41 @@ export default class WorldRenderer {
         // Try to draw using sprite if available
         let spriteDrawn = false;
         if (obj.spriteCellId) {
+             // Pass shadow and tint options to sprite manager
             spriteDrawn = this.renderer.spriteManager.drawSprite(
                 this.ctx,
                 obj.spriteCellId,
                 screenPos.x,
                 screenPos.y,
                 screenSize,
-                screenSize,
+                screenSize, // Use same width/height for now, could customize per sprite later
                 {
                     shadow: shadowOptions,
-                    tint: tintOptions
+                    tint: tintOptions,
+                    smoothing: false // Prefer crisp pixel art look
                 }
             );
         }
 
         // Fallback rendering if sprite not available or failed to draw
         if (!spriteDrawn) {
+            // Draw shadow first if lighting is enabled (so it's behind the object)
+            if (shadowOptions.enabled && shadowOptions.length > 0) {
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                const shadowX = screenPos.x + shadowOptions.direction.x * shadowOptions.length;
+                const shadowY = screenPos.y + shadowOptions.direction.y * shadowOptions.length;
+                
+                this.ctx.beginPath();
+                this.ctx.ellipse(
+                    shadowX, 
+                    shadowY, 
+                    screenSize * 0.4, // Basic oval shadow
+                    screenSize * 0.2, 
+                    0, 0, Math.PI * 2
+                );
+                this.ctx.fill();
+            }
+
             // Simple object rendering based on type
             switch (obj.type) {
                 case 'tree':
@@ -154,7 +182,7 @@ export default class WorldRenderer {
                 case 'debris':
                     this.ctx.fillStyle = this.renderer.lightingSystem.enabled ? 
                         this.adjustColorForLighting(obj.color || '#f0f', tintOptions.lightColor, tintOptions.ambientLight) : 
-                        (obj.color || '#f0f');
+                        (obj.color || '#888'); // Grey fallback
                     this.ctx.beginPath();
                     this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                     this.ctx.fill();
@@ -203,27 +231,10 @@ export default class WorldRenderer {
                         screenSize
                     );
             }
-            
-            // Draw shadow if lighting is enabled (placeholder)
-            if (shadowOptions.enabled && shadowOptions.length > 0) {
-                // Implement shadow rendering
-                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                const shadowX = screenPos.x + shadowOptions.direction.x * shadowOptions.length;
-                const shadowY = screenPos.y + shadowOptions.direction.y * shadowOptions.length;
-                
-                this.ctx.beginPath();
-                this.ctx.ellipse(
-                    shadowX, 
-                    shadowY, 
-                    screenSize * 0.4, 
-                    screenSize * 0.2, 
-                    0, 0, Math.PI * 2
-                );
-                this.ctx.fill();
-            }
         }
         
-        this.ctx.restore(); // Restore context state (removes shadow, etc.)
+        // Restore context state only after overlays are drawn
+        // ctx.restore(); // Moved to end of function
 
         // Draw object name label if zoomed in enough
         if (obj.name && this.renderer.camera.zoom > 0.6) {
@@ -233,9 +244,11 @@ export default class WorldRenderer {
             this.ctx.shadowColor = 'black';
             this.ctx.shadowBlur = 2;
             this.ctx.fillText(obj.name, screenPos.x, screenPos.y - screenSize / 2 - 5);
-            this.ctx.shadowBlur = 0;
-            this.ctx.textAlign = 'left';
+            this.ctx.shadowBlur = 0; // Reset shadow for next text/element
         }
+
+         // Restore context state after drawing object AND overlays
+         this.ctx.restore(); 
     }
     
     renderGrid(world) {
@@ -284,6 +297,7 @@ export default class WorldRenderer {
         if (screenOrigin.x > 0 && screenOrigin.x < this.renderer.canvas.width &&
             screenOrigin.y > 0 && screenOrigin.y < this.renderer.canvas.height)
         {
+            this.ctx.save(); // Save before changing styles
             this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.5)';
             this.ctx.lineWidth = 2;
             this.ctx.beginPath();
@@ -297,6 +311,7 @@ export default class WorldRenderer {
             this.ctx.font = '12px monospace';
             this.ctx.textAlign = 'left';
             this.ctx.fillText('(0,0)', screenOrigin.x + 15, screenOrigin.y + 5);
+            this.ctx.restore(); // Restore styles
         }
     }
     
