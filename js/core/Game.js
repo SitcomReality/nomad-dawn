@@ -8,8 +8,6 @@ import ResourceManager from './ResourceManager.js';
 import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
 import Vehicle from '../entities/Vehicle.js';
-// Import noise library if needed for world generation options
-import perlin from 'perlin'; // Assuming perlin is available via import map
 
 export default class Game {
     constructor(options) {
@@ -25,7 +23,7 @@ export default class Game {
         // Initialize core systems
         this.resources = new ResourceManager();
         this.input = new InputManager(this.canvas);
-        this.renderer = new Renderer(this.canvas, this); // Pass game reference to renderer
+        this.renderer = new Renderer(this.canvas); 
         this.entities = new EntityManager();
         this.network = new NetworkManager(this);
         this.ui = new UIManager(this); 
@@ -85,14 +83,15 @@ export default class Game {
     
     async loadAssets() {
         try {
-            const assetsToLoad = [];
+            const assetsToLoad = [
+                // { type: 'texture', id: 'player_sprite', url: '/assets/player.png' },
+            ];
 
             // Add spritesheets from config
             if (this.config.SPRITESHEET_CONFIG) {
                 for (const key in this.config.SPRITESHEET_CONFIG) {
                     const sheet = this.config.SPRITESHEET_CONFIG[key];
-                     // Use the ID specified within the sheet config object
-                    assetsToLoad.push({ type: 'image', id: sheet.id, url: sheet.url }); 
+                    assetsToLoad.push({ type: 'image', id: sheet.id, url: sheet.url });
                 }
             }
 
@@ -114,7 +113,7 @@ export default class Game {
                 size: this.config.WORLD_SIZE,
                 chunkSize: this.config.CHUNK_SIZE,
                 maxLoadDistance: this.config.MAX_LOAD_DISTANCE,
-                noise: perlin, // Pass the imported noise generator
+                noise: window.perlin, // Pass noise generator if available globally
                 debug: this.debug, // Pass debug instance
             });
             
@@ -188,6 +187,7 @@ export default class Game {
         };
     }
 
+    // New function to handle vehicle sync from room state
     syncVehiclesFromNetwork(networkVehicles) {
         const presentVehicleIds = new Set(Object.keys(networkVehicles));
 
@@ -211,7 +211,7 @@ export default class Game {
                  // Assuming Vehicle class constructor exists and takes initial state
                  vehicle = new Vehicle(vehicleId, vehicleConfig, data.owner); // Might need adjustment based on Vehicle class constructor
                  this.entities.add(vehicle);
-                 // console.log(`Created network vehicle ${vehicleId}`); // Less noisy log
+                 console.log(`Created network vehicle ${vehicleId}`);
             }
 
              // Update vehicle state (position, health, modules, driver etc.)
@@ -241,6 +241,7 @@ export default class Game {
              }
          }
     }
+
 
     handlePresenceUpdateRequest(updateRequest, fromClientId) {
         if (!this.player) return;
@@ -300,7 +301,7 @@ export default class Game {
                      this.updatePlayerNameFromPeers();
                  } else {
                      // Trigger presence sync to potentially create the new player entity
-                     this.entities.syncFromNetworkPresence(this.network.room.presence, this.player?.id); // Ensure player exists before accessing id
+                     this.entities.syncFromNetworkPresence(this.network.room.presence, this.player.id);
                  }
                 break;
                 
@@ -354,22 +355,35 @@ export default class Game {
     gameLoop(timestamp) {
         if (!this.isRunning) return;
 
+        // Calculate delta time
         const now = performance.now();
-        const rawDt = (now - this.lastFrameTime) / 1000; 
+        const rawDt = (now - this.lastFrameTime) / 1000; // Delta time in seconds
         this.lastFrameTime = now;
-        this.deltaTime = Math.min(rawDt, 1 / 30); 
-        this.rawDeltaTime = rawDt; 
+        
+        // Cap delta time for physics/updates to prevent instability
+        this.deltaTime = Math.min(rawDt, 1 / 30); // Cap at 30 FPS equivalent
+        this.rawDeltaTime = rawDt; // Store uncapped for FPS calculation
 
+        // Update performance metrics first
         this.updatePerformanceMetrics(now);
-        this.input.update(); 
+
+        // Process input
+        this.input.update(); // Reset one-time inputs like mouse wheel
+        
+        // Update game logic
         this.update(this.deltaTime);
+        
+        // Render the scene
         this.render();
+        
+        // Request next frame
         requestAnimationFrame(this.gameLoop);
     }
 
     update(deltaTime) {
         // Update player state (movement, actions)
         if (this.player) {
+            // Handle player input/update only if not inside a vehicle they are driving
             const vehicle = this.player.vehicleId ? this.entities.get(this.player.vehicleId) : null;
             const isDriving = vehicle && vehicle.driver === this.player.id;
 
@@ -377,17 +391,22 @@ export default class Game {
                 this.player.update(deltaTime, this.input);
             }
 
+            // Sync player state if changed
             if (this.player.hasStateChanged()) {
                 this.network.updatePresence(this.player.getNetworkState());
                 this.player.clearStateChanged();
             }
 
+            // Update the vehicle the player is driving based on input
             if (isDriving && vehicle && vehicle.update) {
+                 // Vehicle update should handle input if driven by local player
                  vehicle.update(deltaTime, this.input);
+                 // Sync vehicle state if it changed (assuming Vehicle tracks changes)
                  if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
+                     // Send vehicle updates via room state as it's shared
                      this.network.updateRoomState({
                          vehicles: {
-                             [vehicle.id]: vehicle.getNetworkState() 
+                             [vehicle.id]: vehicle.getNetworkState() // Send full state or diff
                          }
                      });
                      if(vehicle.clearStateChanged) vehicle.clearStateChanged();
@@ -395,40 +414,50 @@ export default class Game {
             }
         }
 
+        // Update world (chunk loading based on player position)
         if (this.world && this.player) {
             this.world.update(deltaTime, this.player.x, this.player.y);
         }
         
+        // Update all other entities (remote players, AI, non-driven vehicles)
+        // EntityManager's update handles calling individual entity updates
         this.entities.update(deltaTime);
-        this.ui.update(); 
+        
+        // Update UI systems
+        this.ui.update(); // Updates HUD, checks open panels
+        
+        // Check for collisions
         this.checkCollisions();
     }
 
     checkCollisions() {
+        // More optimized collision checks needed for many entities.
+        // Consider spatial partitioning (e.g., Quadtree or Grid) later.
         const entities = this.entities.getAll();
-        const checkableEntities = entities.filter(e => e.collidesWith && e.onCollision); 
+        const checkableEntities = entities.filter(e => e.collidesWith && e.onCollision); // Filter entities that can collide
 
         for (let i = 0; i < checkableEntities.length; i++) {
             const entityA = checkableEntities[i];
             for (let j = i + 1; j < checkableEntities.length; j++) {
                 const entityB = checkableEntities[j];
+                
+                // Basic bounding box/circle check first for performance
                  if (this.broadPhaseCheck(entityA, entityB)) {
+                    // More precise check if broad phase passes
                     if (entityA.collidesWith(entityB)) {
                         entityA.onCollision(entityB);
                         entityB.onCollision(entityA);
                     }
                  }
             }
-             // Check collision with world resources/features
+             // Check collision with world resources/features (if player/vehicle)
              if (this.world && (entityA.type === 'player' || entityA.type === 'vehicle')) {
-                  // Reduce radius slightly for check to avoid overly frequent chunk lookups
-                 const checkRadius = (entityA.radius || entityA.size / 2) + 50; 
-                 const nearbyChunks = this.world.getChunksInRadius(entityA.x, entityA.y, checkRadius); 
+                 const nearbyChunks = this.world.getChunksInRadius(entityA.x, entityA.y, entityA.radius + 50); // Check nearby chunks
                  for (const chunk of nearbyChunks) {
-                      // Combine features and resources for collision check
-                     const objects = [...(chunk.features || []), ...(chunk.resources || [])]; 
+                     const objects = [...(chunk.features || []), ...(chunk.resources || [])];
                      for (const obj of objects) {
                          if (obj && obj.collides && this.simpleCircleCollision(entityA, obj)) {
+                             // Assuming world objects don't have onCollision, only player/vehicle reacts
                              entityA.onCollision(obj);
                          }
                      }
@@ -437,19 +466,21 @@ export default class Game {
         }
     }
 
+     // Simple broad-phase check (Axis-Aligned Bounding Box)
      broadPhaseCheck(entityA, entityB) {
          const radiusA = (entityA.radius || entityA.size / 2);
          const radiusB = (entityB.radius || entityB.size / 2);
-          if (!radiusA || !radiusB) return false; // Avoid checks if size/radius is missing
          const dx = Math.abs(entityA.x - entityB.x);
          const dy = Math.abs(entityA.y - entityB.y);
          return dx < radiusA + radiusB && dy < radiusA + radiusB;
      }
 
+     // Simple circle collision check (used for entity vs world object)
      simpleCircleCollision(entity, obj) {
          const radiusA = (entity.radius || entity.size / 2);
-         const radiusB = (obj.radius || obj.size / 2); 
-         if (!radiusA || !radiusB) return false; 
+         const radiusB = (obj.radius || obj.size / 2); // Assume size property for world objects
+         if (!radiusA || !radiusB) return false; // Cannot check if radius is missing
+
          const dx = entity.x - obj.x;
          const dy = entity.y - obj.y;
          const distanceSq = dx * dx + dy * dy;
@@ -460,32 +491,49 @@ export default class Game {
     render() {
         if (!this.renderer) return;
 
-        this.renderer.lastFrameTime = this.lastFrameTime; // Update renderer timer
+        // Update renderer's internal timer for effects
+        this.renderer.lastFrameTime = this.lastFrameTime;
 
+        // Clear canvas
         this.renderer.clear();
         
+        // Render world background and chunks
         if (this.world && this.player) {
             this.renderer.renderWorld(this.world, this.player);
         } else {
+             // Fallback background if world/player not ready
              this.renderer.ctx.fillStyle = '#111';
              this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
         }
         
+        // Render entities (players, vehicles, etc.)
         this.renderer.renderEntities(this.entities.getAll(), this.player);
-        this.renderer.renderEffects();
-        this.renderer.renderUI(this); 
         
-        // Debug info is rendered via DOM overlay managed by renderer/debug utils now
+        // Render visual effects
+        this.renderer.renderEffects();
+        
+        // Render UI overlays (Minimap rendered here, HUD elements are DOM)
+        this.renderer.renderUI(this); // Primarily for Minimap now
+        
+        // Render debug information onto the canvas if needed (or use DOM overlay)
+        if (this.debug && this.debug.isEnabled()) {
+            // Pass performance data to the DOM overlay manager
+            // The actual DOM update happens in updatePerformanceMetrics
+            // this.renderer.renderDebugInfo(this.debug.getDebugData()); // Keep if canvas debug info is needed
+        }
     }
 
     updatePerformanceMetrics(timestamp) {
         this.frameCounter++;
+        // Use the raw delta time for FPS calculation
         this.frameTimeAccumulator += this.rawDeltaTime;
 
         if (timestamp - this.lastFpsUpdate >= this.fpsUpdateInterval) {
+             // Avoid division by zero if frameTimeAccumulator is somehow 0
              const avgFps = this.frameTimeAccumulator > 0 ? Math.round(this.frameCounter / this.frameTimeAccumulator) : 0;
              const avgFrameTimeMs = this.frameCounter > 0 ? (this.frameTimeAccumulator / this.frameCounter) * 1000 : 0;
 
+            // Update debug stats using DebugUtils
             if (this.debug) {
                  const memoryUsage = performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : 'N/A';
                  const networkState = this.network ? (this.network.connected ? 'Connected' : 'Disconnected') : 'N/A';
@@ -493,7 +541,7 @@ export default class Game {
                  this.debug.updateStats({
                     FPS: avgFps,
                     FrameTime: avgFrameTimeMs.toFixed(2) + ' ms',
-                    DeltaTime: this.deltaTime.toFixed(4) + ' s', 
+                    DeltaTime: this.deltaTime.toFixed(4) + ' s', // Show capped delta used for updates
                     Entities: this.entities ? this.entities.count() : 'N/A',
                     PlayerPos: this.player ? `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : 'N/A',
                     Memory: memoryUsage,
@@ -501,23 +549,27 @@ export default class Game {
                     Network: networkState,
                     ClientID: this.network ? this.network.clientId?.substring(0, 8) : 'N/A'
                 });
-                // Renderer updates the DOM overlay using the latest debug data
-                 if (this.renderer) {
-                     this.renderer.renderDebugInfo(this.debug.getDebugData());
-                 }
+                 // Directly update the DOM element via renderer as DebugUtils only stores data
+                 this.renderer.renderDebugInfo(this.debug.getDebugData());
             }
 
+            // Reset counters for the next interval
             this.frameCounter = 0;
             this.frameTimeAccumulator = 0;
             this.lastFpsUpdate = timestamp;
         }
     }
 
+     // Placeholder simulation pause/resume for menu (tricky in multiplayer)
      pauseSimulation() {
+         // In a single-player game, you might stop updates here.
+         // In multiplayer, the world continues; maybe just disable local input processing.
          this.debug.log("Simulation Paused (Input Disabled)");
+         // Potentially set a flag to skip player/vehicle input updates
      }
 
      resumeSimulation() {
          this.debug.log("Simulation Resumed");
+         // Re-enable input processing
      }
 }

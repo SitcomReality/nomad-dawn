@@ -1,19 +1,82 @@
-import { Config } from '../config/GameConfig.js';
-
 export default class ResourceGenerator {
     constructor(world) {
         this.world = world;
         this.rng = world.rng;
-        // Simplify definitions, rely on GameConfig for sprite/color/name
         this.resourceDefinitions = {
-            'metal': { baseAmount: 50, size: 15, density: 1.0 },
-            'energy': { baseAmount: 40, size: 12, density: 0.8 },
-            'food': { baseAmount: 60, size: 14, density: 1.2 },
-            'uranium': { baseAmount: 20, size: 10, density: 0.2, isRare: true, clusterSize: 3 },
-            'silicon': { baseAmount: 25, size: 12, density: 0.3, isRare: true, clusterSize: 4 },
-            'crystal': { baseAmount: 15, size: 16, density: 0.15, isRare: true, clusterSize: 5 },
-            'medicine': { baseAmount: 30, size: 11, density: 0.25, isRare: true, clusterSize: 3 },
-            'exotic_wood': { baseAmount: 35, size: 18, density: 0.2, isRare: true, clusterSize: 4 }
+            'metal': {
+                name: 'Metal',
+                color: '#a0a0a0',
+                baseAmount: 50,
+                size: 15,
+                density: 1.0,
+                spriteCellId: 'metal'
+            },
+            'energy': {
+                name: 'Energy Crystals',
+                color: '#f0e050',
+                baseAmount: 40,
+                size: 12,
+                density: 0.8,
+                spriteCellId: 'energy'
+            },
+            'food': {
+                name: 'Food Source',
+                color: '#50c020',
+                baseAmount: 60,
+                size: 14,
+                density: 1.2,
+                spriteCellId: 'food'
+            },
+            'uranium': {
+                name: 'Uranium',
+                color: '#2ea83b',
+                baseAmount: 20,
+                size: 10,
+                density: 0.2,
+                isRare: true,
+                clusterSize: 3,
+                spriteCellId: 'uranium'
+            },
+            'silicon': {
+                name: 'Pure Silicon',
+                color: '#b9d0d7',
+                baseAmount: 25,
+                size: 12,
+                density: 0.3,
+                isRare: true,
+                clusterSize: 4,
+                spriteCellId: 'silicon'
+            },
+            'crystal': {
+                name: 'Crystal Formation',
+                color: '#9966cc',
+                baseAmount: 15,
+                size: 16,
+                density: 0.15,
+                isRare: true,
+                clusterSize: 5,
+                spriteCellId: 'crystal'
+            },
+            'medicine': {
+                name: 'Medicinal Plants',
+                color: '#d14a87',
+                baseAmount: 30,
+                size: 11,
+                density: 0.25,
+                isRare: true,
+                clusterSize: 3,
+                spriteCellId: 'medicine'
+            },
+            'exotic_wood': {
+                name: 'Exotic Wood',
+                color: '#8b4513',
+                baseAmount: 35,
+                size: 18,
+                density: 0.2,
+                isRare: true,
+                clusterSize: 4,
+                spriteCellId: 'exotic_wood'
+            }
         };
     }
 
@@ -28,12 +91,10 @@ export default class ResourceGenerator {
 
         chunk.biome.resources.forEach(resourceType => {
             const resourceDef = this.resourceDefinitions[resourceType];
-            const resourceConfig = Config.RESOURCE_TYPES.find(r => r.id === resourceType); // Get full config
-            if (!resourceDef || !resourceConfig) return;
+            if (!resourceDef) return;
 
-            const baseCount = Math.ceil(this.world.resourceDensity * chunk.size / 100); // Scale count with density and chunk size
+            const baseCount = Math.ceil(this.world.resourceDensity * chunk.size / 100);
             const resourceCount = Math.floor(baseCount * resourceDef.density * (0.7 + this.rng() * 0.6));
-
 
             for (let i = 0; i < resourceCount; i++) {
                 const offsetX = (this.rng() - 0.5) * chunk.size;
@@ -43,16 +104,16 @@ export default class ResourceGenerator {
 
                 const resource = {
                     id: `resource-${chunk.id}-${resourceType}-${i}`,
-                    type: 'resource', // Type used for rendering/collision checks
-                    resourceType: resourceType, // Specific type ID
-                    name: resourceConfig.name,
+                    type: 'resource',
+                    resourceType: resourceType,
+                    name: resourceDef.name,
                     x: resourceX,
                     y: resourceY,
                     size: resourceDef.size + this.rng() * 5 - 2.5,
-                    amount: Math.max(1, resourceDef.baseAmount + Math.floor(this.rng() * 30 - 15)), // Ensure at least 1 amount
-                    color: resourceConfig.color, // Get color from config
+                    amount: resourceDef.baseAmount + Math.floor(this.rng() * 30 - 15),
+                    color: resourceDef.color,
                     collides: true,
-                    spriteCellId: Config.RESOURCE_SPRITES[resourceType] // Get sprite mapping from config
+                    spriteCellId: resourceDef.spriteCellId 
                 };
 
                 chunk.resources.push(resource);
@@ -61,17 +122,15 @@ export default class ResourceGenerator {
     }
 
     generateRareResources(chunk) {
-        // Lower probability for rare resource cluster spawn
-        if (!chunk.biome || !chunk.biome.rareResources || this.rng() > 0.1) return;
+        if (!chunk.biome || !chunk.biome.rareResources) return;
+
+        if (this.rng() > 0.08) return;
 
         const biomeRareResources = chunk.biome.rareResources;
-        if (biomeRareResources.length === 0) return;
-
         const rareType = biomeRareResources[Math.floor(this.rng() * biomeRareResources.length)];
         const resourceDef = this.resourceDefinitions[rareType];
-        const resourceConfig = Config.RESOURCE_TYPES.find(r => r.id === rareType); // Get full config
 
-        if (!resourceDef || !resourceConfig || !resourceDef.isRare) return;
+        if (!resourceDef || !resourceDef.isRare) return;
 
         const clusterSize = resourceDef.clusterSize || 3;
         const clusterRadius = chunk.size * 0.3;
@@ -91,15 +150,15 @@ export default class ResourceGenerator {
                 id: `resource-${chunk.id}-${rareType}-${i}`,
                 type: 'resource',
                 resourceType: rareType,
-                name: resourceConfig.name,
+                name: resourceDef.name,
                 x: resourceX,
                 y: resourceY,
                 size: resourceDef.size + this.rng() * 4 - 2,
-                amount: Math.max(1, resourceDef.baseAmount + Math.floor(this.rng() * 10)), // Ensure at least 1
-                color: resourceConfig.color, // Get color from config
+                amount: resourceDef.baseAmount + Math.floor(this.rng() * 10),
+                color: resourceDef.color,
                 collides: true,
                 rare: true,
-                spriteCellId: Config.RESOURCE_SPRITES[rareType] // Get sprite mapping from config
+                spriteCellId: resourceDef.spriteCellId 
             };
 
             chunk.resources.push(resource);
