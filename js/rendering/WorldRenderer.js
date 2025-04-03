@@ -100,10 +100,13 @@ export default class WorldRenderer {
         if (!obj) return; // Guard against null/undefined objects
 
         const screenPos = this.renderer.worldToScreen(obj.x, obj.y);
-        const screenSize = (obj.size || 10) * this.renderer.camera.zoom; // Default size if undefined
+        const baseScreenSize = (obj.size || 10) * this.renderer.camera.zoom; // Base size based on obj.size and zoom
+        const spriteDrawScaleFactor = 5; // Factor to scale the sprite drawing
+        const finalDrawWidth = baseScreenSize * spriteDrawScaleFactor;
+        const finalDrawHeight = baseScreenSize * spriteDrawScaleFactor;
 
-        // More aggressive culling: check based on radius/half-size
-        const cullMargin = screenSize; // Use full size as margin for simplicity
+        // More aggressive culling: check based on the final draw size
+        const cullMargin = Math.max(finalDrawWidth, finalDrawHeight) / 2; // Use half of the larger dimension
         if (
             screenPos.x + cullMargin < 0 ||
             screenPos.y + cullMargin < 0 ||
@@ -116,15 +119,14 @@ export default class WorldRenderer {
         // Save context state before drawing object AND overlays
         this.ctx.save();
 
-        // Prepare shadow options for future day/night cycle
+        // Prepare shadow options, potentially scale shadow based on final size?
         const shadowOptions = {
             enabled: this.renderer.lightingSystem.enabled,
             direction: this.renderer.lightingSystem.shadowDirection,
-            length: this.renderer.lightingSystem.shadowLength * screenSize / 30,
-            // We'll pass size info for potential scaling
+            length: this.renderer.lightingSystem.shadowLength * finalDrawWidth / 30, // Scale shadow length with draw width
             targetScreenX: screenPos.x,
             targetScreenY: screenPos.y,
-            targetScreenSize: screenSize
+            targetScreenSize: finalDrawWidth // Use final draw size for shadow ellipse?
         };
 
         // Prepare tint options for day/night cycle
@@ -137,23 +139,23 @@ export default class WorldRenderer {
         // Try to draw using sprite if available
         let spriteDrawn = false;
         if (obj.spriteCellId) {
-             // --- Debug Log Start ---
-             if (this.game?.debug?.isEnabled()) {
-                 console.log(`[WorldRenderer] Attempting sprite draw for object:`, {
-                     id: obj.id, type: obj.type, spriteCellId: obj.spriteCellId,
-                     screenX: screenPos.x.toFixed(0), screenY: screenPos.y.toFixed(0),
-                     screenSize: screenSize.toFixed(0)
-                 });
-             }
-             // --- Debug Log End ---
-             // Pass shadow and tint options to sprite manager
+            // --- Debug Log Start ---
+            if (this.game?.debug?.isEnabled()) {
+                console.log(`[WorldRenderer] Attempting sprite draw for object:`, {
+                    id: obj.id, type: obj.type, spriteCellId: obj.spriteCellId,
+                    screenX: screenPos.x.toFixed(0), screenY: screenPos.y.toFixed(0),
+                    drawWidth: finalDrawWidth.toFixed(0), drawHeight: finalDrawHeight.toFixed(0) // Log final draw dimensions
+                });
+            }
+            // --- Debug Log End ---
+            // Pass shadow and tint options to sprite manager
             spriteDrawn = this.renderer.spriteManager.drawSprite(
                 this.ctx,
                 obj.spriteCellId,
                 screenPos.x,
                 screenPos.y,
-                screenSize,
-                screenSize, // Use same width/height for now, could customize per sprite later
+                finalDrawWidth,  // Use scaled width
+                finalDrawHeight, // Use scaled height
                 {
                     shadow: shadowOptions,
                     tint: tintOptions,
@@ -162,33 +164,39 @@ export default class WorldRenderer {
                 }
             );
             // --- Debug Log Start ---
-             if (!spriteDrawn && this.game?.debug?.isEnabled()) {
-                 console.log(`[WorldRenderer] Sprite draw returned false for ${obj.spriteCellId}`);
-             }
+            if (!spriteDrawn && this.game?.debug?.isEnabled()) {
+                console.log(`[WorldRenderer] Sprite draw returned false for ${obj.spriteCellId}`);
+            }
             // --- Debug Log End ---
         }
 
         // Fallback rendering if sprite not available or failed to draw
+        // Fallback size should probably still use baseScreenSize, not the scaled sprite size
         if (!spriteDrawn) {
-             // --- Debug Log Start ---
-             // Only log if we *expected* a sprite but it failed
-             if (obj.spriteCellId && this.game?.debug?.isEnabled()) {
-                 this.game.debug.log(`[WorldRenderer] Fallback rendering used for object with spriteCellId '${obj.spriteCellId}'. ID: ${obj.id}, Type: ${obj.type}`);
-             }
-             // --- Debug Log End ---
+            // --- Debug Log Start ---
+            // Only log if we *expected* a sprite but it failed
+            if (obj.spriteCellId && this.game?.debug?.isEnabled()) {
+                this.game.debug.log(`[WorldRenderer] Fallback rendering used for object with spriteCellId '${obj.spriteCellId}'. ID: ${obj.id}, Type: ${obj.type}`);
+            }
+            // --- Debug Log End ---
+
+            // Use baseScreenSize for fallback rendering shapes
+            const fallbackSize = baseScreenSize;
 
             // Draw shadow first if lighting is enabled (so it's behind the object)
+            // Adjust shadow based on fallback size
             if (shadowOptions.enabled && shadowOptions.length > 0) {
                 this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-                const shadowX = screenPos.x + shadowOptions.direction.x * shadowOptions.length;
-                const shadowY = screenPos.y + shadowOptions.direction.y * shadowOptions.length;
+                const shadowLength = this.renderer.lightingSystem.shadowLength * fallbackSize / 30; // Shadow based on fallback size
+                const shadowX = screenPos.x + shadowOptions.direction.x * shadowLength;
+                const shadowY = screenPos.y + shadowOptions.direction.y * shadowLength;
 
                 this.ctx.beginPath();
                 this.ctx.ellipse(
                     shadowX,
                     shadowY,
-                    screenSize * 0.4, // Basic oval shadow
-                    screenSize * 0.2,
+                    fallbackSize * 0.4, // Basic oval shadow based on fallback size
+                    fallbackSize * 0.2,
                     0, 0, Math.PI * 2
                 );
                 this.ctx.fill();
@@ -207,30 +215,30 @@ export default class WorldRenderer {
             switch (obj.type) {
                 case 'resource':
                     this.ctx.beginPath();
-                    this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
+                    this.ctx.arc(screenPos.x, screenPos.y, fallbackSize / 2, 0, Math.PI * 2);
                     this.ctx.fill();
 
                     // Inner highlight for visual interest
                     this.ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
                     this.ctx.beginPath();
-                    this.ctx.arc(screenPos.x - screenSize * 0.1, screenPos.y - screenSize * 0.1,
-                                screenSize * 0.25, 0, Math.PI * 2);
+                    this.ctx.arc(screenPos.x - fallbackSize * 0.1, screenPos.y - fallbackSize * 0.1,
+                                fallbackSize * 0.25, 0, Math.PI * 2);
                     this.ctx.fill();
 
                     // Add glow effect for rare resources (only if zoomed in enough)
                     if (obj.rare && this.renderer.camera.zoom > 0.4) {
                         this.ctx.shadowColor = obj.color || '#ff0';
-                        this.ctx.shadowBlur = screenSize * 0.6;
+                        this.ctx.shadowBlur = fallbackSize * 0.6;
 
                         // Draw a pulsing highlight
                         const time = performance.now() * 0.0015;
-                        const pulseSize = (Math.sin(time * Math.PI) * 0.05 + 1) * (screenSize / 2);
+                        const pulseSize = (Math.sin(time * Math.PI) * 0.05 + 1) * (fallbackSize / 2);
                         this.ctx.strokeStyle = `rgba(255, 255, 255, ${0.3 + Math.sin(time * Math.PI) * 0.2})`;
                         this.ctx.lineWidth = 1;
                         this.ctx.beginPath();
                         this.ctx.arc(screenPos.x, screenPos.y, pulseSize, 0, Math.PI * 2);
                         this.ctx.stroke();
-                         this.ctx.shadowBlur = 0; // Reset shadow
+                        this.ctx.shadowBlur = 0; // Reset shadow
                     }
                     break;
 
@@ -244,17 +252,17 @@ export default class WorldRenderer {
                 case 'pebbles':
                     // Fallback: Draw circle for features
                     this.ctx.beginPath();
-                    this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
+                    this.ctx.arc(screenPos.x, screenPos.y, fallbackSize / 2, 0, Math.PI * 2);
                     this.ctx.fill();
                     break;
 
                 default:
                     // Generic square rendering for unknown types
                     this.ctx.fillRect(
-                        screenPos.x - screenSize / 2,
-                        screenPos.y - screenSize / 2,
-                        screenSize,
-                        screenSize
+                        screenPos.x - fallbackSize / 2,
+                        screenPos.y - fallbackSize / 2,
+                        fallbackSize,
+                        fallbackSize
                     );
             }
         }
@@ -262,19 +270,20 @@ export default class WorldRenderer {
         // Restore context state only after overlays are drawn
         // ctx.restore(); // Moved to end of function
 
-        // Draw object name label if zoomed in enough
+        // Position object name label based on the final drawn size for better placement
         if (obj.name && this.renderer.camera.zoom > 0.6) {
             this.ctx.fillStyle = obj.rare ? 'gold' : 'rgba(255, 255, 255, 0.8)';
             this.ctx.font = `bold ${Math.max(8, 10 * this.renderer.camera.zoom)}px monospace`;
             this.ctx.textAlign = 'center';
             this.ctx.shadowColor = 'black';
             this.ctx.shadowBlur = 2;
-            this.ctx.fillText(obj.name, screenPos.x, screenPos.y - screenSize / 2 - 5);
+            const labelYOffset = (spriteDrawn ? finalDrawHeight : baseScreenSize) / 2 + 5; // Place above the drawn object
+            this.ctx.fillText(obj.name, screenPos.x, screenPos.y - labelYOffset);
             this.ctx.shadowBlur = 0; // Reset shadow for next text/element
         }
 
-         // Restore context state after drawing object AND overlays
-         this.ctx.restore();
+        // Restore context state after drawing object AND overlays
+        this.ctx.restore();
     }
 
     renderGrid(world) {
@@ -351,15 +360,15 @@ export default class WorldRenderer {
             // Parse hex color
             const hex = colorString.substring(1);
             if (hex.length === 3) { // Handle shorthand hex
-                 r = parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
-                 g = parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
-                 b = parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
+                r = parseInt(hex.substring(0, 1) + hex.substring(0, 1), 16);
+                g = parseInt(hex.substring(1, 2) + hex.substring(1, 2), 16);
+                b = parseInt(hex.substring(2, 3) + hex.substring(2, 3), 16);
             } else if (hex.length === 6) {
-                 r = parseInt(hex.substring(0, 2), 16);
-                 g = parseInt(hex.substring(2, 4), 16);
-                 b = parseInt(hex.substring(4, 6), 16);
+                r = parseInt(hex.substring(0, 2), 16);
+                g = parseInt(hex.substring(2, 4), 16);
+                b = parseInt(hex.substring(4, 6), 16);
             } else {
-                 return colorString; // Invalid hex
+                return colorString; // Invalid hex
             }
 
         } else if (colorString.startsWith('rgb')) {
