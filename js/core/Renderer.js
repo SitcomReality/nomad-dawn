@@ -202,24 +202,61 @@ export default class Renderer {
         // Simple object rendering based on type
         switch (obj.type) {
             case 'tree':
-                this.ctx.fillStyle = '#2d4';
+                this.ctx.fillStyle = obj.color || '#2d4';
                 this.ctx.beginPath();
                 this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                 this.ctx.fill();
                 break;
                 
             case 'rock':
-                this.ctx.fillStyle = '#999';
+                this.ctx.fillStyle = obj.color || '#999';
                 this.ctx.beginPath();
                 this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                 this.ctx.fill();
                 break;
                 
             case 'resource':
+                // Create specialized rendering for resources with a more distinctive look
+                this.ctx.save();
+                
+                // Base circle
                 this.ctx.fillStyle = obj.color || '#ff0';
                 this.ctx.beginPath();
                 this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2, 0, Math.PI * 2);
                 this.ctx.fill();
+                
+                // Add inner details based on resource type
+                if (obj.resourceType) {
+                    // Inner highlight
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                    this.ctx.beginPath();
+                    this.ctx.arc(screenPos.x - screenSize * 0.1, screenPos.y - screenSize * 0.1, 
+                                screenSize * 0.25, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Add a glow effect for rare resources
+                    if (obj.rare) {
+                        this.ctx.shadowColor = obj.color || '#ff0';
+                        this.ctx.shadowBlur = screenSize * 0.5;
+                        this.ctx.beginPath();
+                        this.ctx.arc(screenPos.x, screenPos.y, screenSize / 2 * 0.8, 0, Math.PI * 2);
+                        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                        this.ctx.fill();
+                        
+                        // Add pulsing if camera is close enough
+                        if (this.camera.zoom > 0.8) {
+                            const time = performance.now() * 0.001; // seconds
+                            const pulseSize = (Math.sin(time * 2) * 0.1 + 1) * (screenSize / 2 + 3);
+                            this.ctx.strokeStyle = obj.color || '#ff0';
+                            this.ctx.lineWidth = 1;
+                            this.ctx.beginPath();
+                            this.ctx.arc(screenPos.x, screenPos.y, pulseSize, 0, Math.PI * 2);
+                            this.ctx.stroke();
+                        }
+                    }
+                }
+                
+                this.ctx.restore();
                 break;
                 
             default:
@@ -235,8 +272,8 @@ export default class Renderer {
         
         // Draw object name if applicable
         if (obj.name && this.camera.zoom > 0.5) {
-            this.ctx.fillStyle = 'white';
-            this.ctx.font = '12px monospace';
+            this.ctx.fillStyle = obj.rare ? '#ffdf00' : 'white';
+            this.ctx.font = obj.rare ? 'bold 12px monospace' : '12px monospace';
             this.ctx.textAlign = 'center';
             this.ctx.fillText(obj.name, screenPos.x, screenPos.y - screenSize / 2 - 5);
             this.ctx.textAlign = 'left';

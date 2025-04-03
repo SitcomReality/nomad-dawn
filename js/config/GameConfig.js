@@ -19,15 +19,51 @@ export const Config = {
         },
         {
             id: 'energy',
-            name: 'Energy',
+            name: 'Energy Crystals',
             color: '#f0e050',
             description: 'Powers vehicles and advanced structures'
         },
         {
             id: 'food',
-            name: 'Food',
+            name: 'Food Source',
             color: '#50c020',
             description: 'Required for player survival and healing'
+        },
+        // Rare resources
+        {
+            id: 'uranium',
+            name: 'Uranium',
+            color: '#2ea83b',
+            description: 'Highly efficient but dangerous energy source',
+            rare: true
+        },
+        {
+            id: 'silicon',
+            name: 'Pure Silicon',
+            color: '#b9d0d7',
+            description: 'Used for advanced electronics and solar panels',
+            rare: true
+        },
+        {
+            id: 'crystal',
+            name: 'Crystal Formation',
+            color: '#9966cc',
+            description: 'Exotic material with unique properties',
+            rare: true
+        },
+        {
+            id: 'medicine',
+            name: 'Medicinal Plants',
+            color: '#d14a87',
+            description: 'Used for crafting advanced medical supplies',
+            rare: true
+        },
+        {
+            id: 'exotic_wood',
+            name: 'Exotic Wood',
+            color: '#8b4513',
+            description: 'Rare material for specialized construction',
+            rare: true
         }
     ],
     
