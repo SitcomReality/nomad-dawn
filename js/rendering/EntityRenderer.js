@@ -52,21 +52,25 @@ export default class EntityRenderer {
             const shadowAlpha = 0.3 * light.shadowVisibility; // Fade shadow with visibility
 
             // Base shadow size & position calculation
-            // Double horizontal displacement for longer shadows
-            const baseShadowDisplacement = screenSize * 0.6;
+            // Increased max horizontal displacement by 25% (0.6 * 1.25 = 0.75)
+            const maxShadowDisplacement = screenSize * 0.75; 
             // Reduce base vertical offset (move shadow up slightly at midday)
             const baseVerticalOffset = screenSize * 0.075; 
             // Keep additional offset based on factor
             const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor; // Lower at dawn/dusk
-            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * baseShadowDisplacement;
+            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * maxShadowDisplacement; // Use max displacement
             const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
             // Shadow shape calculation
             const baseWidthRadius = screenSize * 0.3; // Base width radius at noon
             const baseHeightRadius = screenSize * 0.25; // Base height radius at noon
-            // Use factors calculated in Renderer
-            const shadowWidth = baseWidthRadius * light.shadowWidthFactor;
-            const shadowHeight = baseHeightRadius * light.shadowHeightFactor;
+            
+            // Increased stretching factors by 25%
+            const shadowWidthFactor = 1.0 + light.shadowVerticalOffsetFactor * 1.5; // Max stretch = 2.5
+            const shadowHeightFactor = 1.0 - light.shadowVerticalOffsetFactor * 0.55; // Max squash = 0.45
+
+            const shadowWidth = baseWidthRadius * shadowWidthFactor;
+            const shadowHeight = baseHeightRadius * shadowHeightFactor;
 
             this.ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
             this.ctx.beginPath();
