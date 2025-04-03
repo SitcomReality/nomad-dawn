@@ -1,12 +1,18 @@
 export class DebugUtils {
     constructor() {
-        this.enabled = false;
+        this.enabled = true; // Start with debug enabled by default
         this.debugData = {};
         this.logHistory = [];
         this.maxLogHistory = 100;
         
-        // Initialize with URL parameters
+        // Initialize with URL parameters (URL params can still override default)
         this.parseUrlParams();
+
+         // Show or hide debug overlay initially based on enabled state
+         const debugOverlay = document.getElementById('debug-overlay');
+         if (debugOverlay) {
+             debugOverlay.classList.toggle('hidden', !this.enabled);
+         }
         
         // Register keyboard shortcut for toggling debug mode
         window.addEventListener('keydown', (e) => {
@@ -21,6 +27,7 @@ export class DebugUtils {
     parseUrlParams() {
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('debug')) {
+            // URL param overrides the default setting
             this.enabled = urlParams.get('debug') !== 'false';
         }
     }
@@ -138,4 +145,3 @@ export class DebugUtils {
         return result;
     }
 }
-
