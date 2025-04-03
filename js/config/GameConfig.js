@@ -67,6 +67,77 @@ export const Config = {
         }
     ],
     
+    // Module configuration
+    MODULE_TYPES: [
+        {
+            id: 'storage',
+            name: 'Storage Module',
+            description: 'Increases vehicle storage capacity',
+            effect: { storage: 100 },
+            cost: { metal: 25, energy: 10 },
+            color: '#5af',
+            size: 10
+        },
+        {
+            id: 'armor',
+            name: 'Armor Plating',
+            description: 'Increases vehicle durability',
+            effect: { maxHealth: 100 },
+            cost: { metal: 50 },
+            color: '#888',
+            size: 12
+        },
+        {
+            id: 'engine',
+            name: 'Engine Upgrade',
+            description: 'Increases vehicle speed',
+            effect: { maxSpeed: 50 },
+            cost: { metal: 30, energy: 30 },
+            color: '#f55',
+            size: 8
+        },
+        {
+            id: 'scanner',
+            name: 'Resource Scanner',
+            description: 'Reveals nearby resources on the minimap',
+            effect: { scanRadius: 500 },
+            cost: { metal: 15, energy: 40 },
+            color: '#5e5',
+            size: 7
+        }
+    ],
+    
+    // Equipment configuration
+    EQUIPMENT_TYPES: [
+        {
+            id: 'mining_laser',
+            name: 'Mining Laser',
+            slot: 'tool',
+            description: 'Efficient resource collection tool',
+            effect: { collectionSpeed: 2 },
+            cost: { metal: 30, energy: 20 },
+            color: '#f55'
+        },
+        {
+            id: 'combat_rifle',
+            name: 'Combat Rifle',
+            slot: 'weapon',
+            description: 'Standard defensive weapon',
+            effect: { damage: 15, range: 300 },
+            cost: { metal: 40, energy: 15 },
+            color: '#a55'
+        },
+        {
+            id: 'energy_shield',
+            name: 'Energy Shield',
+            slot: 'armor',
+            description: 'Provides protection against damage',
+            effect: { maxHealth: 50, damageReduction: 0.2 },
+            cost: { metal: 20, energy: 30 },
+            color: '#55f'
+        }
+    ],
+    
     // Network configuration
     NETWORK_UPDATE_RATE: 100,  // milliseconds between presence updates
     
@@ -75,4 +146,3 @@ export const Config = {
     SHOW_COLLISION_SHAPES: false,
     SHOW_CHUNK_BOUNDARIES: false
 };
-

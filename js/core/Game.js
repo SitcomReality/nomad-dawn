@@ -7,6 +7,7 @@ import NetworkManager from './NetworkManager.js';
 import ResourceManager from './ResourceManager.js';
 import { Config } from '../config/GameConfig.js';
 import MinimapRenderer from '../ui/MinimapRenderer.js';
+import UIManager from '../ui/UIManager.js';
 
 export default class Game {
     constructor(options) {
@@ -24,6 +25,10 @@ export default class Game {
         this.renderer = new Renderer(this.canvas);
         this.entities = new EntityManager();
         this.network = new NetworkManager(this);
+        this.ui = new UIManager(this);
+        
+        // Make config available to the game
+        this.config = Config;
         
         // Debug performance metrics
         this.frameCounter = 0;
@@ -335,6 +340,9 @@ export default class Game {
         
         // Update all entities (including remote players, vehicles, etc.)
         this.entities.update(deltaTime);
+        
+        // Update UI
+        this.ui.update();
         
         // Check for collisions
         this.checkCollisions();

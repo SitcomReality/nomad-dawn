@@ -29,6 +29,13 @@ export default class Player {
         this.vehicleId = null;
         this.insideVehicle = false;
         
+        // Equipment
+        this.equipment = {
+            weapon: null,
+            armor: null,
+            tool: null
+        };
+        
         // Collision properties
         this.radius = this.size / 2;
         this.mass = 10;
@@ -118,6 +125,52 @@ export default class Player {
         }
         console.warn(`Player ${this.id} attempted to add unknown resource type: ${type}`);
         return false;
+    }
+    
+    equipItem(item) {
+        if (!item || !item.type || !item.slot) return false;
+        
+        // Store previous item if any
+        const previousItem = this.equipment[item.slot];
+        
+        // Equip new item
+        this.equipment[item.slot] = item;
+        
+        // Apply equipment effects (e.g., armor increases max health)
+        if (item.effect) {
+            for (const [stat, value] of Object.entries(item.effect)) {
+                if (stat === 'maxHealth') {
+                    this.maxHealth += value;
+                }
+                // Add other stat effects as needed
+            }
+        }
+        
+        this._stateChanged = true;
+        return true;
+    }
+
+    unequipItem(slot) {
+        if (!slot || !this.equipment[slot]) return false;
+        
+        const item = this.equipment[slot];
+        
+        // Remove equipment effects
+        if (item.effect) {
+            for (const [stat, value] of Object.entries(item.effect)) {
+                if (stat === 'maxHealth') {
+                    this.maxHealth -= value;
+                    this.health = Math.min(this.health, this.maxHealth); // Cap health
+                }
+                // Remove other stat effects as needed
+            }
+        }
+        
+        // Clear equipment slot
+        this.equipment[slot] = null;
+        
+        this._stateChanged = true;
+        return true;
     }
     
     collidesWith(other) {
@@ -266,7 +319,8 @@ export default class Player {
             speed: this.speed,
             health: this.health,
             resources: { ...this.resources },
-            vehicleId: this.vehicleId
+            vehicleId: this.vehicleId,
+            equipment: { ...this.equipment }
         };
     }
     
@@ -294,7 +348,9 @@ export default class Player {
         // More efficient resource check if resources change frequently
         const resourcesChanged = JSON.stringify(currentState.resources) !== JSON.stringify(lastState.resources);
         
-        return positionChanged || angleChanged || healthChanged || vehicleChanged || resourcesChanged;
+        const equipmentChanged = JSON.stringify(currentState.equipment) !== JSON.stringify(lastState.equipment);
+        
+        return positionChanged || angleChanged || healthChanged || vehicleChanged || resourcesChanged || equipmentChanged;
     }
     
     // Stores the current state as the last sent state and resets the change flag
