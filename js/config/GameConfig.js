@@ -55,7 +55,7 @@ export const Config = {
             color: '#9966cc',
             description: 'Exotic material with unique properties',
             rare: true,
-            spriteCellId: null
+            spriteCellId: 'crystal' // Assuming a sprite exists or will be added
         },
         {
             id: 'medicine',
@@ -63,7 +63,7 @@ export const Config = {
             color: '#d14a87',
             description: 'Used for crafting advanced medical supplies',
             rare: true,
-            spriteCellId: 'flowers_pink'
+            spriteCellId: 'flowers_pink' // Placeholder sprite
         },
         {
             id: 'exotic_wood',
@@ -71,14 +71,14 @@ export const Config = {
             color: '#8b4513',
             description: 'Rare material for specialized construction',
             rare: true,
-            spriteCellId: 'tree_round'
+            spriteCellId: 'tree_round' // Placeholder sprite
         }
     ],
     
     // Game mechanics
     RESOURCE_RESPAWN_TIME: 300,  // seconds
     PLAYER_HUNGER_RATE: 0.5,     // food units per minute
-    DAY_NIGHT_CYCLE: 15 * 60,    // 15 minutes per day-night cycle
+    DAY_NIGHT_CYCLE_DURATION_SECONDS: 900, // Total duration for one cycle (day + night)
     
     // Vehicle configuration
     VEHICLE_TYPES: [
@@ -224,7 +224,8 @@ export const Config = {
         'battery_car': { sheet: 'environmental', col: 0, row: 3 },
         'tire': { sheet: 'environmental', col: 1, row: 3 },
         'metal_ingots': { sheet: 'environmental', col: 2, row: 3 },
-        'metal_lump': { sheet: 'environmental', col: 3, row: 3 }
+        'metal_lump': { sheet: 'environmental', col: 3, row: 3 },
+        'crystal': { sheet: 'environmental', col: 0, row: 3 } // Assuming this is the correct position
     },
 
     // Define Feature Types with Sprite Info (if not already defined elsewhere)

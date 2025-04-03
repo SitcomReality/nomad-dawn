@@ -36,13 +36,16 @@ export default class Renderer {
         
         // Lighting system properties (placeholders for future day/night cycle)
         this.lightingSystem = {
-            enabled: false,
-            timeOfDay: 0, // 0 to 1, 0 = midnight, 0.5 = noon
-            ambientLight: 1.0, // Full brightness by default
-            shadowDirection: { x: 1, y: 1 }, // Direction shadows will cast
-            shadowLength: 0, // Length of shadows
-            lightColor: { r: 255, g: 255, b: 255 } // Color of light
+            enabled: true, // Enable the lighting system by default
+            timeOfDay: 0.25, // 0 to 1, 0 = midnight, 0.25 = dawn, 0.5 = noon, 0.75 = dusk
+            ambientLight: 1.0, // Will be calculated
+            shadowDirection: { x: 1, y: 1 }, // Will be calculated
+            shadowLength: 0, // Will be calculated
+            lightColor: { r: 255, g: 255, b: 255 } // Will be calculated
         };
+        
+        // Initial lighting calculation
+        this.updateLightingSystem();
     }
     
     resizeCanvas() {
@@ -151,27 +154,74 @@ export default class Renderer {
         this.effectRenderer.createEffect(type, x, y, options);
     }
     
-    // --- Lighting System Methods (Keep as placeholders) ---
+    // --- Lighting System Methods ---
     setTimeOfDay(time) {
-        this.lightingSystem.timeOfDay = Math.max(0, Math.min(1, time));
-        this.updateLightingSystem();
+        // Only update if time actually changed
+        if (this.lightingSystem.timeOfDay !== time) {
+            this.lightingSystem.timeOfDay = Math.max(0, Math.min(1, time));
+            this.updateLightingSystem(); // Recalculate lighting values
+        }
     }
     
     updateLightingSystem() {
-        // ... existing lighting calculation logic ...
-        const timeOfDay = this.lightingSystem.timeOfDay;
-        const sunAngle = (timeOfDay * Math.PI * 2) - Math.PI/2;
+        if (!this.lightingSystem.enabled) {
+            // Set defaults if disabled
+            this.lightingSystem.ambientLight = 1.0;
+            this.lightingSystem.shadowDirection = { x: 1, y: 1 };
+            this.lightingSystem.shadowLength = 0;
+            this.lightingSystem.lightColor = { r: 255, g: 255, b: 255 };
+            return;
+        }
+        
+        const time = this.lightingSystem.timeOfDay; // 0 to 1
+
+        // Calculate sun position angle (0 at dawn, PI/2 at noon, PI at dusk, 3PI/2 at midnight)
+        // We shift the phase so 0.5 (noon) corresponds to angle PI/2 (straight down)
+        const sunAngle = (time * Math.PI * 2) - (Math.PI / 2);
+
+        // Calculate shadow direction (opposite to sun direction projected onto ground)
+        // Negate x component for typical top-down shadow direction
         this.lightingSystem.shadowDirection = {
             x: -Math.cos(sunAngle),
-            y: -Math.sin(sunAngle)
+            y: -Math.sin(sunAngle) // y points downwards in canvas, so sun rising from east (angle 0) casts shadow west (-x)
         };
-        const dayProgress = Math.abs((timeOfDay % 1) - 0.5) * 2;
-        this.lightingSystem.shadowLength = 20 * dayProgress;
-        const dayNightCycle = Math.sin(timeOfDay * Math.PI * 2 - Math.PI/2) * 0.5 + 0.5;
-        this.lightingSystem.ambientLight = Math.max(0.2, dayNightCycle);
-        const r = 255;
-        const g = Math.floor(200 + 55 * dayNightCycle);
-        const b = Math.floor(150 + 105 * dayNightCycle);
-        this.lightingSystem.lightColor = { r, g, b };
+
+        // Calculate shadow length based on sun height (max at dawn/dusk, min at noon)
+        // Use sin of the angle (0 at dawn/dusk, 1 at noon)
+        const sunHeightFactor = Math.sin(time * Math.PI); // Peaks at 1 when time = 0.5 (noon)
+         // Inverse relationship: longer shadows when sun is low
+        this.lightingSystem.shadowLength = 30 * (1 - sunHeightFactor);
+
+        // Calculate ambient light (darkest at midnight, brightest at noon)
+        // Use cosine wave shifted (peaks at 0.5)
+        const ambientFactor = Math.cos( (time - 0.5) * Math.PI * 2) * 0.5 + 0.5; // 0 at midnight, 1 at noon
+        this.lightingSystem.ambientLight = Math.max(0.1, ambientFactor); // Ensure minimum ambient light
+
+        // Calculate light color (e.g., warmer at sunrise/sunset, whiter at noon)
+        const noonR = 255, noonG = 255, noonB = 255;
+        const twilightR = 255, twilightG = 180, twilightB = 100; // Warmer color
+
+        // Blend between noon and twilight based on how close to noon we are
+        const noonProximity = Math.cos( (time - 0.5) * Math.PI ); // 1 at noon, -1 at midnight, 0 at dawn/dusk
+        const blendFactor = Math.max(0, noonProximity); // Use only positive part (0 to 1 for noon half)
+
+        let r = twilightR + (noonR - twilightR) * blendFactor;
+        let g = twilightG + (noonG - twilightG) * blendFactor;
+        let b = twilightB + (noonB - twilightB) * blendFactor;
+
+        // Reduce intensity further during deep night
+        const nightFade = Math.max(0, Math.cos(time * Math.PI * 2)) * 0.5 + 0.5; // 1 near midnight, 0.5 near dawn/dusk
+        const nightIntensityFactor = Math.max(0.2, nightFade); // Clamp minimum
+
+        r *= nightIntensityFactor;
+        g *= nightIntensityFactor;
+        b *= nightIntensityFactor;
+
+
+        this.lightingSystem.lightColor = {
+            r: Math.floor(Math.max(0, Math.min(255, r))),
+            g: Math.floor(Math.max(0, Math.min(255, g))),
+            b: Math.floor(Math.max(0, Math.min(255, b)))
+        };
     }
 }

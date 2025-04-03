@@ -20,6 +20,7 @@ export default class Game {
         this.deltaTime = 0; // Capped delta time for updates
         this.rawDeltaTime = 0; // Uncapped delta time for FPS calculation
         this.isGuestMode = false; // Flag for guest observer mode
+        this.timeOfDay = 0.25; // Start at dawn (0 = midnight, 0.5 = noon, 1 = next midnight)
 
         // Initialize core systems
         this.resources = new ResourceManager();
@@ -219,6 +220,11 @@ export default class Game {
     }
 
     update(deltaTime) {
+        // --- Update Time of Day ---
+        const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 60;
+        const timeIncrement = deltaTime / cycleDuration;
+        this.timeOfDay = (this.timeOfDay + timeIncrement) % 1; // Keep time between 0 and 1
+
         // --- Player Update (Handle Guest Mode) ---
         if (this.player && !this.isGuestMode) {
             // Handle player input/update only if not inside a vehicle they are driving
@@ -296,7 +302,6 @@ export default class Game {
         }
         const allTargets = [...potentialTargets, ...worldObjects];
 
-
         for (let i = 0; i < colliders.length; i++) {
             const entityA = colliders[i];
 
@@ -308,7 +313,6 @@ export default class Game {
                  if (entityA === entityB || !entityB) continue; 
                  // Skip if B doesn't have collision properties (rough check)
                  if (entityB.collides === false || (entityB.type !== 'player' && entityB.type !== 'vehicle' && !entityB.collides)) continue;
-
 
                  if (this.broadPhaseCheck(entityA, entityB)) {
                      // More precise check (use simple for world objects, entity method otherwise)
@@ -361,6 +365,9 @@ export default class Game {
         // Update renderer's internal timer for effects
         this.renderer.lastFrameTime = this.lastFrameTime;
 
+        // Update renderer's lighting system time
+        this.renderer.setTimeOfDay(this.timeOfDay);
+
         // Clear canvas
         this.renderer.clear();
         
@@ -410,10 +417,12 @@ export default class Game {
                  const networkState = this.network ? (this.network.connected ? 'Connected' : 'Disconnected') : 'N/A';
                  const playerPos = this.player ? `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : (this.isGuestMode ? 'Guest Mode' : 'N/A');
                  const clientId = this.network ? (this.network.clientId ? this.network.clientId.substring(0, 8) : (this.isGuestMode ? 'Guest' : 'None')) : 'N/A';
+                 const timeOfDayStr = this.timeOfDay.toFixed(3); // Add time of day to debug
 
                  this.debug.updateStats({
                     FPS: avgFps,
                     FrameTime: avgFrameTimeMs.toFixed(2) + ' ms',
+                    TimeOfDay: timeOfDayStr, // Display time of day
                     Mode: this.isGuestMode ? 'Guest' : 'Player',
                     Entities: this.entities ? this.entities.count() : 'N/A',
                     PlayerPos: playerPos,
