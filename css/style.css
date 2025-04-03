@@ -1,11 +1,11 @@
 /* Base Styles */
 :root {
     /* Game color palette - to be finalized */
-    --color-primary: #e63946;
-    --color-secondary: #457b9d;
-    --color-accent: #f1faee;
-    --color-dark: #1d3557;
-    --color-light: #a8dadc;
+    --color-primary: #e63946; /* Red */
+    --color-secondary: #457b9d; /* Blue */
+    --color-accent: #f1faee; /* Off-white */
+    --color-dark: #1d3557; /* Dark blue */
+    --color-light: #a8dadc; /* Light blue */
     --font-main: 'Courier New', monospace;
     
     /* Game dimensions */
@@ -13,12 +13,16 @@
     --game-height: 100vh;
     
     /* UI colors */
-    --ui-bg: rgba(29, 53, 87, 0.85);
-    --ui-border: #457b9d;
-    --ui-text: #f1faee;
-    --ui-accent: #e63946;
-    --ui-highlight: #a8dadc;
-    --ui-disabled: #6c757d;
+    --ui-bg: rgba(29, 53, 87, 0.85); /* Dark blue semi-transparent */
+    --ui-bg-solid: rgb(29, 53, 87); /* Solid dark blue */
+    --ui-border: #457b9d; /* Blue */
+    --ui-text: #f1faee; /* Off-white */
+    --ui-text-dim: rgba(241, 250, 238, 0.7); /* Dimmed text */
+    --ui-accent: #e63946; /* Red */
+    --ui-highlight: #a8dadc; /* Light blue */
+    --ui-disabled: #6c757d; /* Grey */
+    --ui-success: #4caf50; /* Green */
+    --ui-warning: #ff9800; /* Orange */
 }
 
 * {
@@ -52,7 +56,7 @@ body {
     width: 100%;
     height: 100%;
     z-index: 2;
-    pointer-events: none;
+    pointer-events: none; /* Allow clicks to pass through by default */
 }
 
 /* Loading Screen */
@@ -66,6 +70,7 @@ body {
     align-items: center;
     background-color: var(--color-dark);
     pointer-events: auto;
+    z-index: 1000; /* Ensure loading screen is on top */
 }
 
 #loading-screen h1 {
@@ -95,19 +100,59 @@ body {
 
 /* HUD Elements */
 #hud {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    padding: 1rem;
+    /* Use absolute positioning for HUD elements */
+    position: absolute;
     width: 100%;
     height: 100%;
+    padding: 1rem;
+    display: block; /* Remove grid layout */
+    pointer-events: none; /* Let clicks pass through HUD background */
 }
 
-#resources {
-    justify-self: start;
+/* HUD Corner Elements */
+#player-stats-top-left {
+    position: absolute;
+    top: 1rem;
+    left: 1rem;
+    background-color: var(--ui-bg);
+    padding: 0.5rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--ui-border);
+    font-size: 0.9rem;
+}
+
+#resource-display-top-right {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    background-color: var(--ui-bg);
+    padding: 0.5rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--ui-border);
+    max-width: 250px;
+}
+#resource-display-top-right h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+#hud-resources {
+    font-size: 0.85rem;
+    line-height: 1.4;
+}
+.resource-item {
+    margin-bottom: 0.2rem;
+}
+
+#minimap-container {
+    position: absolute;
+    bottom: 6rem; /* Adjust position to not overlap buttons */
+    left: 50%;
+    transform: translateX(-50%);
+    pointer-events: auto; /* Allow interaction with minimap */
 }
 
 #minimap {
-    justify-self: center;
     width: 150px;
     height: 150px;
     border: 2px solid var(--color-light);
@@ -116,8 +161,108 @@ body {
     background-color: rgba(0, 0, 0, 0.5);
 }
 
-#player-status {
-    justify-self: end;
+#controls-info-bottom-left {
+    position: absolute;
+    bottom: 1rem;
+    left: 1rem;
+    background-color: var(--ui-bg);
+    padding: 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--ui-border);
+    max-width: 250px;
+}
+#controls-info-bottom-left h3 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+}
+#controls-info-bottom-left ul {
+    list-style: none;
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+#hud-buttons-bottom-right {
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.hud-button {
+    padding: 0.5rem 1rem;
+    background-color: var(--ui-bg);
+    color: var(--ui-text);
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease;
+    font-family: var(--font-main);
+    pointer-events: auto; /* Enable clicks on buttons */
+    text-align: center;
+    min-width: 100px;
+}
+
+.hud-button:hover {
+    background-color: var(--ui-highlight);
+    color: var(--color-dark);
+}
+.hud-button.active {
+    background-color: var(--ui-highlight);
+    color: var(--color-dark);
+}
+
+/* Game Menu */
+#game-menu {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 350px;
+    background-color: var(--ui-bg-solid);
+    border: 2px solid var(--ui-border);
+    border-radius: 8px;
+    color: var(--ui-text);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    pointer-events: auto; /* Enable interaction */
+    z-index: 200; /* Above other UI elements but below loading screen */
+    box-shadow: 0 5px 25px rgba(0, 0, 0, 0.6);
+}
+
+#game-menu h2 {
+    font-size: 1.8rem;
+    margin-bottom: 1rem;
+    color: var(--ui-highlight);
+}
+
+#game-menu button {
+    width: 80%;
+    padding: 0.8rem;
+    font-size: 1.1rem;
+    background-color: var(--ui-bg-solid);
+    color: var(--ui-text);
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    font-family: var(--font-main);
+}
+
+#game-menu button:hover {
+    background-color: var(--ui-highlight);
+    color: var(--color-dark);
+}
+
+.menu-content {
+    margin-top: 1rem;
+    width: 100%;
+    text-align: center;
+    color: var(--ui-text-dim);
 }
 
 /* Inventory and Base Building UI */
@@ -483,8 +628,8 @@ body {
 
 #debug-overlay {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: 5rem; /* Adjust position to avoid overlap */
+    left: 1rem;
     background-color: rgba(0, 0, 0, 0.7);
     padding: 10px;
     border-radius: 5px;
@@ -493,4 +638,6 @@ body {
     max-width: 300px;
     max-height: 200px;
     overflow: auto;
+    pointer-events: auto; /* Enable interaction if needed */
+    z-index: 50; /* Below main UI panels */
 }
