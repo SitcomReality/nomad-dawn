@@ -69,9 +69,7 @@ export default class ShadowManager {
                 if (!casterGeometry || casterGeometry.length < 3) continue;
 
                 // Calculate the shadow polygon for this light/caster pair
-                // --- UPDATED: Call the implemented raycasting function ---
                 const shadowPolygon = this.calculateShadowPolygonRaycast(light, casterGeometry);
-                // --- END UPDATED ---
                 if (shadowPolygon) {
                     this.shadowPolygons.push(shadowPolygon);
                 }
@@ -119,74 +117,118 @@ export default class ShadowManager {
     }
 
     /**
-     * Calculates the shadow polygon using 2D Raycasting.
+     * Calculates the shadow polygon using 2D Raycasting, finding silhouette edges.
+     * Currently assumes casterVertices represent a convex polygon (like a rectangle).
      * @param {LightSource} light - The light source.
-     * @param {Array<{x: number, y: number}>} casterVertices - Vertices of the caster polygon (ordered clockwise or counter-clockwise).
+     * @param {Array<{x: number, y: number}>} casterVertices - Vertices of the caster polygon (ordered, e.g., clockwise).
      * @returns {Array<{x: number, y: number}>|null} The vertices of the shadow polygon or null.
      */
     calculateShadowPolygonRaycast(light, casterVertices) {
         if (!casterVertices || casterVertices.length < 3) return null;
 
         const lightPos = { x: light.x, y: light.y };
-        const maxDist = this.maxShadowDistance; // Use the defined max distance
-        const shadowPoints = [];
+        const maxDist = this.maxShadowDistance;
+        const silhouetteEdges = []; // Stores { v1: vertex, v2: vertex }
 
-        // 1. Cast rays from the light through each vertex of the caster
+        // 1. Find silhouette edges (edges facing the light)
         for (let i = 0; i < casterVertices.length; i++) {
-            const vertex = casterVertices[i];
+            const v1 = casterVertices[i];
+            const v2 = casterVertices[(i + 1) % casterVertices.length]; // Next vertex, wraps around
+
+            // Calculate edge vector and midpoint
+            const edgeVecX = v2.x - v1.x;
+            const edgeVecY = v2.y - v1.y;
+            const midX = (v1.x + v2.x) / 2;
+            const midY = (v1.y + v2.y) / 2;
+
+            // Calculate edge normal (pointing outwards for clockwise vertices)
+            const normalX = edgeVecY;
+            const normalY = -edgeVecX;
+
+            // Calculate vector from light to edge midpoint
+            const lightToMidX = midX - lightPos.x;
+            const lightToMidY = midY - lightPos.y;
+
+            // Calculate dot product of normal and light vector
+            const dotProduct = normalX * lightToMidX + normalY * lightToMidY;
+
+            // If dot product > 0, the edge is facing the light (part of the silhouette)
+            if (dotProduct > 0) {
+                silhouetteEdges.push({ v1: v1, v2: v2, index: i });
+            }
+        }
+
+        // Handle cases where no edges face the light (light inside caster? should not happen with check)
+        // or all edges face the light (should also not happen for convex)
+        if (silhouetteEdges.length === 0 || silhouetteEdges.length === casterVertices.length) {
+             // This might happen if the light is very close or inside the caster bounds
+             // For simplicity, return null, though a more robust solution might be needed
+            return null;
+        }
+
+        // 2. Identify the start and end vertices of the silhouette chain
+        // Find the edge where the next edge in the original polygon is *not* a silhouette edge.
+        // Find the edge where the previous edge in the original polygon is *not* a silhouette edge.
+        // This logic assumes a single contiguous silhouette chain, valid for convex polygons.
+
+        let silhouetteStartVertex = null;
+        let silhouetteEndVertex = null;
+
+        // Find the start vertex (v1 of the first edge whose *previous* edge is not silhouette)
+        for (const edge of silhouetteEdges) {
+             const prevEdgeIndex = (edge.index - 1 + casterVertices.length) % casterVertices.length;
+             if (!silhouetteEdges.some(e => e.index === prevEdgeIndex)) {
+                  silhouetteStartVertex = edge.v1;
+                  break;
+             }
+        }
+         // Find the end vertex (v2 of the last edge whose *next* edge is not silhouette)
+         for (const edge of silhouetteEdges) {
+             const nextEdgeIndex = (edge.index + 1) % casterVertices.length;
+              if (!silhouetteEdges.some(e => e.index === nextEdgeIndex)) {
+                  silhouetteEndVertex = edge.v2;
+                  break;
+              }
+         }
+
+
+        if (!silhouetteStartVertex || !silhouetteEndVertex) {
+            // Fallback or error handling if silhouette ends cannot be determined
+            // This might indicate issues with vertex order or the light position.
+             if (this.debug) console.warn("Could not determine silhouette start/end vertices.", silhouetteEdges);
+             return null;
+        }
+
+
+        // 3. Project rays from the light through the silhouette start and end vertices
+        const projectRay = (vertex) => {
             const dx = vertex.x - lightPos.x;
             const dy = vertex.y - lightPos.y;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            // Project slightly further than maxDist to ensure clipping works
+            const scale = (maxDist + 1) / dist;
+            return {
+                x: lightPos.x + dx * scale,
+                y: lightPos.y + dy * scale
+            };
+        };
 
-            // Project the ray to the maximum shadow distance
-            const rayEndX = lightPos.x + dx * (maxDist / (Math.sqrt(dx * dx + dy * dy) || 1));
-            const rayEndY = lightPos.y + dy * (maxDist / (Math.sqrt(dx * dx + dy * dy) || 1));
+        const projectedStart = projectRay(silhouetteStartVertex);
+        const projectedEnd = projectRay(silhouetteEndVertex);
 
-            shadowPoints.push({ x: rayEndX, y: rayEndY, angle: Math.atan2(dy, dx) });
+        // 4. Construct the final shadow polygon vertices in order
+        // Order: silhouette start -> projected start -> projected end -> silhouette end
+        const finalPolygon = [
+            { x: silhouetteStartVertex.x, y: silhouetteStartVertex.y },
+            { x: projectedStart.x, y: projectedStart.y },
+            { x: projectedEnd.x, y: projectedEnd.y },
+            { x: silhouetteEndVertex.x, y: silhouetteEndVertex.y }
+        ];
 
-            // Add rotated points slightly around each vertex ray to handle edges
-            // This helps close gaps when vertices are collinear from the light's perspective
-            const angle = Math.atan2(dy, dx);
-            const smallAngleOffset = 0.0001; // Tiny angle offset
+        // TODO: Clipping against light range could be added here if needed.
+        // For now, we rely on the maxShadowDistance projection.
 
-            // Point slightly counter-clockwise
-            const dxCCW = Math.cos(angle - smallAngleOffset);
-            const dyCCW = Math.sin(angle - smallAngleOffset);
-            shadowPoints.push({
-                x: lightPos.x + dxCCW * maxDist,
-                y: lightPos.y + dyCCW * maxDist,
-                angle: angle - smallAngleOffset
-            });
-
-            // Point slightly clockwise
-            const dxCW = Math.cos(angle + smallAngleOffset);
-            const dyCW = Math.sin(angle + smallAngleOffset);
-            shadowPoints.push({
-                x: lightPos.x + dxCW * maxDist,
-                y: lightPos.y + dyCW * maxDist,
-                angle: angle + smallAngleOffset
-            });
-        }
-
-        // 2. Sort the projected points by angle around the light source
-        shadowPoints.sort((a, b) => a.angle - b.angle);
-
-        // 3. Construct the final shadow polygon
-        // The final polygon consists of a subset of the caster's vertices (the "outer edge")
-        // and the projected points corresponding to those vertices.
-        // This requires finding the silhouette edges, which is complex.
-        // --- Simplified Approach (Approximation): ---
-        // For now, use all sorted projected points. This creates a large polygon encompassing
-        // the shadow area but isn't perfectly accurate at the caster boundary.
-        // A more robust method involves segment intersection tests or finding silhouette edges.
-        const finalPolygon = [];
-        for(const p of shadowPoints) {
-             finalPolygon.push({x: p.x, y: p.y});
-        }
-
-
-        // This simplified approach generates a large covering polygon.
-        // More advanced steps (clipping, silhouette finding) are needed for accuracy.
-        return finalPolygon.length >= 3 ? finalPolygon : null;
+        return finalPolygon;
     }
 
     /**

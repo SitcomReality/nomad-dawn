@@ -43,29 +43,32 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 13. Research and choose a shadow casting algorithm suitable for 2D (e.g., shadow mapping using an offscreen buffer, 2D raycasting with polygon clipping). (**COMPLETE** - Chose 2D raycasting approach)
 14. Implement shadow calculation in `LightManager` or a dedicated `ShadowManager`. (**COMPLETE** - Created `ShadowManager.js`, added basic raycasting calculation logic in `calculateShadowPolygonRaycast`, integrated into Game update loop)
 15. Modify renderers (`WorldObjectRenderer`, `EntityRenderer`, `WorldRenderer` for terrain) to draw calculated shadows. (**COMPLETE** - Added `renderShadows` to `Renderer.js` with basic polygon drawing).
+16. Refine shadow polygon generation in `ShadowManager.calculateShadowPolygonRaycast`:
+    *   Implement silhouette edge detection for convex polygons (start with rectangles). (**COMPLETE**)
+    *   Correctly order vertices to form the final shadow polygon using the silhouette vertices and projected ray endpoints. (**COMPLETE**)
+    *   Clip the generated shadow polygon against the light's range or a maximum shadow distance. (**Partially Complete** - Uses max distance projection, but explicit clipping step might be needed).
 
 ---
 
 **Phase 5 - NEXT STEPS:**
 
-16. ~~Implement actual 2D raycasting algorithm in `ShadowManager.calculatePolygonForCaster` to generate geometrically correct shadow polygons based on light position and caster vertices. This will involve:~~
-    *   ~~Identifying silhouette edges of the caster relative to the light.~~
-    *   ~~Projecting rays from the light through the silhouette vertices.~~
-    *   ~~Calculating intersection points with a maximum shadow range or viewport bounds.~~
-    *   ~~Constructing the final shadow polygon vertices in the correct order.~~ **(Partially Complete - Basic raycasting implemented, needs silhouette finding and proper polygon construction)**
-17. Refine shadow polygon generation in `ShadowManager.calculateShadowPolygonRaycast`:
-    *   Implement silhouette edge detection for convex polygons (start with rectangles).
-    *   Correctly order vertices to form the final shadow polygon using the light source, silhouette vertices, and projected ray endpoints.
-    *   Clip the generated shadow polygon against the light's range or a maximum shadow distance.
-18. Refine shadow rendering in `Renderer.renderShadows`:
-    *   Consider using an offscreen shadow mask buffer for better blending and performance (e.g., draw all shadows to a mask, then draw the mask over the world).
-    *   Ensure correct drawing order (shadows should typically be drawn after the main world/entities but before certain effects or UI).
-19. Optimize shadow calculation:
-    *   Cache caster geometry.
-    *   Optimize caster finding (spatial partitioning?).
-    *   Potentially skip calculations for lights/casters far off-screen.
+1.  **Refine Shadow Rendering:**
+    *   **Experiment with Shadow Mask:** Implement shadow rendering using an offscreen shadow mask buffer in `Renderer.renderShadows`. This involves:
+        *   Creating an offscreen canvas (e.g., `this.shadowMaskCanvas`).
+        *   Clearing the mask (e.g., fill with white or transparent).
+        *   Drawing all calculated `shadowPolygons` onto the mask canvas (e.g., with solid black).
+        *   Drawing the `shadowMaskCanvas` onto the main game canvas using a suitable `globalCompositeOperation` (e.g., 'multiply' or 'destination-in') after drawing the world and entities but before UI/effects.
+    *   Ensure correct drawing order.
+2.  **Optimize Shadow Calculation:**
+    *   Cache caster geometry in `ShadowManager` (e.g., using `casterCache`).
+    *   Optimize caster finding (use viewport culling more effectively).
+    *   Potentially skip calculations for lights/casters far off-screen or lights with very low intensity.
+3.  **Handle Complex Shapes:** Extend `getCasterGeometry` and silhouette finding to handle non-rectangular or rotated shapes if necessary.
+4.  **Improve Edge Cases:** Refine silhouette detection for edge cases (light very close to caster, light on an edge/vertex).
 
 ---
+
+
 
 
 
