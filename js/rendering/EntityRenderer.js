@@ -62,19 +62,17 @@ export default class EntityRenderer {
         if (light.enabled && light.shadowVisibility > 0 && entity.type !== 'projectile') {
             const shadowAlpha = 0.3 * light.shadowVisibility;
 
-            const maxShadowDisplacement = screenSize * 0.75;
-            // --- MODIFIED: Increased base vertical offset ---
-            const baseVerticalOffset = screenSize * 0.10; // Increased from 0.075 to lower the shadow
-            // --- END MODIFIED ---
-            const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor;
+            const maxShadowDisplacement = screenSize * 0.75; 
+            const baseVerticalOffset = screenSize * 0.15; 
+            const additionalVerticalOffset = screenSize * 0.15 * light.shadowVerticalOffsetFactor; 
             const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * maxShadowDisplacement;
             const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
-            const baseWidthRadius = screenSize * 0.3;
-            const baseHeightRadius = screenSize * 0.25;
+            const baseWidthRadius = screenSize * 0.6; 
+            const baseHeightRadius = screenSize * 0.5; 
 
-            const shadowWidthFactor = light.shadowWidthFactor; // Use factor from Renderer
-            const shadowHeightFactor = light.shadowHeightFactor; // Use factor from Renderer
+            const shadowWidthFactor = light.shadowWidthFactor; 
+            const shadowHeightFactor = light.shadowHeightFactor; 
 
             const shadowWidth = baseWidthRadius * shadowWidthFactor;
             const shadowHeight = baseHeightRadius * shadowHeightFactor;

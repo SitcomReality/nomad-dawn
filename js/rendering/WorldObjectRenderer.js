@@ -48,16 +48,18 @@ export default class WorldObjectRenderer {
 
         // Adjust shadow size based on the *base* screen size before the pixel multiplier
         const shadowBaseSize = baseScreenSize;
-        const maxShadowDisplacement = shadowBaseSize * 0.75;
-        // --- MODIFIED: Increased base vertical offset ---
-        const baseVerticalOffset = shadowBaseSize * 0.10; // Increased from 0.075 to lower the shadow
+        const maxShadowDisplacement = shadowBaseSize * 0.75; // Base displacement remains the same relative to size
+        // --- MODIFIED: Increase vertical offset ---
+        const baseVerticalOffset = shadowBaseSize * 0.15; // Increased from 0.10
+        const additionalVerticalOffset = shadowBaseSize * 0.15 * this.renderer.lightingSystem.shadowVerticalOffsetFactor; // Adjusted proportional factor
         // --- END MODIFIED ---
-        const additionalVerticalOffset = shadowBaseSize * 0.1 * this.renderer.lightingSystem.shadowVerticalOffsetFactor; // Lower at dawn/dusk
         const shadowX = screenPos.x + this.renderer.lightingSystem.shadowHorizontalOffsetFactor * maxShadowDisplacement;
         const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
-        const baseWidthRadius = shadowBaseSize * 0.3; // Base width radius at noon
-        const baseHeightRadius = shadowBaseSize * 0.25; // Base height radius at noon
+        // --- MODIFIED: Double base shadow size ---
+        const baseWidthRadius = shadowBaseSize * 0.6; // Doubled from 0.3
+        const baseHeightRadius = shadowBaseSize * 0.5; // Doubled from 0.25
+        // --- END MODIFIED ---
 
         const shadowWidthFactor = this.renderer.lightingSystem.shadowWidthFactor; // Use factor from Renderer
         const shadowHeightFactor = this.renderer.lightingSystem.shadowHeightFactor; // Use factor from Renderer
