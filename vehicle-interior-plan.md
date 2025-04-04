@@ -15,8 +15,8 @@
 
 **Phase 3: Building UI & Grid Modification (NEXT)**
 
-8.  **UIManager.js / BaseBuildingUI.js:** Update the 'B' key handler in `UIManager` (or potentially move it to `PlayerController`) to transition the player to a 'Building' state when near their owned vehicle. The `BaseBuildingUI` needs to be triggered in this state.
-9.  **BaseBuildingUI.js:** Refactor `BaseBuildingUI` to display the *vehicle's interior grid* instead of the module list/preview canvas when active. This might involve creating a new component/renderer (`VehicleGridEditorRenderer`?) or embedding grid rendering logic within `BaseBuildingUI`.
+8.  **PlayerController.js / UIManager.js / BaseBuildingUI.js:** Implement 'B' key handling in `PlayerController` to transition the player to 'Building' state when near their *owned* vehicle. Call `BaseBuildingUI.show(vehicle)` to open the UI. Implement `exitBuildingMode()` in `PlayerController` to return to 'Overworld' and hide the UI (triggered by 'B' or 'Esc'). Move `findNearbyVehicle` from `BaseBuildingUI` to `PlayerController` and add `findNearbyOwnedVehicle`. (COMPLETE)
+9.  **BaseBuildingUI.js:** Refactor `BaseBuildingUI` to display the *vehicle's interior grid* instead of the module list/preview canvas when active. This might involve creating a new component/renderer (`VehicleGridEditorRenderer`?) or embedding grid rendering logic within `BaseBuildingUI`. Update the HTML structure in `injectContainerHTML`.
 10. **VehicleGridEditorRenderer (New File/Component):** Create a component responsible for rendering the vehicle grid within the `BaseBuildingUI`. It should display tiles and objects visually. It needs to handle clicks on grid cells.
 11. **BaseBuildingUI.js / PlayerController.js:** Implement click handling for the grid editor. When a cell is clicked:
     *   Determine the clicked `gridX`, `gridY`.

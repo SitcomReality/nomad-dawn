@@ -1,6 +1,5 @@
 /**
- * Handles player input processing, state transitions, and interactions related
- * to movement and vehicle entry/exit.
+ * Handles player input processing, state transitions, and interactions with the game world.
  */
 export default class PlayerController {
     constructor(game) {
@@ -14,6 +13,8 @@ export default class PlayerController {
         this.lastInteractionTime = 0;
         this.gridMoveCooldown = 150; // Milliseconds between grid movements
         this.lastGridMoveTime = 0;
+        this.buildToggleCooldown = 300; // Milliseconds between build mode toggles
+        this.lastBuildToggleTime = 0;
     }
 
     update(deltaTime) {
@@ -28,8 +29,57 @@ export default class PlayerController {
             this.lastInteractionTime = now;
         }
 
+        // --- Check for Build Mode Input (B key) ---
+        if (this.input.isKeyDown('KeyB') && now - this.lastBuildToggleTime > this.buildToggleCooldown) {
+            this.handleBuildKeyPress();
+            this.lastBuildToggleTime = now;
+        }
+
         // --- Handle Movement Updates Based on State ---
         this.handleMovementUpdate(deltaTime, player);
+    }
+
+    // --- NEW: Method to handle 'B' key press for building ---
+    handleBuildKeyPress() {
+        const player = this.game.player;
+        if (!player) return;
+
+        if (player.playerState === 'Overworld') {
+            // Check for nearby owned vehicle
+            const nearbyOwnedVehicle = this.findPlayerNearbyOwnedVehicle();
+
+            if (nearbyOwnedVehicle) {
+                // --- Transition to Building state ---
+                player.playerState = 'Building';
+                player.currentVehicleId = nearbyOwnedVehicle.id; // Store ID of vehicle being modified
+                player._stateChanged = true; // Sync state change
+                this.debug.log(`Player ${player.id} entering Building mode for vehicle ${nearbyOwnedVehicle.id}`);
+
+                // Show the Base Building UI, passing the vehicle context
+                this.game.ui.baseBuilding.show(nearbyOwnedVehicle);
+            } else {
+                this.game.ui.showNotification("No owned vehicle nearby to modify.", "warn");
+            }
+        } else if (player.playerState === 'Building') {
+            // --- Exit Building state ---
+            this.exitBuildingMode();
+        }
+        // If in Interior or Piloting state, 'B' might do something else later, or nothing.
+    }
+
+    // --- NEW: Helper method to exit building mode ---
+    exitBuildingMode() {
+         const player = this.game.player;
+         if (!player || player.playerState !== 'Building') return;
+
+         player.playerState = 'Overworld';
+         // Keep currentVehicleId? Maybe not necessary after exiting building? Clear it.
+         // player.currentVehicleId = null; // Let's clear it for now
+         player._stateChanged = true; // Sync state change
+         this.debug.log(`Player ${player.id} exiting Building mode.`);
+
+         // Hide the Base Building UI
+         this.game.ui.baseBuilding.hide();
     }
 
     handleMovementUpdate(deltaTime, player) {
@@ -64,7 +114,9 @@ export default class PlayerController {
                 break;
 
             case 'Building':
-                // Building mode usually doesn't involve direct player/vehicle movement via WASD
+                // Player is stationary while in building mode (using the UI)
+                // Stop any existing overworld movement if they just entered build mode
+                player.speed = 0;
                 break;
         }
     }
@@ -128,9 +180,6 @@ export default class PlayerController {
         player.gridY = targetGridY;
         player._stateChanged = true; // Mark state changed for network sync
         this.lastGridMoveTime = now; // Reset cooldown timer
-
-        // Debug log
-        // this.debug.log(`Player moved to grid (${player.gridX}, ${player.gridY})`);
     }
 
     handleInteractionKeyPress() {
@@ -159,7 +208,7 @@ export default class PlayerController {
                 break;
 
             case 'Interior':
-                if (currentVehicle) {
+                 if (currentVehicle) {
                     // Check grid properties exist before accessing
                     const doorX = currentVehicle.doorLocation?.x;
                     const doorY = currentVehicle.doorLocation?.y;
@@ -233,12 +282,14 @@ export default class PlayerController {
                  }
                  break;
              case 'Building':
-                 // 'E' might close the building UI or finalize placement later
+                 // 'E' currently does nothing in building mode
+                 // Could potentially be used for selecting/confirming later
                  break;
         }
     }
 
-    // Helper to find nearby vehicle
+    // --- MOVED from BaseBuildingUI.js ---
+    // Helper to find nearby vehicle (any vehicle)
     findPlayerNearbyVehicle() {
         const player = this.game.player;
         if (!player) return null;
@@ -249,8 +300,9 @@ export default class PlayerController {
         let closestDistanceSq = interactionDistance * interactionDistance;
 
         for (const vehicle of vehicles) {
-            // Ensure vehicle has grid properties before allowing entry
-            if (!vehicle.gridTiles || !vehicle.doorLocation || !vehicle.pilotSeatLocation) {
+            // Ensure vehicle has basic grid properties before allowing entry
+            // Check gridTiles existence, doorLocation object existence, pilotSeatLocation object existence
+            if (!vehicle || typeof vehicle.gridTiles !== 'object' || typeof vehicle.doorLocation !== 'object' || typeof vehicle.pilotSeatLocation !== 'object') {
                  continue;
             }
             const dx = vehicle.x - player.x;
@@ -262,5 +314,45 @@ export default class PlayerController {
             }
         }
         return closestVehicle;
+    }
+
+    // --- NEW: Helper to find nearby vehicle *owned* by the player ---
+    findPlayerNearbyOwnedVehicle() {
+        const player = this.game.player;
+        if (!player) return null;
+
+        const vehicles = this.entities.getByType('vehicle');
+        const interactionDistance = 150; // Slightly larger range for building
+        let closestOwnedVehicle = null;
+        let closestDistanceSq = interactionDistance * interactionDistance;
+
+        this.debug.log(`Finding nearby OWNED vehicles. Total vehicles: ${vehicles.length}`);
+
+        for (const vehicle of vehicles) {
+             // Check ownership
+             if (vehicle.owner !== player.id) {
+                 this.debug.log(`  Skipping vehicle ${vehicle.id}: Not owned by ${player.id} (Owner: ${vehicle.owner})`);
+                 continue;
+             }
+
+            const dx = vehicle.x - player.x;
+            const dy = vehicle.y - player.y;
+            const distanceSq = dx * dx + dy * dy;
+
+            this.debug.log(`  Checking owned vehicle ${vehicle.id} at (${vehicle.x.toFixed(0)}, ${vehicle.y.toFixed(0)}), distance: ${Math.sqrt(distanceSq).toFixed(1)}`);
+
+            if (distanceSq < closestDistanceSq) {
+                closestDistanceSq = distanceSq;
+                closestOwnedVehicle = vehicle;
+            }
+        }
+
+        if (closestOwnedVehicle) {
+            this.debug.log(`Closest owned vehicle found: ${closestOwnedVehicle.id} at distance ${Math.sqrt(closestDistanceSq).toFixed(1)}`);
+        } else {
+            this.debug.log(`No owned vehicle found within interaction distance (${interactionDistance}).`);
+        }
+
+        return closestOwnedVehicle;
     }
 }
