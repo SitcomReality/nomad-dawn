@@ -1,3 +1,5 @@
+import Vehicle from '../entities/Vehicle.js'; // Keep for syncVehiclesFromNetwork
+
 export default class NetworkManager {
     constructor(game) {
         this.game = game;
@@ -11,6 +13,11 @@ export default class NetworkManager {
         this.unsubscribePresence = null;
         this.unsubscribeRoomState = null;
         this.unsubscribePresenceRequests = null;
+
+        // --- NEW: World Seed Tracking ---
+        this.worldSeed = null;
+        this.worldSeedConfirmed = false;
+        // --- END NEW ---
     }
 
     async initialize() {
@@ -21,13 +28,35 @@ export default class NetworkManager {
             this.clientId = this.room.clientId;
             this.connected = true;
 
-            // If clientId is still null/undefined after init, something is wrong.
-            // Game class will handle turning this into guest mode.
+            let isGuest = false; // Local flag for logic within initialize
+
+            // If clientId is still null/undefined after init, it's likely guest mode.
             if (!this.clientId) {
-                 this.game.debug.warn('Network initialized, but Client ID is missing.');
+                 this.game.debug.warn('Network initialized, but Client ID is missing. Assuming Guest Mode.');
+                 isGuest = true;
             } else {
                  this.game.debug.log('Network connection initialized. Client ID:', this.clientId);
             }
+
+            // --- NEW: Handle World Seed ---
+            const initialRoomState = this.room.roomState || {};
+            if (initialRoomState.worldSeed !== undefined && initialRoomState.worldSeed !== null) {
+                // Seed exists in room state, use it.
+                this.worldSeed = initialRoomState.worldSeed;
+                this.worldSeedConfirmed = true;
+                this.game.debug.log(`World seed received from room state: ${this.worldSeed}`);
+            } else if (!isGuest) {
+                // No seed exists, and we are not a guest. Propose a seed.
+                this.worldSeed = Math.floor(Math.random() * 9999999);
+                this.worldSeedConfirmed = false; // Not confirmed until echoed back
+                this.game.debug.log(`No world seed found. Proposing seed: ${this.worldSeed}`);
+                // Send update immediately, hoping to establish the seed
+                this.updateRoomState({ worldSeed: this.worldSeed });
+            } else {
+                 // Is a guest and no seed exists yet. Wait for subscription callback.
+                 this.game.debug.log("Guest mode: Waiting for world seed from room state...");
+            }
+            // --- END NEW ---
 
             // Set up handlers *after* successful initialization
             this.setupNetworkHandlers();
@@ -48,6 +77,8 @@ export default class NetworkManager {
         this.connected = false;
         this.clientId = null;
         this.room = null; // Release room reference
+        this.worldSeed = null; // Reset seed
+        this.worldSeedConfirmed = false;
         this.game.debug.log('Network disconnected and listeners cleaned up.');
     }
 
@@ -75,6 +106,16 @@ export default class NetworkManager {
         });
 
         this.unsubscribeRoomState = this.subscribeRoomState((roomState) => {
+             // --- NEW: Handle world seed updates ---
+             if (!this.worldSeedConfirmed && roomState.worldSeed !== undefined && roomState.worldSeed !== null) {
+                 this.worldSeed = roomState.worldSeed;
+                 this.worldSeedConfirmed = true;
+                 this.game.debug.log(`World seed confirmed via subscription: ${this.worldSeed}`);
+                 // Signal the Game class that the seed is ready (if it was waiting)
+                 this.game.confirmWorldSeed?.(this.worldSeed); // Add this method to Game
+             }
+             // --- END NEW ---
+
             if (this.game.world) {
                 this.game.world.syncFromNetworkState(roomState);
             }
@@ -95,7 +136,6 @@ export default class NetworkManager {
         };
     }
 
-    // Moved from Game.js: Sync Vehicles
     syncVehiclesFromNetwork(networkVehicles) {
          // Lazily import Vehicle or ensure it's globally available
          const Vehicle = window.Vehicle; // Assuming Vehicle is globally accessible
@@ -202,34 +242,34 @@ export default class NetworkManager {
                  const newTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : {};
                  const currentTiles = vehicle.gridTiles || {};
                  Object.keys(newTiles).forEach(key => {
-                     if (currentTiles[key] !== newTiles[key]) { 
+                     if (currentTiles[key] !== newTiles[key]) {
                          currentTiles[key] = newTiles[key];
-                         confirmedModifications[vehicleId].push(`${key}:gridTiles`); 
+                         confirmedModifications[vehicleId].push(`${key}:gridTiles`);
                      }
                  });
                  Object.keys(currentTiles).forEach(key => {
                      if (!(key in newTiles)) {
                          delete currentTiles[key];
-                         confirmedModifications[vehicleId].push(`${key}:gridTiles`); 
+                         confirmedModifications[vehicleId].push(`${key}:gridTiles`);
                      }
                  });
-                 vehicle.gridTiles = currentTiles; 
+                 vehicle.gridTiles = currentTiles;
 
                  const newObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : {};
                  const currentObjects = vehicle.gridObjects || {};
                  Object.keys(newObjects).forEach(key => {
-                     if (currentObjects[key] !== newObjects[key]) { 
+                     if (currentObjects[key] !== newObjects[key]) {
                          currentObjects[key] = newObjects[key];
-                         confirmedModifications[vehicleId].push(`${key}:gridObjects`); 
+                         confirmedModifications[vehicleId].push(`${key}:gridObjects`);
                      }
                  });
                  Object.keys(currentObjects).forEach(key => {
                      if (!(key in newObjects)) {
                          delete currentObjects[key];
-                         confirmedModifications[vehicleId].push(`${key}:gridObjects`); 
+                         confirmedModifications[vehicleId].push(`${key}:gridObjects`);
                      }
                  });
-                 vehicle.gridObjects = currentObjects; 
+                 vehicle.gridObjects = currentObjects;
                  vehicle.doorLocation = data.doorLocation ?? vehicle.doorLocation;
                  vehicle.pilotSeatLocation = data.pilotSeatLocation ?? vehicle.pilotSeatLocation;
 
@@ -267,7 +307,6 @@ export default class NetworkManager {
          }
     }
 
-    // Moved from Game.js: Handle Presence Update Requests
     handlePresenceUpdateRequest(updateRequest, fromClientId) {
          // Guest mode check
          if (this.game.isGuestMode || !this.game.player) return;
@@ -310,7 +349,6 @@ export default class NetworkManager {
          }
     }
 
-    // Moved from Game.js: Handle Network Events
     handleNetworkEvent(eventData) {
          if (!eventData || !eventData.type) return;
 
@@ -350,8 +388,6 @@ export default class NetworkManager {
                  break;
          }
     }
-
-    // --- Existing methods ---
 
     updatePresence(presenceData) {
         if (this.game.isGuestMode || !this.connected || !this.room) return;

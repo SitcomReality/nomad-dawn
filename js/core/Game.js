@@ -46,6 +46,14 @@ export default class Game {
 
         // Player reference (potentially null in guest mode)
         this.player = null;
+        this.world = null; // Initialize world as null
+
+        // --- NEW: Seed Handling ---
+        this.worldSeed = null;
+        this.worldSeedPromise = null;
+        this.worldSeedResolve = null;
+        this.worldSeedConfirmed = false;
+        // --- END NEW ---
 
         // Bind game loop to maintain this context
         this.gameLoop = this.gameLoop.bind(this);
@@ -53,6 +61,12 @@ export default class Game {
 
     async initializeNetwork() {
         try {
+            // --- NEW: Set up promise for waiting on seed ---
+            this.worldSeedPromise = new Promise((resolve) => {
+                 this.worldSeedResolve = resolve;
+            });
+            // --- END NEW ---
+
             await this.network.initialize();
 
             if (!this.network.clientId) {
@@ -61,12 +75,20 @@ export default class Game {
                  this.ui.showNotification("Running in Guest Mode (Observer)", "warn", 5000);
                  this.player = null;
                  this.ui.setGuestMode(true);
+                 // Resolve seed promise immediately for guests if seed already available
+                 if (this.network.worldSeedConfirmed) {
+                    this.worldSeedResolve(this.network.worldSeed);
+                 }
             } else {
                  this.isGuestMode = false;
                  this.player = new Player(this.network.clientId, this);
                  this.entities.add(this.player);
                  this.updatePlayerNameFromPeers();
                  this.ui.setGuestMode(false);
+                 // Resolve seed promise immediately for non-guests if seed already available/proposed
+                 if (this.network.worldSeed !== null) {
+                    this.worldSeedResolve(this.network.worldSeed);
+                 }
             }
 
             this.addInitialTestVehicle();
@@ -76,9 +98,23 @@ export default class Game {
             this.debug.error('Network initialization failed', error);
             const loadingMessage = document.querySelector('#loading-screen p');
             if (loadingMessage) loadingMessage.textContent = `Network Error: ${error.message}`;
+            // Reject the seed promise on network error
+            if(this.worldSeedResolve) this.worldSeedResolve(null); // Resolve with null on error? Or reject? Let's resolve null.
             throw error;
         }
     }
+
+    // --- NEW: Method called by NetworkManager when seed is confirmed ---
+    confirmWorldSeed(seed) {
+         if (this.worldSeed === null && this.worldSeedResolve) {
+            this.worldSeed = seed;
+            this.worldSeedResolve(seed);
+            this.debug.log(`World seed confirmed in Game: ${seed}`);
+         } else if (this.worldSeed !== seed) {
+            this.debug.warn(`Received seed confirmation (${seed}), but game already had seed (${this.worldSeed}). Ignoring.`);
+         }
+    }
+    // --- END NEW ---
 
     addInitialTestVehicle() {
         if (this.isGuestMode || !this.network || !this.network.room) {
@@ -157,16 +193,31 @@ export default class Game {
 
     async initializeWorld() {
         try {
+            // --- NEW: Wait for world seed ---
+            if (!this.worldSeedConfirmed) {
+                this.debug.log("Waiting for world seed confirmation...");
+                this.worldSeed = await this.worldSeedPromise; // Wait for the promise to resolve
+                if (this.worldSeed === null) {
+                     throw new Error("Failed to obtain world seed.");
+                }
+                this.worldSeedConfirmed = true; // Mark as confirmed after await
+                this.debug.log(`World seed obtained: ${this.worldSeed}`);
+            }
+            // --- END NEW ---
+
             this.world = new World({
-                seed: this.config.WORLD_SEED || Math.floor(Math.random() * 999999),
+                // --- MODIFIED: Use confirmed seed ---
+                seed: this.worldSeed,
+                // --- END MODIFIED ---
                 size: this.config.WORLD_SIZE,
                 chunkSize: this.config.CHUNK_SIZE,
                 maxLoadDistance: this.config.MAX_LOAD_DISTANCE,
-                noise: window.perlin,
+                noise: window.perlin, // Assumes perlin is globally available
                 debug: this.debug,
             });
             await this.world.initialize();
 
+            // Player spawning logic remains the same
             if (this.player && !this.isGuestMode) {
                 const startPosition = this.world.getRandomSpawnPoint();
                 this.player.setPosition(startPosition.x, startPosition.y);

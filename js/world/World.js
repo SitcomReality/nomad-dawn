@@ -5,16 +5,16 @@ import { BiomeTypes } from './Biome.js';
 
 export default class World {
     constructor(options) {
-        this.seed = options.seed || Math.floor(Math.random() * 999999);
+        this.seed = options.seed ?? Math.floor(Math.random() * 999999);
         this.size = options.size || 10000;
         this.chunkSize = options.chunkSize || 500;
-        
+
         // World generation parameters
         this.terrainScale = options.terrainScale || 0.005;
         this.resourceDensity = options.resourceDensity || 0.01;
         this.maxLoadDistance = options.maxLoadDistance || 2000;
-        
-        // Setup noise generator (implemented in perlin import)
+
+        // Setup noise generator (passed from Game)
         this.noise = options.noise || {
             simplex2: (x, y) => {
                 // Simple fallback if noise library not available
@@ -22,29 +22,32 @@ export default class World {
                 return value * 0.5;
             }
         };
-        
+
         // Debug flag
         this.debug = options.debug || false;
-        
-        // Create RNG
+
+        // Create RNG (potentially unused now if generators use per-chunk RNGs)
+        // Keep it for now for potential other uses like getRandomSpawnPoint
         this.rng = this.createRNG(this.seed);
-        
+
         // Initialize managers
         this.chunkManager = new ChunkManager(this);
         this.resourceGenerator = new ResourceGenerator(this);
         this.featureGenerator = new FeatureGenerator(this);
-        
+
         // Resource deposits - maintained for network sync
         this.resources = {};
+        this.resourceOverrides = {};
+
     }
-    
+
     async initialize() {
         // Generate initial world state (spawn area)
         await this.generateSpawnArea();
-        
+
         return true;
     }
-    
+
     createRNG(seed) {
         // Simple deterministic RNG
         let s = seed;
@@ -53,22 +56,22 @@ export default class World {
             return s / 233280;
         };
     }
-    
+
     async generateSpawnArea() {
         // Generate chunks around (0,0) for initial spawn area
         const spawnRadius = 1000;
-        
+
         // Use chunk manager to load chunks around spawn point
         await this.chunkManager.loadChunksAroundPosition(0, 0);
-        
+
         return true;
     }
-    
+
     getNoise(x, y, seed = 0) {
         // Use noise function to generate terrain values
         return this.noise.simplex2(x + seed, y + seed) * 0.5 + 0.5;
     }
-    
+
     getBiome(height, moisture) {
         // Determine biome based on height and moisture
         if (height < 0.3) {
@@ -87,77 +90,37 @@ export default class World {
             }
         }
     }
-    
+
     update(deltaTime, playerX, playerY) {
         // Load and unload chunks based on player position
         this.chunkManager.loadChunksAroundPosition(playerX, playerY);
     }
-    
+
     getVisibleChunks(cameraX, cameraY, viewWidth, viewHeight) {
         return this.chunkManager.getVisibleChunks(cameraX, cameraY, viewWidth, viewHeight);
     }
-    
+
     getChunksInRadius(x, y, radius) {
         return this.chunkManager.getChunksInRadius(x, y, radius);
     }
-    
+
     getRandomSpawnPoint() {
         // Find a safe place to spawn a player
         // For simplicity, just use the center for now
         return { x: 0, y: 0 };
     }
-    
+
     syncFromNetworkState(roomState) {
         // Update world state from network
         if (roomState.resources) {
-            this.updateResourcesFromNetwork(roomState.resources);
+            this.resourceOverrides = roomState.resources || {};
         }
-        
+
         if (roomState.worldObjects) {
             this.updateWorldObjectsFromNetwork(roomState.worldObjects);
         }
     }
-    
-    updateResourcesFromNetwork(networkResources) {
-        // Keep track of resource IDs present in the network update
-        const networkResourceIds = new Set(Object.keys(networkResources));
-        
-        // Update resource locations and amounts from network data
-        for (const id in networkResources) {
-            const data = networkResources[id];
-            const existingResource = this.findResourceById(id); 
 
-            if (data === null) {
-                // Resource was deleted/collected
-                if (existingResource) {
-                    // Remove from the relevant chunk's resource list
-                    const chunkId = this.chunkManager.getChunkId(existingResource.x, existingResource.y);
-                    if (this.chunkManager.chunks[chunkId] && this.chunkManager.chunks[chunkId].resources) {
-                        this.chunkManager.chunks[chunkId].resources = this.chunkManager.chunks[chunkId].resources.filter(r => r.id !== id);
-                    }
-                }
-                continue; 
-            }
-            
-            // Update or create resource
-            if (!existingResource) {
-                // New resource added to the world state 
-                const newResource = {
-                    id,
-                    type: 'resource', 
-                    ...data
-                };
-                this.addResourceToChunk(newResource); 
-            } else {
-                // Update existing resource properties 
-                Object.assign(existingResource, data);
-                // Ensure it's still in the correct chunk 
-                this.updateResourceChunkLocation(existingResource);
-            }
-        }
-    }
-
-    // Helper function to find a resource by ID across all loaded chunks
     findResourceById(resourceId) {
         for (const chunkId in this.chunkManager.chunks) {
             const chunk = this.chunkManager.chunks[chunkId];
@@ -168,7 +131,7 @@ export default class World {
                 }
             }
         }
-        return null; 
+        return null;
     }
 
     addResourceToChunk(resource) {
@@ -186,7 +149,7 @@ export default class World {
             }).catch(err => {
                 console.error(`Error generating chunk ${chunkId} for resource ${resource.id}:`, err);
             });
-            return; 
+            return;
         }
 
         const chunk = this.chunkManager.chunks[chunkId];
@@ -223,7 +186,7 @@ export default class World {
             this.addResourceToChunk(resource);
         }
     }
-    
+
     updateWorldObjectsFromNetwork(worldObjects) {
         // Update world objects like buildings, etc.
         for (const [id, data] of Object.entries(worldObjects)) {
