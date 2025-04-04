@@ -3,6 +3,7 @@ import EntityRenderer from './EntityRenderer.js';
 import EffectRenderer from './EffectRenderer.js';
 import UIRenderer from './UIRenderer.js';
 import SpriteManager from './SpriteManager.js';
+import InteriorRenderer from './InteriorRenderer.js';
 
 export default class Renderer {
     // Pass game instance to constructor
@@ -30,6 +31,7 @@ export default class Renderer {
         this.entityRenderer = new EntityRenderer(this, game);
         this.effectRenderer = new EffectRenderer(this, game);
         this.uiRenderer = new UIRenderer(this, game);
+        this.interiorRenderer = new InteriorRenderer(this, game);
 
         // Track last frame time for effects delta calculation
         this.lastFrameTime = performance.now();
@@ -59,6 +61,8 @@ export default class Renderer {
         if (this.uiRenderer && this.uiRenderer.onResize) {
             this.uiRenderer.onResize();
         }
+        // We might need to notify interiorRenderer too if its layout depends on canvas size
+        // For now, it calculates dimensions within its render method.
     }
 
     setupResizeListener() {
@@ -69,6 +73,9 @@ export default class Renderer {
 
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Optional: set a default background color here if needed before specific renderers draw
+        // this.ctx.fillStyle = '#000';
+        // this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
     // Update camera position to follow a target (entity or fixed point)

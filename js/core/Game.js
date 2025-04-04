@@ -10,6 +10,9 @@ import UIManager from '../ui/UIManager.js';
 import Vehicle from '../entities/Vehicle.js'; // Needed for collision checks and initial spawn
 import CollisionManager from './CollisionManager.js'; // Import the new CollisionManager
 
+// Make Player class globally accessible for EntityManager remote player creation
+window.Player = Player;
+
 export default class Game {
     constructor(options) {
         this.canvas = options.canvas;
@@ -140,7 +143,14 @@ export default class Game {
                  angle: 0,
                  health: vehicleConfig.health,
                  maxHealth: vehicleConfig.health,
-                 modules: []
+                 modules: [],
+                 // Add default grid properties for the new vehicle
+                 gridWidth: 10, // Default
+                 gridHeight: 10, // Default
+                 gridTiles: {},
+                 gridObjects: {},
+                 doorLocation: { x: 5, y: 9 }, // Centered bottom
+                 pilotSeatLocation: { x: 5, y: 1 } // Centered top
              };
             
              this.debug.log(`Sending updateRoomState for vehicle:`, testVehicleState);
@@ -187,6 +197,13 @@ export default class Game {
                 }
             }
 
+            // Set progress callback
+            this.resources.setOnProgress((loaded, total) => {
+                const progress = total > 0 ? (loaded / total) * 100 : 100;
+                 // Update loading screen progress bar (requires a function or direct access)
+                 // updateLoadingProgress(progress, `Loading asset ${loaded}/${total}...`); // Assuming updateLoadingProgress exists globally or is passed
+            });
+            
             await this.resources.loadAssets(assetsToLoad);
             
             this.debug.log('Assets loaded successfully');
@@ -295,7 +312,7 @@ export default class Game {
         const playerState = player.playerState;
         let transitionMade = false; // Flag to apply cooldown only if interaction happens
 
-        this.debug.log(`Handling 'E' press. Player state: ${playerState}, Coords: (${player.x.toFixed(0)}, ${player.y.toFixed(0)}), Grid Coords: (${player.gridX}, ${player.gridY})`);
+        this.debug.log(`Handling 'E' press. Player state: ${playerState}, Coords: (${player.x.toFixed(0)}, ${player.y.toFixed(0)}), Grid Coords: (${player.gridX.toFixed(1)}, ${player.gridY.toFixed(1)})`);
 
         if (playerState === 'Overworld') {
             // Find nearby vehicle
@@ -304,6 +321,7 @@ export default class Game {
             let closestDistanceSq = interactionDistance * interactionDistance;
 
             for (const vehicle of this.entities.getByType('vehicle')) {
+                 if (!vehicle) continue; // Skip invalid vehicles
                 const dx = vehicle.x - player.x;
                 const dy = vehicle.y - player.y;
                 const distanceSq = dx * dx + dy * dy;
@@ -318,8 +336,8 @@ export default class Game {
                 player.playerState = 'Interior';
                 player.currentVehicleId = nearbyVehicle.id;
                 // Use door location from vehicle data
-                player.gridX = nearbyVehicle.doorLocation?.x ?? 0;
-                player.gridY = nearbyVehicle.doorLocation?.y ?? 0;
+                player.gridX = nearbyVehicle.doorLocation?.x ?? Math.floor(nearbyVehicle.gridWidth / 2); // Default to center X if missing
+                player.gridY = nearbyVehicle.doorLocation?.y ?? nearbyVehicle.gridHeight -1; // Default to bottom Y if missing
                 // Stop player's overworld movement
                 player.speed = 0;
                 player._stateChanged = true; // Mark state changed for network sync
@@ -329,14 +347,25 @@ export default class Game {
             const vehicle = this.entities.get(player.currentVehicleId);
             if (!vehicle) {
                 this.debug.warn(`Player in Interior state but vehicle ${player.currentVehicleId} not found.`);
-                // Reset state? For now, just log.
+                // Attempt to recover by resetting state
+                player.playerState = 'Overworld';
+                player.currentVehicleId = null;
+                player._stateChanged = true;
+                this.ui.showNotification("Error: Exited invalid vehicle", "error");
                 return;
             }
 
-            const isOnDoor = player.gridX === (vehicle.doorLocation?.x ?? 0) && player.gridY === (vehicle.doorLocation?.y ?? 0);
-            const isOnPilotSeat = player.gridX === (vehicle.pilotSeatLocation?.x ?? 1) && player.gridY === (vehicle.pilotSeatLocation?.y ?? 1);
+            // Check if player is near the door grid coordinates
+            const doorX = vehicle.doorLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
+            const doorY = vehicle.doorLocation?.y ?? vehicle.gridHeight - 1;
+            const isNearDoor = Math.abs(player.gridX - doorX) < 0.6 && Math.abs(player.gridY - doorY) < 0.6; // Use tolerance
 
-            if (isOnDoor) {
+            // Check if player is near the pilot seat grid coordinates
+            const pilotX = vehicle.pilotSeatLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
+            const pilotY = vehicle.pilotSeatLocation?.y ?? 1;
+            const isNearPilotSeat = Math.abs(player.gridX - pilotX) < 0.6 && Math.abs(player.gridY - pilotY) < 0.6;
+
+            if (isNearDoor) {
                 this.debug.log(`Transitioning to Overworld from vehicle ${vehicle.id}`);
                 player.playerState = 'Overworld';
                 // Place player slightly outside the vehicle
@@ -346,11 +375,13 @@ export default class Game {
                 player.currentVehicleId = null;
                 player._stateChanged = true;
                 transitionMade = true;
-            } else if (isOnPilotSeat && vehicle.driver !== player.id) { // Can only pilot if not already driving
+            } else if (isNearPilotSeat && vehicle.driver !== player.id) { // Can only pilot if not already driving
                 this.debug.log(`Transitioning to Piloting vehicle ${vehicle.id}`);
                 player.playerState = 'Piloting';
                 // Set vehicle driver (this marks vehicle state changed implicitly)
                 if (vehicle.setDriver) vehicle.setDriver(player.id);
+                 else vehicle.driver = player.id; // Direct set if method missing
+                 vehicle._stateChanged = true; // Mark vehicle changed
                 // Update room state for vehicle driver
                 this.network.updateRoomState({
                     vehicles: {
@@ -360,22 +391,28 @@ export default class Game {
                 player._stateChanged = true;
                 transitionMade = true;
             } else {
-                 this.debug.log(`'E' pressed in Interior at (${player.gridX}, ${player.gridY}). No action.`);
+                 this.debug.log(`'E' pressed in Interior at (${player.gridX.toFixed(1)}, ${player.gridY.toFixed(1)}). No action.`);
             }
         } else if (playerState === 'Piloting') {
              const vehicle = this.entities.get(player.currentVehicleId);
              if (!vehicle) {
                  this.debug.warn(`Player in Piloting state but vehicle ${player.currentVehicleId} not found.`);
-                 // Reset state?
+                  // Attempt to recover by resetting state
+                 player.playerState = 'Overworld';
+                 player.currentVehicleId = null;
+                 player._stateChanged = true;
+                 this.ui.showNotification("Error: Exited invalid vehicle while piloting", "error");
                  return;
              }
              this.debug.log(`Transitioning from Piloting to Interior in vehicle ${vehicle.id}`);
              player.playerState = 'Interior';
-             // Place player back at pilot seat
-             player.gridX = vehicle.pilotSeatLocation?.x ?? 1;
+             // Place player back near pilot seat
+             player.gridX = vehicle.pilotSeatLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
              player.gridY = vehicle.pilotSeatLocation?.y ?? 1;
              // Remove vehicle driver (this marks vehicle state changed implicitly)
              if (vehicle.removeDriver) vehicle.removeDriver();
+              else vehicle.driver = null; // Direct set if method missing
+              vehicle._stateChanged = true; // Mark vehicle changed
               // Update room state for vehicle driver
              this.network.updateRoomState({
                  vehicles: {
@@ -388,12 +425,15 @@ export default class Game {
 
         if (transitionMade) {
             this.lastInteractionTime = currentTime; // Apply cooldown
+             // Force immediate presence update after state transition
+             this.network.updatePresence(player.getNetworkState());
+             player.clearStateChanged();
         }
     }
 
     update(deltaTime) {
         // --- Update Time of Day ---
-        const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 60;
+        const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90; // Use value from config
         const timeIncrement = deltaTime / cycleDuration;
         this.timeOfDay = (this.timeOfDay + timeIncrement) % 1; // Keep time between 0 and 1
 
@@ -420,7 +460,7 @@ export default class Game {
                          if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
                              this.network.updateRoomState({
                                  vehicles: {
-                                     [vehicle.id]: vehicle.getFullNetworkState() // Send full state when piloting updates
+                                     [vehicle.id]: vehicle.getMinimalNetworkState() // Send minimal state from pilot
                                  }
                              });
                              if(vehicle.clearStateChanged) vehicle.clearStateChanged();
@@ -489,24 +529,18 @@ export default class Game {
         // Render based on player state
         if (this.player && this.player.playerState === 'Interior') {
             const vehicle = this.entities.get(this.player.currentVehicleId);
-            if (vehicle) {
-                 // Call Interior Renderer (Phase 2 implementation)
-                 // this.renderer.renderInterior(vehicle, this.player);
-                 // Placeholder: Render black screen for now
-                 this.renderer.ctx.fillStyle = 'black';
-                 this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-                 this.renderer.ctx.fillStyle = 'white';
-                 this.renderer.ctx.font = '20px monospace';
-                 this.renderer.ctx.textAlign = 'center';
-                 this.renderer.ctx.fillText(`INSIDE VEHICLE ${vehicle.id}`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
-                 this.renderer.ctx.fillText(`Grid Pos: (${this.player.gridX}, ${this.player.gridY})`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2 + 30);
+            if (vehicle && this.renderer.interiorRenderer) {
+                 // Call Interior Renderer
+                 this.renderer.interiorRenderer.render(vehicle, this.player);
             } else {
-                 // Handle case where player is 'Interior' but vehicle doesn't exist
+                 // Handle case where player is 'Interior' but vehicle/renderer doesn't exist
+                 const errorMsg = !vehicle ? 'Vehicle Not Found!' : 'Interior Renderer Missing!';
                  this.renderer.ctx.fillStyle = 'red';
                  this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
                  this.renderer.ctx.fillStyle = 'white';
                  this.renderer.ctx.font = '20px monospace';
-                 this.renderer.ctx.fillText('Error: Vehicle Not Found!', this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
+                 this.renderer.ctx.textAlign = 'center';
+                 this.renderer.ctx.fillText(`Error: ${errorMsg}`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
             }
         } else if (this.player && this.player.playerState === 'Building') {
              // Render Building UI (Phase 3 implementation)
@@ -567,7 +601,12 @@ export default class Game {
             if (this.debug) {
                  const memoryUsage = performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : 'N/A';
                  const networkState = this.network ? (this.network.connected ? 'Connected' : 'Disconnected') : 'N/A';
-                 const playerPos = this.player ? `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : (this.isGuestMode ? 'Guest Mode' : 'N/A');
+                 const playerPos = this.player ? (
+                      this.player.playerState === 'Interior' ? `Interior (${this.player.gridX.toFixed(1)}, ${this.player.gridY.toFixed(1)})` :
+                      this.player.playerState === 'Piloting' ? `Piloting (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : // Show vehicle pos when piloting
+                      `Overworld (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})`
+                 ) : (this.isGuestMode ? 'Guest Mode' : 'N/A');
+                 const playerStateStr = this.player ? this.player.playerState : (this.isGuestMode ? 'Guest' : 'N/A');
                  const clientId = this.network ? (this.network.clientId ? this.network.clientId.substring(0, 8) : (this.isGuestMode ? 'Guest' : 'None')) : 'N/A';
                  const timeOfDayStr = this.timeOfDay.toFixed(3); // Add time of day to debug
                  const vehiclesCount = this.entities ? this.entities.getByType('vehicle').length : 'N/A'; // Count vehicles
@@ -576,7 +615,7 @@ export default class Game {
                     FPS: avgFps,
                     FrameTime: avgFrameTimeMs.toFixed(2) + ' ms',
                     TimeOfDay: timeOfDayStr, // Display time of day
-                    Mode: this.isGuestMode ? 'Guest' : 'Player',
+                    Mode: playerStateStr, // Show actual player state
                     Entities: this.entities ? this.entities.count() : 'N/A',
                     Vehicles: vehiclesCount, // Show vehicle count
                     PlayerPos: playerPos,
