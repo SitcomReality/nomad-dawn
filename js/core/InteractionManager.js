@@ -4,6 +4,9 @@ export default class InteractionManager {
         this.interactionCooldown = 500; // ms cooldown for 'E' key interactions
         this.lastInteractionTime = 0;
         this.resourceCheckRadius = 40; // Radius to check for resources when pressing 'E'
+        
+        // Import ResourceCollectionManager to handle collection logic
+        this.resourceManager = new (import('./ResourceCollectionManager.js').default)(game);
     }
 
     handleInput(currentTime) {
@@ -88,88 +91,17 @@ export default class InteractionManager {
             return true; // Interaction occurred (entering vehicle)
         }
 
-        // If no vehicle found, check for nearby resources
-        let nearbyResource = null;
-        let closestResourceDistSq = this.resourceCheckRadius * this.resourceCheckRadius;
-
-        // Get resources from nearby chunks only
-        const chunks = this.game.world?.getChunksInRadius(player.x, player.y, this.resourceCheckRadius * 1.5) || [];
-        for (const chunk of chunks) {
-             if (chunk && chunk.resources) {
-                for (const resource of chunk.resources) {
-                    // --- NEW: Check if resource is active using World helper ---
-                    if (resource && this.game.world.isResourceActive(resource.id)) {
-                        const dx = resource.x - player.x;
-                        const dy = resource.y - player.y;
-                        const distanceSq = dx * dx + dy * dy;
-                        if (distanceSq < closestResourceDistSq) {
-                            closestResourceDistSq = distanceSq;
-                            nearbyResource = resource;
-                        }
-                    }
-                }
-             }
-        }
-
+        // If no vehicle found, check for nearby resources using ResourceCollectionManager
+        const nearbyResource = this.resourceManager.findNearestResource(player, this.resourceCheckRadius);
 
         if (nearbyResource) {
             this.game.debug.log(`[InteractionManager] Requesting collection of resource: ${nearbyResource.id}`);
-             // --- Call the new collection function ---
-             this.requestCollectResource(player, nearbyResource);
-             return true; // Interaction occurred (collecting resource)
+            // Use the dedicated resource manager for collection logic
+            return this.resourceManager.collectResource(player, nearbyResource);
         }
 
         return false; // No interaction
     }
-
-    // --- NEW: requestCollectResource moved from Player.js ---
-     /**
-      * Handles the logic for collecting a resource. Updates player inventory,
-      * sends network updates for room state (resource removal) and player presence (inventory).
-      * @param {Player} player - The player entity collecting the resource.
-      * @param {Object} resource - The resource entity being collected.
-      */
-     requestCollectResource(player, resource) {
-         // Double check resource validity
-         if (!resource || !resource.id || !resource.resourceType || resource.amount <= 0) {
-             this.game.debug.warn(`[InteractionManager] Attempted to collect invalid resource:`, resource);
-             return;
-         }
-         // Double check it's actually active according to world state
-          if (!this.game.world.isResourceActive(resource.id)) {
-              this.game.debug.log(`[InteractionManager] Attempted to collect already collected resource: ${resource.id}`);
-              return;
-          }
-
-         // 1. Optimistically add the resource locally for immediate feedback
-         //    This will be overwritten/confirmed by the presence update anyway.
-         player.addResource(resource.resourceType, resource.amount);
-
-         // 2. Send request to update the *shared* room state, removing the resource
-         //    This is the crucial step for synchronization.
-         this.game.network.updateRoomState({
-             resources: {
-                 [resource.id]: null // Use null to signify deletion in room state
-             }
-         });
-
-         // 3. Send an update for *this player's* presence, reflecting the new resource count
-         //    This ensures other players see the updated inventory quickly.
-         //    Note: The player state change flag should already be set by addResource.
-         //    The presence update will happen automatically if the flag is set.
-         //    We might force it here anyway if needed: this.game.network.updatePresence({ resources: player.resources });
-
-         // 4. Trigger a local visual effect for immediate feedback
-         if (this.game.renderer) {
-             // Use resource color for the effect
-             this.game.renderer.createEffect('collect', resource.x, resource.y, { color: resource.color || '#ffff00' });
-         }
-
-         // 5. Local logging
-         this.game.debug.log(`Player ${player.id} collected ${resource.amount} ${resource.resourceType} from ${resource.id}`);
-         // player._stateChanged = true; // Ensure state is marked changed (already done by addResource)
-     }
-
 
     handleInteriorInteraction(player) {
          const vehicle = this.game.entities.get(player.currentVehicleId);
