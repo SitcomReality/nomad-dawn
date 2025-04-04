@@ -8,6 +8,7 @@ import ResourceManager from './ResourceManager.js';
 import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
 import Vehicle from '../entities/Vehicle.js'; // Needed for collision checks and initial spawn
+import CollisionManager from './CollisionManager.js'; // Import the new CollisionManager
 
 export default class Game {
     constructor(options) {
@@ -32,6 +33,8 @@ export default class Game {
         this.network = new NetworkManager(this);
         // Pass game instance to UIManager constructor
         this.ui = new UIManager(this); 
+        // Initialize CollisionManager
+        this.collisions = new CollisionManager(this);
         
         // Make config available to the game
         this.config = Config;
@@ -81,6 +84,7 @@ export default class Game {
             // Network handlers are now set up inside network.initialize()
 
             // Add initial test vehicle if none exists in room state
+            // We check inside the method if guest or not
             this.addInitialTestVehicle();
             
             return true;
@@ -99,13 +103,18 @@ export default class Game {
     addInitialTestVehicle() {
          // Guests cannot add vehicles
         if (this.isGuestMode || !this.network || !this.network.room) {
+            this.debug.log("Guest mode or network not ready, skipping initial vehicle check.");
             return;
         }
 
         const currentVehicles = this.network.room.roomState?.vehicles;
         const testVehicleId = 'vehicle-test-hauler-initial';
         
+        this.debug.log("Checking for initial test vehicle...");
+        this.debug.log("Current roomState.vehicles:", currentVehicles);
+
         // Check if the room state already has vehicles or the specific test vehicle
+        // Check if currentVehicles is truthy before checking keys or content
         if (!currentVehicles || Object.keys(currentVehicles).length === 0 || !currentVehicles[testVehicleId]) {
              this.debug.log(`Attempting to add initial test vehicle (${testVehicleId})...`);
             
@@ -130,15 +139,16 @@ export default class Game {
                  modules: []
              };
             
+             this.debug.log(`Sending updateRoomState for vehicle:`, testVehicleState);
              // Send the update to the room state
              this.network.updateRoomState({
                  vehicles: {
                      [testVehicleId]: testVehicleState
                  }
              });
-             this.debug.log(`Initial test vehicle added to room state.`);
+             this.debug.log(`Initial test vehicle added request sent.`);
         } else {
-             // this.debug.log(`Initial test vehicle (${testVehicleId}) already exists in room state or other vehicles present.`);
+            this.debug.log(`Initial test vehicle (${testVehicleId}) already exists in room state or other vehicles present.`);
         }
     }
 
@@ -324,90 +334,11 @@ export default class Game {
         // --- UI Update ---
         this.ui.update(); // Updates HUD, checks open panels
         
-        // --- Collision Checks (Skip for Guests) ---
+        // --- Collision Checks (Use CollisionManager, Skip for Guests) ---
         if (!this.isGuestMode) {
-             this.checkCollisions();
+            this.collisions.checkCollisions(); // Use the collision manager
         }
     }
-
-    checkCollisions() {
-        // More optimized collision checks needed for many entities.
-        // Consider spatial partitioning (e.g., Quadtree or Grid) later.
-
-        // Only get entities that can collide (player, vehicles) for the outer loop
-        const colliders = this.entities.getAll().filter(e => e.collidesWith && e.onCollision && (e.type === 'player' || e.type === 'vehicle'));
-        
-        if (colliders.length === 0) return;
-
-        // Get all potentially collidable objects (other players, vehicles, world objects) once
-        const potentialTargets = this.entities.getAll();
-        let worldObjects = [];
-        if (this.world && colliders[0]) { // Only get world objects if there's someone to collide with them
-            const checkRadius = (colliders[0].radius || colliders[0].size / 2 || 20) + 100; // Use first collider's radius + buffer
-             const nearbyChunks = this.world.getChunksInRadius(colliders[0].x, colliders[0].y, checkRadius);
-             nearbyChunks.forEach(chunk => {
-                 if (chunk.features) worldObjects = worldObjects.concat(chunk.features.filter(f => f && f.collides));
-                 if (chunk.resources) worldObjects = worldObjects.concat(chunk.resources.filter(r => r && r.collides));
-             });
-        }
-        const allTargets = [...potentialTargets, ...worldObjects];
-
-        for (let i = 0; i < colliders.length; i++) {
-            const entityA = colliders[i];
-
-            // Check against other entities
-            for (let j = 0; j < allTargets.length; j++) {
-                 const entityB = allTargets[j];
-                 
-                 // Skip self-collision and check if B is collidable
-                 if (entityA === entityB || !entityB) continue; 
-                 // Skip if B doesn't have collision properties (rough check)
-                 if (entityB.collides === false || (entityB.type !== 'player' && entityB.type !== 'vehicle' && !entityB.collides)) continue;
-
-                 if (this.broadPhaseCheck(entityA, entityB)) {
-                     // More precise check (use simple for world objects, entity method otherwise)
-                     let collision = false;
-                      if (entityB.collidesWith) { // B is an entity with a method
-                          collision = entityA.collidesWith(entityB);
-                      } else if (entityB.collides) { // B is likely a world object
-                          collision = this.simpleCircleCollision(entityA, entityB);
-                      }
-
-                     if (collision) {
-                         entityA.onCollision(entityB); // A reacts to B
-                         if (entityB.onCollision) { // If B is an entity, it reacts too
-                             entityB.onCollision(entityA);
-                         }
-                     }
-                 }
-            }
-        }
-    }
-
-     // Simple broad-phase check (Axis-Aligned Bounding Box)
-     broadPhaseCheck(entityA, entityB) {
-         const radiusA = (entityA.radius || entityA.size / 2 || 0);
-         const radiusB = (entityB.radius || entityB.size / 2 || 0);
-         if (radiusA === 0 || radiusB === 0) return false; // Cannot check if radius is zero
-         const dx = Math.abs(entityA.x - entityB.x);
-         const dy = Math.abs(entityA.y - entityB.y);
-         // Add a small buffer maybe?
-         const buffer = 1; 
-         return dx < radiusA + radiusB + buffer && dy < radiusA + radiusB + buffer;
-     }
-
-     // Simple circle collision check (used for entity vs world object)
-     simpleCircleCollision(entity, obj) {
-         const radiusA = (entity.radius || entity.size / 2 || 0);
-         const radiusB = (obj.radius || obj.size / 2 || 0); // Assume size property for world objects
-         if (radiusA === 0 || radiusB === 0) return false; // Cannot check if radius is missing
-
-         const dx = entity.x - obj.x;
-         const dy = entity.y - obj.y;
-         const distanceSq = dx * dx + dy * dy;
-         const radiiSumSq = (radiusA + radiusB) * (radiusA + radiusB);
-         return distanceSq < radiiSumSq;
-     }
 
     render() {
         if (!this.renderer) return;
@@ -468,6 +399,7 @@ export default class Game {
                  const playerPos = this.player ? `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : (this.isGuestMode ? 'Guest Mode' : 'N/A');
                  const clientId = this.network ? (this.network.clientId ? this.network.clientId.substring(0, 8) : (this.isGuestMode ? 'Guest' : 'None')) : 'N/A';
                  const timeOfDayStr = this.timeOfDay.toFixed(3); // Add time of day to debug
+                 const vehiclesCount = this.entities ? this.entities.getByType('vehicle').length : 'N/A'; // Count vehicles
 
                  this.debug.updateStats({
                     FPS: avgFps,
@@ -475,6 +407,7 @@ export default class Game {
                     TimeOfDay: timeOfDayStr, // Display time of day
                     Mode: this.isGuestMode ? 'Guest' : 'Player',
                     Entities: this.entities ? this.entities.count() : 'N/A',
+                    Vehicles: vehiclesCount, // Show vehicle count
                     PlayerPos: playerPos,
                     Memory: memoryUsage,
                     ActiveChunks: this.world ? this.world.chunkManager.activeChunkIds.size : 'N/A',

@@ -14,6 +14,12 @@ export default class EntityManager {
         }
         this.entities[entity.id] = entity;
         
+        // --- DEBUG: Log adding vehicles ---
+        if (entity.type === 'vehicle') {
+            console.log(`[EntityManager] Added vehicle entity: ${entity.id}`, entity); // Use console.log to ensure it appears even if debug off
+        }
+        // --- END DEBUG ---
+
         // Track player entities separately for quick access using clientId
         if (entity.type === 'player') {
             this.playerEntities[entity.id] = entity;
@@ -25,6 +31,11 @@ export default class EntityManager {
     remove(entityId) {
         const entity = this.entities[entityId];
         if (entity) {
+             // --- DEBUG: Log removing vehicles ---
+             if (entity.type === 'vehicle') {
+                 console.log(`[EntityManager] Removing vehicle entity: ${entityId}`); // Use console.log
+             }
+             // --- END DEBUG ---
             if (entity.type === 'player') {
                 delete this.playerEntities[entityId];
             }
@@ -44,7 +55,7 @@ export default class EntityManager {
     }
     
     getByType(type) {
-        return Object.values(this.entities).filter(entity => entity.type === type);
+        return Object.values(this.entities).filter(entity => entity && entity.type === type); // Add check for entity validity
     }
     
     getPlayersInRadius(x, y, radius) {
@@ -99,7 +110,8 @@ export default class EntityManager {
                  // console.log(`Creating remote player entity for ${clientId}`); // Debugging creation
                 
                 // Create a Player instance for remote players too, for consistency
-                 entity = new Player(clientId, window.game); // Assuming 'game' is globally accessible or passed appropriately
+                 // Ensure game reference is passed correctly
+                 entity = new Player(clientId, window.game); 
                 
                 // Set initial properties from network data and peer info
                  entity.name = peerInfo ? peerInfo.username : `Player ${clientId.substring(0, 4)}`;
@@ -124,7 +136,7 @@ export default class EntityManager {
                  entity.update = function(deltaTime) {
                      // Interpolate towards target state
                      // Using a fixed factor can feel jerky, time-based is better
-                     const now = performance.now();
+                     // const now = performance.now();
                       // Estimate time since last *network* update arrived for this player
                       // This is tricky because we only know when we processed it.
                       // Let's stick to simpler lerp for now, or use a library later.
@@ -134,9 +146,18 @@ export default class EntityManager {
                      this.y += (this._targetY - this.y) * lerpFactor;
 
                      // Interpolate angle carefully (handle wrapping)
-                     const angleDiff = this.normalizeAngle(this._targetAngle - this.angle);
-                      // Ensure normalizeAngle is accessible (it's on Player prototype)
-                     this.angle = Player.prototype.normalizeAngle.call(this, this.angle + angleDiff * lerpFactor); 
+                     // Check if normalizeAngle exists before calling
+                     if (typeof this.normalizeAngle === 'function') {
+                        const angleDiff = this.normalizeAngle(this._targetAngle - this.angle);
+                         this.angle = this.normalizeAngle(this.angle + angleDiff * lerpFactor); 
+                     } else if (typeof Player.prototype.normalizeAngle === 'function') {
+                         // Fallback if prototype method is available but not on instance
+                         const angleDiff = Player.prototype.normalizeAngle.call(this, this._targetAngle - this.angle);
+                         this.angle = Player.prototype.normalizeAngle.call(this, this.angle + angleDiff * lerpFactor);
+                     } else {
+                         // Direct assignment if no normalization function found (less smooth)
+                         this.angle += (this._targetAngle - this.angle) * lerpFactor;
+                     }
                  };
                 
                 this.add(entity); // Add the fully configured remote player

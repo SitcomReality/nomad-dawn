@@ -75,6 +75,12 @@ export default class NetworkManager {
         });
 
         this.unsubscribeRoomState = this.subscribeRoomState((roomState) => {
+            // --- DEBUG ---
+            if (roomState.vehicles) {
+                this.game.debug.log("Received roomState update with vehicles:", JSON.parse(JSON.stringify(roomState.vehicles))); // Log a copy
+            }
+            // --- END DEBUG ---
+
             if (this.game.world) {
                 this.game.world.syncFromNetworkState(roomState);
             }
@@ -97,6 +103,7 @@ export default class NetworkManager {
 
     // Moved from Game.js: Sync Vehicles
     syncVehiclesFromNetwork(networkVehicles) {
+         this.game.debug.log("Starting syncVehiclesFromNetwork..."); // DEBUG
          // Lazily import Vehicle to avoid circular dependency issues if NetworkManager is imported elsewhere
          // Or ensure Vehicle class is loaded before this is called. For simplicity, assuming Vehicle is available.
          const Vehicle = window.Vehicle; // Assuming Vehicle is globally accessible or loaded appropriately
@@ -113,9 +120,19 @@ export default class NetworkManager {
             let vehicle = this.game.entities.get(vehicleId);
 
             if (data === null) { // Vehicle removed
-                 if (vehicle) this.game.entities.remove(vehicleId);
+                 if (vehicle) {
+                     this.game.debug.log(`Removing vehicle ${vehicleId} due to null in network state.`); // DEBUG
+                     this.game.entities.remove(vehicleId);
+                 }
                  continue;
             }
+
+            // Check for minimum required data to create/update a vehicle
+             if (!data || typeof data !== 'object' || !data.vehicleType || typeof data.x !== 'number' || typeof data.y !== 'number') {
+                 this.game.debug.warn(`Received incomplete or invalid vehicle data for ID ${vehicleId}, skipping sync. Data:`, data);
+                 presentVehicleIds.delete(vehicleId); // Remove invalid ID from tracking
+                 continue;
+             }
 
             if (!vehicle) {
                  // Create new vehicle entity if it doesn't exist
@@ -126,19 +143,32 @@ export default class NetworkManager {
                  }
                  // Pass config and owner ID
                  vehicle = new Vehicle(vehicleId, vehicleConfig, data.owner);
-                 this.game.entities.add(vehicle);
-                 this.game.debug.log(`Created network vehicle ${vehicleId}`);
+                 this.game.debug.log(`Created network vehicle ${vehicleId} of type ${data.vehicleType} at (${data.x}, ${data.y})`); // DEBUG
+                 this.game.entities.add(vehicle); // Add should also log
             }
+
+             // --- DEBUG: Log state before update ---
+             // const oldState = JSON.parse(JSON.stringify(vehicle)); // Deep copy
 
              // Update vehicle state
              vehicle.x = data.x ?? vehicle.x;
              vehicle.y = data.y ?? vehicle.y;
              vehicle.angle = data.angle ?? vehicle.angle;
              vehicle.health = data.health ?? vehicle.health;
-             vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth;
+             vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth; // Make sure maxHealth is synced too
              vehicle.driver = data.driver ?? null;
              vehicle.passengers = data.passengers ?? [];
              vehicle.modules = data.modules ?? [];
+
+              // --- DEBUG: Log state after update and compare ---
+              // const newState = JSON.parse(JSON.stringify(vehicle));
+              // if (JSON.stringify(oldState) !== JSON.stringify(newState)) {
+              //      this.game.debug.log(`Updated vehicle ${vehicleId}. Old:`, oldState, 'New:', newState);
+              // } else {
+              //      // Only log if nothing changed and we expected it to
+              //      // this.game.debug.log(`Vehicle ${vehicleId} state unchanged.`);
+              // }
+
 
              // If vehicle has an interpolation target, update it here
              // if (vehicle.updateTargetState) {
@@ -153,10 +183,11 @@ export default class NetworkManager {
          const currentVehicles = this.game.entities.getByType('vehicle');
          for (const localVehicle of currentVehicles) {
              if (!presentVehicleIds.has(localVehicle.id)) {
-                 this.game.debug.log(`Removing vehicle ${localVehicle.id} (no longer in room state)`);
+                 this.game.debug.log(`Removing vehicle ${localVehicle.id} (no longer in network state)`);
                  this.game.entities.remove(localVehicle.id);
              }
          }
+         this.game.debug.log("Finished syncVehiclesFromNetwork."); // DEBUG
     }
 
 
@@ -270,6 +301,10 @@ export default class NetworkManager {
          // Prevent guests from modifying room state
         if (this.game.isGuestMode || !this.connected || !this.room) return;
         
+        // --- DEBUG ---
+        this.game.debug.log(`Sending updateRoomState:`, JSON.parse(JSON.stringify(stateData))); 
+        // --- END DEBUG ---
+
         this.room.updateRoomState(stateData);
     }
     

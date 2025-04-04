@@ -139,7 +139,7 @@ export default class BaseBuildingUI {
             const nearbyVehicle = this.findNearbyVehicle();
             if (!nearbyVehicle) {
                 // Show notification that no vehicle is nearby
-                this.game.ui.notifications.show("No vehicle nearby", "error");
+                this.game.ui.showNotification("No vehicle nearby", "warn"); 
                 return;
             }
             
@@ -167,20 +167,33 @@ export default class BaseBuildingUI {
         const vehicles = this.game.entities.getByType('vehicle');
         const interactionDistance = 100; // Maximum distance to interact with a vehicle
         
-        // Find the closest vehicle within interaction distance
+        this.game.debug.log(`Finding nearby vehicles. Total vehicles in EntityManager: ${vehicles.length}`);
+        vehicles.forEach(v => {
+             const dx_debug = v.x - this.game.player.x;
+             const dy_debug = v.y - this.game.player.y;
+             const dist_debug = Math.sqrt(dx_debug*dx_debug + dy_debug*dy_debug);
+             this.game.debug.log(`  Vehicle ${v.id} at (${v.x.toFixed(0)}, ${v.y.toFixed(0)}), distance: ${dist_debug.toFixed(1)}`);
+        });
+
         let closestVehicle = null;
-        let closestDistance = interactionDistance;
+        let closestDistance = interactionDistance * interactionDistance; // Use squared distance
         
         for (const vehicle of vehicles) {
             const dx = vehicle.x - this.game.player.x;
             const dy = vehicle.y - this.game.player.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            const distanceSq = dx * dx + dy * dy; // Squared distance
             
-            if (distance < closestDistance) {
-                closestDistance = distance;
+            if (distanceSq < closestDistance) {
+                closestDistance = distanceSq;
                 closestVehicle = vehicle;
             }
         }
+        
+        if (closestVehicle) {
+             this.game.debug.log(`Closest vehicle found: ${closestVehicle.id} at distance ${Math.sqrt(closestDistance).toFixed(1)}`);
+         } else {
+             this.game.debug.log(`No vehicle found within interaction distance (${interactionDistance}).`);
+         }
         
         return closestVehicle;
     }
@@ -193,55 +206,46 @@ export default class BaseBuildingUI {
         
         const ctx = canvas.getContext('2d');
         
-        // Clear canvas
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Set background
         ctx.fillStyle = '#222';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         
-        // Calculate scale to fit vehicle in canvas
         const scale = Math.min(canvas.width, canvas.height) / (this.activeVehicle.size * 4);
         
-        // Draw vehicle in center of canvas
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(scale, scale);
         
-        // Draw vehicle body
         ctx.fillStyle = this.activeVehicle.color || '#fa5';
         ctx.beginPath();
         ctx.arc(0, 0, this.activeVehicle.size / 2, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw direction indicator
         ctx.strokeStyle = 'white';
-        ctx.lineWidth = 2;
+        ctx.lineWidth = 2 / scale; 
         ctx.beginPath();
         ctx.moveTo(0, 0);
         ctx.lineTo(this.activeVehicle.size / 2, 0);
         ctx.stroke();
         
-        // Draw installed modules
         if (this.activeVehicle.modules && this.activeVehicle.modules.length > 0) {
             this.activeVehicle.modules.forEach((module, index) => {
-                // Position modules around the vehicle
                 const angle = (index / this.activeVehicle.modules.length) * Math.PI * 2;
                 const distance = this.activeVehicle.size * 0.7;
                 const x = Math.cos(angle) * distance;
                 const y = Math.sin(angle) * distance;
                 
-                // Draw module
+                const moduleSize = module.size || 5; 
                 ctx.fillStyle = module.color || '#5af';
                 ctx.beginPath();
-                ctx.arc(x, y, module.size / 2 || 5, 0, Math.PI * 2);
+                ctx.arc(x, y, moduleSize / 2, 0, Math.PI * 2); 
                 ctx.fill();
                 
-                // Draw module name
                 ctx.fillStyle = 'white';
-                ctx.font = '3px sans-serif';
+                ctx.font = `${Math.max(3, 10 / scale)}px sans-serif`; 
                 ctx.textAlign = 'center';
-                ctx.fillText(module.name, x, y + 8);
+                ctx.fillText(module.name, x, y + moduleSize * 0.8); 
             });
         }
         
@@ -251,25 +255,21 @@ export default class BaseBuildingUI {
     updateVehicleStats() {
         if (!this.activeVehicle) return;
         
-        // Update vehicle type
         const vehicleTypeElement = document.getElementById('vehicle-type');
         if (vehicleTypeElement) {
             vehicleTypeElement.textContent = this.activeVehicle.name || this.activeVehicle.vehicleType || 'Unknown';
         }
         
-        // Update health
         const healthElement = document.getElementById('vehicle-health');
         if (healthElement) {
             healthElement.textContent = `${Math.floor(this.activeVehicle.health)}/${this.activeVehicle.maxHealth}`;
         }
         
-        // Update speed
         const speedElement = document.getElementById('vehicle-speed');
         if (speedElement) {
             speedElement.textContent = `${this.activeVehicle.maxSpeed}`;
         }
         
-        // Update storage
         const storageElement = document.getElementById('vehicle-storage');
         if (storageElement) {
             storageElement.textContent = `${this.activeVehicle.storage}`;
@@ -280,47 +280,15 @@ export default class BaseBuildingUI {
         const modulesList = document.getElementById('modules-list');
         if (!modulesList) return;
         
-        // Clear current list
         modulesList.innerHTML = '';
         
-        // Get available modules from config
-        const moduleTypes = this.game.config?.MODULE_TYPES || [
-            {
-                id: 'storage',
-                name: 'Storage Module',
-                description: 'Increases vehicle storage capacity',
-                effect: { storage: 100 },
-                cost: { metal: 25, energy: 10 },
-                color: '#5af',
-                size: 10
-            },
-            {
-                id: 'armor',
-                name: 'Armor Plating',
-                description: 'Increases vehicle durability',
-                effect: { maxHealth: 100 },
-                cost: { metal: 50 },
-                color: '#888',
-                size: 12
-            },
-            {
-                id: 'engine',
-                name: 'Engine Upgrade',
-                description: 'Increases vehicle speed',
-                effect: { maxSpeed: 50 },
-                cost: { metal: 30, energy: 30 },
-                color: '#f55',
-                size: 8
-            }
-        ];
+        const moduleTypes = this.game.config?.MODULE_TYPES || []; 
         
-        // Create module items
         moduleTypes.forEach(module => {
             const moduleItem = document.createElement('div');
             moduleItem.className = 'module-item';
             moduleItem.dataset.id = module.id;
             
-            // Check if player has enough resources to craft
             const canCraft = this.canCraftModule(module);
             
             moduleItem.innerHTML = `
@@ -333,11 +301,9 @@ export default class BaseBuildingUI {
                 </div>
             `;
             
-            // Add click handler
             moduleItem.addEventListener('click', () => {
                 this.selectModule(module);
                 
-                // Highlight selected item
                 document.querySelectorAll('.module-item').forEach(item => {
                     item.classList.remove('selected');
                 });
@@ -347,7 +313,6 @@ export default class BaseBuildingUI {
             modulesList.appendChild(moduleItem);
         });
         
-        // Show empty message if no modules
         if (modulesList.children.length === 0) {
             modulesList.innerHTML = '<div class="empty-message">No modules available</div>';
         }
@@ -356,7 +321,6 @@ export default class BaseBuildingUI {
     selectModule(module) {
         this.selectedModule = module;
         
-        // Update module details
         const moduleDetails = document.getElementById('module-details');
         if (moduleDetails) {
             let detailsHTML = `<h3>${module.name}</h3>`;
@@ -365,7 +329,6 @@ export default class BaseBuildingUI {
                 detailsHTML += `<p>${module.description}</p>`;
             }
             
-            // Show module effects
             if (module.effect) {
                 detailsHTML += `<p>Effects:</p><ul>`;
                 for (const [stat, value] of Object.entries(module.effect)) {
@@ -374,23 +337,25 @@ export default class BaseBuildingUI {
                 detailsHTML += `</ul>`;
             }
             
-            // Show required resources
-            detailsHTML += `<p>Required Resources:</p><ul>`;
-            for (const [resource, amount] of Object.entries(module.cost)) {
-                const resourceConfig = this.getResourceConfig(resource);
-                const playerAmount = this.game.player.resources[resource] || 0;
-                const hasEnough = playerAmount >= amount;
-                
-                detailsHTML += `<li class="${hasEnough ? 'has-enough' : 'not-enough'}">
-                    ${resourceConfig?.name || resource}: ${amount} (Have: ${playerAmount})
-                </li>`;
+            if (module.cost) { 
+                detailsHTML += `<p>Required Resources:</p><ul>`;
+                for (const [resource, amount] of Object.entries(module.cost)) {
+                    const resourceConfig = this.getResourceConfig(resource);
+                    const playerAmount = this.game.player?.resources[resource] || 0; 
+                    const hasEnough = playerAmount >= amount;
+                    
+                    detailsHTML += `<li class="${hasEnough ? 'has-enough' : 'not-enough'}">
+                        ${resourceConfig?.name || resource}: ${amount} (Have: ${playerAmount})
+                    </li>`;
+                }
+                detailsHTML += `</ul>`;
+            } else {
+                 detailsHTML += `<p>No resources required.</p>`; 
             }
-            detailsHTML += `</ul>`;
             
             moduleDetails.innerHTML = detailsHTML;
         }
         
-        // Update action buttons
         this.updateActionButtons();
     }
     
@@ -400,12 +365,10 @@ export default class BaseBuildingUI {
         const enterButton = document.getElementById('btn-enter-vehicle');
         
         if (installButton) {
-            // Enable install button if a module is selected and player has resources
             installButton.disabled = !(this.selectedModule && this.canCraftModule(this.selectedModule));
         }
         
         if (removeButton) {
-            // Enable remove button if active vehicle has this module installed
             const hasModule = this.activeVehicle && this.activeVehicle.modules && 
                 this.selectedModule && this.activeVehicle.modules.some(m => m.id === this.selectedModule.id);
                 
@@ -413,7 +376,6 @@ export default class BaseBuildingUI {
         }
         
         if (enterButton) {
-            // Enable enter button if vehicle is available
             enterButton.disabled = !this.activeVehicle;
         }
     }
@@ -421,17 +383,15 @@ export default class BaseBuildingUI {
     installModule() {
         if (!this.selectedModule || !this.activeVehicle || !this.canCraftModule(this.selectedModule)) return;
         
-        // Deduct resources
-        for (const [resource, amount] of Object.entries(this.selectedModule.cost)) {
-            this.game.player.resources[resource] -= amount;
+        if (this.selectedModule.cost) {
+             for (const [resource, amount] of Object.entries(this.selectedModule.cost)) {
+                 this.game.player.resources[resource] -= amount;
+             }
+            this.game.network.updatePresence({
+                 resources: this.game.player.resources
+             });
         }
         
-        // Sync resources with network
-        this.game.network.updatePresence({
-            resources: this.game.player.resources
-        });
-        
-        // Add module to vehicle
         const moduleInstance = {
             id: this.selectedModule.id,
             name: this.selectedModule.name,
@@ -440,72 +400,56 @@ export default class BaseBuildingUI {
             size: this.selectedModule.size
         };
         
-        // Add module to vehicle locally if it's our own vehicle
-        if (this.activeVehicle.owner === this.game.player.id) {
-            // Add module to vehicle's modules array
-            if (!this.activeVehicle.modules) {
-                this.activeVehicle.modules = [];
-            }
-            this.activeVehicle.modules.push(moduleInstance);
-            
-            // Apply module effects
-            this.applyModuleEffects(this.activeVehicle, moduleInstance);
+        if (!this.activeVehicle.modules) {
+            this.activeVehicle.modules = [];
         }
         
-        // Update vehicle on the network
+        const newModules = [...this.activeVehicle.modules, moduleInstance];
+        
+        this.applyModuleEffects(this.activeVehicle, moduleInstance);
+        
         if (this.activeVehicle.id) {
             this.game.network.updateRoomState({
                 vehicles: {
                     [this.activeVehicle.id]: {
-                        modules: this.activeVehicle.modules
+                        modules: newModules 
                     }
                 }
             });
         }
         
-        // Update UI
         this.update();
     }
     
     removeModule() {
         if (!this.selectedModule || !this.activeVehicle || !this.activeVehicle.modules) return;
         
-        // Find module in vehicle
         const moduleIndex = this.activeVehicle.modules.findIndex(m => m.id === this.selectedModule.id);
         if (moduleIndex === -1) return;
         
-        const module = this.activeVehicle.modules[moduleIndex];
+        const moduleToRemove = this.activeVehicle.modules[moduleIndex];
         
-        // Remove module from vehicle locally if it's our own vehicle
-        if (this.activeVehicle.owner === this.game.player.id) {
-            // Remove module effects
-            this.removeModuleEffects(this.activeVehicle, module);
-            
-            // Remove module from array
-            this.activeVehicle.modules.splice(moduleIndex, 1);
-        }
+        const newModules = this.activeVehicle.modules.filter((m, index) => index !== moduleIndex);
+
+        this.removeModuleEffects(this.activeVehicle, moduleToRemove);
         
-        // Update vehicle on the network
         if (this.activeVehicle.id) {
             this.game.network.updateRoomState({
                 vehicles: {
                     [this.activeVehicle.id]: {
-                        modules: this.activeVehicle.modules
+                        modules: newModules 
                     }
                 }
             });
         }
         
-        // Update UI
         this.update();
     }
     
     enterVehicle() {
         if (!this.activeVehicle || !this.game.player) return;
         
-        // Enter the vehicle
         if (this.game.player.enterVehicle(this.activeVehicle)) {
-            // Close the UI
             this.hide();
         }
     }
@@ -513,41 +457,41 @@ export default class BaseBuildingUI {
     applyModuleEffects(vehicle, module) {
         if (!vehicle || !module || !module.effect) return;
         
-        // Apply each effect
         for (const [stat, value] of Object.entries(module.effect)) {
             if (stat === 'maxHealth') {
                 vehicle.maxHealth += value;
-                vehicle.health += value; // Also increase current health
+                vehicle.health += value; 
             } else if (stat === 'maxSpeed') {
                 vehicle.maxSpeed += value;
             } else if (stat === 'storage') {
                 vehicle.storage += value;
+            } else if (stat === 'scanRadius') {
+                 vehicle.scanRadius = (vehicle.scanRadius || 0) + value;
             }
-            // Add other stat effects as needed
         }
     }
     
     removeModuleEffects(vehicle, module) {
         if (!vehicle || !module || !module.effect) return;
         
-        // Remove each effect
         for (const [stat, value] of Object.entries(module.effect)) {
             if (stat === 'maxHealth') {
                 vehicle.maxHealth -= value;
-                vehicle.health = Math.min(vehicle.health, vehicle.maxHealth); // Cap health
+                vehicle.health = Math.min(vehicle.health, vehicle.maxHealth); 
             } else if (stat === 'maxSpeed') {
                 vehicle.maxSpeed -= value;
             } else if (stat === 'storage') {
                 vehicle.storage -= value;
+            } else if (stat === 'scanRadius') {
+                 vehicle.scanRadius = Math.max(0, (vehicle.scanRadius || 0) - value);
             }
-            // Remove other stat effects as needed
         }
     }
     
     canCraftModule(module) {
-        if (!module || !module.cost || !this.game.player) return false;
+        if (!module || !this.game.player) return false; 
+        if (!module.cost) return true; 
         
-        // Check if player has enough resources for each cost item
         for (const [resource, amount] of Object.entries(module.cost)) {
             const playerAmount = this.game.player.resources[resource] || 0;
             if (playerAmount < amount) {
@@ -565,18 +509,29 @@ export default class BaseBuildingUI {
     }
     
     update() {
-        if (!this.isVisible || !this.activeVehicle) return;
+        if (!this.isVisible) return;
         
-        // Update vehicle preview
+        if (!this.activeVehicle || !this.game.entities.get(this.activeVehicle.id)) {
+             this.game.debug.log("Active vehicle removed, closing Building UI.");
+             this.hide();
+             return;
+        }
+
         this.initVehiclePreview();
         
-        // Update vehicle stats
         this.updateVehicleStats();
         
-        // Update modules list
         this.updateModulesList();
         
-        // Update action buttons
+        if (this.selectedModule) {
+            this.selectModule(this.selectedModule); 
+        } else {
+             const moduleDetails = document.getElementById('module-details');
+             if (moduleDetails) {
+                moduleDetails.innerHTML = `<h3>Select a module</h3><p>Module details will appear here</p>`;
+             }
+        }
+
         this.updateActionButtons();
     }
 }
