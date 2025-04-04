@@ -12,7 +12,8 @@ import CollisionManager from './CollisionManager.js';
 import InteractionManager from './InteractionManager.js';
 import PerformanceMonitor from './PerformanceMonitor.js';
 import WorldObjectManager from '../world/WorldObjectManager.js';
-import LightManager from '../lighting/LightManager.js'; // NEW
+import LightManager from '../lighting/LightManager.js';
+import ShadowManager from '../lighting/ShadowManager.js'; // NEW: Import ShadowManager
 
 // Make Player class globally accessible for EntityManager remote player creation
 window.Player = Player;
@@ -46,7 +47,8 @@ export default class Game {
         this.interactions = new InteractionManager(this);
         this.performance = new PerformanceMonitor(this);
         this.worldObjectManager = new WorldObjectManager(this);
-        this.lightManager = new LightManager(this); // NEW: Instantiate LightManager
+        this.lightManager = new LightManager(this);
+        this.shadowManager = new ShadowManager(this); // NEW: Instantiate ShadowManager
 
         // Make config available to the game
         this.config = Config;
@@ -127,6 +129,8 @@ export default class Game {
 
     handlePeersChanged() {
         this.determineTimeAuthority();
+        // Update local player name in case own peer info changed
+        this.updatePlayerNameFromPeers();
     }
 
     setTimeOfDay(networkTime) {
@@ -173,7 +177,12 @@ export default class Game {
                 modules: [],
                 gridWidth: vehicleConfig.gridWidth || 12,
                 gridHeight: vehicleConfig.gridHeight || 10,
-                gridTiles: {}, gridObjects: {},
+                gridTiles: { // Add some default tiles for testing
+                    '5,9': 'floor_metal', '6,9': 'floor_metal', '7,9': 'floor_metal',
+                    '5,8': 'floor_metal', '6,8': 'floor_metal', '7,8': 'floor_metal',
+                    '5,1': 'floor_metal', '6,1': 'floor_metal', '7,1': 'floor_metal',
+                },
+                gridObjects: {},
                 doorLocation: vehicleConfig.doorLocation || { x: 6, y: 9 },
                 pilotSeatLocation: vehicleConfig.pilotSeatLocation || { x: 6, y: 1 }
             };
@@ -295,7 +304,7 @@ export default class Game {
         const now = performance.now();
         const rawDt = (now - this.lastFrameTime) / 1000;
         this.lastFrameTime = now;
-        this.deltaTime = Math.min(rawDt, 1 / 30);
+        this.deltaTime = Math.min(rawDt, 1 / 30); // Cap delta time at 30 FPS equivalent
         this.rawDeltaTime = rawDt;
 
         this.performance.update(timestamp, this.rawDeltaTime);
@@ -311,6 +320,7 @@ export default class Game {
     }
 
     update(deltaTime, timestamp) {
+        // Update Time of Day
         if (this.timeAuthority) {
             const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
             const timeIncrement = deltaTime / cycleDuration;
@@ -321,9 +331,9 @@ export default class Game {
                 this.lastTimeSync = timestamp;
             }
         }
-
+        // Calculate Ambient Light based on Time of Day
         const ambientFactor = Math.cos((this.timeOfDay - 0.5) * Math.PI * 2) * 0.5 + 0.5; // 0 at midnight, 1 at noon
-        const ambientIntensity = Math.max(0.1, ambientFactor); // Min ambient
+        const ambientIntensity = Math.max(0.1, ambientFactor); // Min ambient brightness
         const baseAmbient = { r: 50, g: 50, b: 70 }; // Base night color
         const dayAmbient = { r: 200, g: 200, b: 220 }; // Brighter day color
         const currentAmbient = {
@@ -333,23 +343,22 @@ export default class Game {
         };
         this.lightManager.setGlobalAmbientLight(currentAmbient);
 
-        const cameraCenterX = this.player ? this.player.x : 0;
-        const cameraCenterY = this.player ? this.player.y : 0;
+        // Update World Chunks based on camera position
+        const cameraCenterX = this.player ? this.player.x : this.renderer?.camera?.x ?? 0; // Fallback to camera position if no player
+        const cameraCenterY = this.player ? this.player.y : this.renderer?.camera?.y ?? 0;
         this.world?.update(deltaTime, cameraCenterX, cameraCenterY);
 
+        // Update Local Player Logic
         if (this.player && !this.isGuestMode) {
             const vehicle = this.player.currentVehicleId ? this.entities.get(this.player.currentVehicleId) : null;
             const playerState = this.player.playerState;
-
             switch (playerState) {
                 case 'Overworld':
                 case 'Interior':
                     this.player.update(deltaTime, this.input);
                     break;
                 case 'Piloting':
-                    if (vehicle?.update) {
-                        vehicle.update(deltaTime, this.input);
-                    }
+                    // Vehicle movement is handled in the main entity loop below
                     break;
                 case 'Building':
                     this.ui?.baseBuilding?.buildingManager?.update?.(deltaTime);
@@ -357,68 +366,114 @@ export default class Game {
             }
         }
 
-        for (const entity of this.entities.getAll()) {
-            if (this.player && entity.id === this.player.id) continue;
-            if (entity.type === 'vehicle' && this.player && entity.driver === this.player.id && this.player.playerState === 'Piloting') continue;
+        // Update All Entities (including remote players, vehicles)
+        this.entities.update(deltaTime); // EntityManager now handles owned light updates
 
-            entity.update?.(deltaTime, null);
-
-            if (entity.type === 'vehicle' && entity.hasStateChanged?.()) {
-                this.network.updateRoomState({
-                    vehicles: { [entity.id]: entity.getMinimalNetworkState() }
-                });
-                entity.clearStateChanged?.();
-            }
+        // Collision Detection (only in Overworld)
+        if (this.player?.playerState === 'Overworld' || this.entities.getByType('vehicle').some(v => v)) {
+            this.collisions.checkCollisions();
         }
 
+        // --- NEW: Calculate Shadows ---
+        this.shadowManager.calculateShadows();
+        // --- END NEW ---
+
+        // Sync Network State
+        this.syncNetworkState();
+
+        // Update UI
+        this.ui.update();
+    }
+
+    syncNetworkState() {
+        // Sync local player presence if changed
         if (this.player && !this.isGuestMode && this.player.hasStateChanged()) {
             this.network.updatePresence(this.player.getNetworkState());
             this.player.clearStateChanged();
         }
 
-        this.ui.update();
-        if (!this.isGuestMode && this.player?.playerState === 'Overworld') {
-            this.collisions.checkCollisions();
+        // Sync vehicle state if changed (handled by the entity that owns the change, e.g., driver or building manager)
+        // Check all vehicles for changes (could be optimized)
+        for (const entity of this.entities.getByType('vehicle')) {
+            if (entity.hasStateChanged?.()) {
+                // Send full state less often, minimal state more often?
+                // For now, just send minimal state if changed
+                const updateData = entity.getMinimalNetworkState();
+                this.network.updateRoomState({
+                    vehicles: { [entity.id]: updateData }
+                });
+                entity.clearStateChanged?.();
+            }
         }
     }
 
     render() {
         if (!this.renderer) return;
 
-        this.renderer.lastFrameTime = this.lastFrameTime;
+        this.renderer.lastFrameTime = this.lastFrameTime; // Used for EffectRenderer delta
         this.renderer.clear();
 
+        // Determine camera target
+        let cameraTarget = this.player ? this.player : { x: 0, y: 0 }; // Default to player or origin
+        if (this.player?.playerState === 'Piloting') {
+            cameraTarget = this.entities.get(this.player.currentVehicleId) || cameraTarget; // Follow vehicle if piloting
+        } else if (this.isGuestMode) {
+            // Guest mode: Allow camera panning? For now, center on 0,0 or average player position?
+            // Let's center on 0,0 if no players, or average if players exist
+            const players = this.entities.getByType('player');
+            if (players.length > 0) {
+                let avgX = 0, avgY = 0;
+                players.forEach(p => { avgX += p.x; avgY += p.y; });
+                cameraTarget = { x: avgX / players.length, y: avgY / players.length };
+            } else {
+                cameraTarget = { x: 0, y: 0 }; // Default for guest with no players
+            }
+        }
+
+        // Render based on player state
         if (this.player?.playerState === 'Interior') {
             const vehicle = this.entities.get(this.player.currentVehicleId);
             if (vehicle && this.renderer.interiorRenderer) {
                 this.renderer.interiorRenderer.render(vehicle, this.player);
-            } else {
-                const errorMsg = !vehicle ? 'Vehicle Not Found!' : 'Interior Renderer Missing!';
-                this.renderer.ctx.fillStyle = 'red';
-                this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-                this.renderer.ctx.fillStyle = 'white';
-                this.renderer.ctx.font = '20px monospace';
-                this.renderer.ctx.textAlign = 'center';
-                this.renderer.ctx.fillText(`Error: ${errorMsg}`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
-            }
+            } else { this.renderErrorState('Interior Render Error'); }
         } else if (this.player?.playerState === 'Building') {
-            this.renderer.ctx.fillStyle = '#151515';
-            this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
+            // Building UI is mostly DOM, but has its own canvas renderer
+            if (this.renderer.baseBuildingRenderer) { // Check if renderer exists
+                // Need to ensure the renderer is correctly referenced/instantiated if used here
+                // Assuming BaseBuildingUI handles its own rendering calls for now.
+                // We might just need a background color.
+                this.renderer.ctx.fillStyle = '#151515';
+                this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
+            } else { this.renderErrorState('Building Render Error'); }
         } else {
-            const cameraTarget = (this.player?.playerState === 'Piloting')
-                ? this.entities.get(this.player.currentVehicleId)
-                : (this.player ? this.player : { x: 0, y: 0 });
-
+            // Default: Render Overworld / Piloting / Guest View
             this.world ? this.renderer.renderWorld(this.world, cameraTarget) : this.renderFallbackBackground();
 
             const entitiesToRender = (this.player?.playerState === 'Piloting')
-                ? this.entities.getAll().filter(e => e.id !== this.player.id)
+                ? this.entities.getAll().filter(e => e.id !== this.player.id) // Don't render player marker when piloting
                 : this.entities.getAll();
+            // Pass localPlayer ref for highlighting etc.
             this.renderer.renderEntities(entitiesToRender, this.player);
+
+            // --- NEW: Render Shadows ---
+            this.renderer.renderShadows();
+            // --- END NEW ---
+
             this.renderer.renderEffects();
         }
 
+        // Render UI on top (always rendered)
         this.renderer.renderUI(this);
+        // Debug info is rendered via PerformanceMonitor -> UIRenderer.renderDebugInfo
+    }
+
+    renderErrorState(message) {
+        this.renderer.ctx.fillStyle = 'red';
+        this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
+        this.renderer.ctx.fillStyle = 'white';
+        this.renderer.ctx.font = '20px monospace';
+        this.renderer.ctx.textAlign = 'center';
+        this.renderer.ctx.fillText(`Error: ${message}`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
     }
 
     renderFallbackBackground() {
@@ -427,10 +482,12 @@ export default class Game {
     }
 
     pauseSimulation() {
+        // Placeholder -Pausing complex in multiplayer
         this.debug.log("Simulation Paused (Input Disabled)");
     }
 
     resumeSimulation() {
+        // Placeholder
         this.debug.log("Simulation Resumed");
     }
 }

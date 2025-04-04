@@ -4,6 +4,8 @@ import EffectRenderer from './EffectRenderer.js';
 import UIRenderer from './UIRenderer.js';
 import SpriteManager from './SpriteManager.js';
 import InteriorRenderer from './InteriorRenderer.js';
+// Assuming VehicleBuildingRenderer is handled within BaseBuildingUI or Game.render
+// import VehicleBuildingRenderer from './VehicleBuildingRenderer.js';
 
 export default class Renderer {
     // Pass game instance to constructor
@@ -32,6 +34,7 @@ export default class Renderer {
         this.effectRenderer = new EffectRenderer(this, game);
         this.uiRenderer = new UIRenderer(this, game);
         this.interiorRenderer = new InteriorRenderer(this, game);
+        // VehicleBuildingRenderer instance is managed by BaseBuildingUI
 
         // Track last frame time for effects delta calculation
         this.lastFrameTime = performance.now();
@@ -44,8 +47,8 @@ export default class Renderer {
         if (this.uiRenderer && this.uiRenderer.onResize) {
             this.uiRenderer.onResize();
         }
-        // We might need to notify interiorRenderer too if its layout depends on canvas size
-        // For now, it calculates dimensions within its render method.
+        // VehicleBuildingRenderer needs resize notification if its canvas isn't fixed size
+        // Assuming its canvas size is determined internally for now
     }
 
     setupResizeListener() {
@@ -56,9 +59,6 @@ export default class Renderer {
 
     clear() {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
-        // Optional: set a default background color here if needed before specific renderers draw
-        // this.ctx.fillStyle = '#000';
-        // this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
     // Update camera position to follow a target (entity or fixed point)
@@ -124,9 +124,50 @@ export default class Renderer {
         this.entityRenderer.render(entities, localPlayer);
     }
 
+    renderShadows() {
+        if (!this.game.shadowManager) return;
+
+        const shadowPolygons = this.game.shadowManager.getShadowPolygons();
+        if (shadowPolygons.length === 0) return;
+
+        this.ctx.save();
+        // Simple rendering: draw semi-transparent black polygons
+        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Shadow color and opacity
+
+        for (const polygon of shadowPolygons) {
+            if (!polygon || polygon.length < 3) continue; // Need at least 3 vertices
+
+            const screenPolygon = polygon.map(p => this.worldToScreen(p.x, p.y));
+
+            this.ctx.beginPath();
+            this.ctx.moveTo(screenPolygon[0].x, screenPolygon[0].y);
+            for (let i = 1; i < screenPolygon.length; i++) {
+                this.ctx.lineTo(screenPolygon[i].x, screenPolygon[i].y);
+            }
+            this.ctx.closePath();
+            this.ctx.fill();
+
+            // Optional: Debug rendering for shadow polygons
+            if (this.game.shadowManager.debug) {
+                 this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)'; // Magenta border for debug
+                 this.ctx.lineWidth = 1;
+                 this.ctx.stroke();
+            }
+        }
+        this.ctx.restore();
+
+        // --- Future: Implement shadow mask rendering ---
+        // 1. Create offscreen canvas (shadowMaskCanvas)
+        // 2. Clear shadowMaskCanvas with transparent or fully lit color
+        // 3. Draw shadow polygons onto shadowMaskCanvas with solid black/grey
+        // 4. Draw shadowMaskCanvas onto the main canvas using appropriate composite operation
+        //    (e.g., 'multiply' or 'destination-in' depending on approach)
+    }
+
     renderEffects() {
         const currentTime = performance.now();
-        const delta = currentTime - this.lastFrameTime;
+        // Calculate delta based on the game's rawDeltaTime for accuracy
+        const delta = this.game.rawDeltaTime * 1000; // Convert seconds to ms
 
         // Only update/render if time has passed
         if (delta <= 0) return;
