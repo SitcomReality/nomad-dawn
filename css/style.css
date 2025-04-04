@@ -287,23 +287,27 @@ body {
     overflow: hidden; /* Prevent internal scrollbars for now */
 }
 
-.inventory-header, .building-header {
+.building-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 8px 15px; /* Reduced padding */
+    padding: 8px 15px; 
     border-bottom: 1px solid var(--ui-border);
-    flex-shrink: 0; /* Prevent header from shrinking */
+    flex-shrink: 0; 
 }
 
 .building-header h2 {
     margin: 0;
-    font-size: 1.3rem; /* Slightly smaller title */
+    font-size: 1.3rem; 
+    flex-shrink: 0; 
+    margin-right: 15px; 
 }
 
 .tool-buttons {
     display: flex;
     gap: 5px;
+    flex-grow: 1; 
+    justify-content: center; 
 }
 
 .tool-button {
@@ -319,7 +323,7 @@ body {
     transition: background-color 0.2s ease, color 0.2s ease;
 }
 .tool-button:hover {
-    background-color: rgba(168, 218, 220, 0.2); /* ui-highlight with alpha */
+    background-color: rgba(168, 218, 220, 0.2); 
     color: var(--ui-text);
 }
 .tool-button.active {
@@ -335,7 +339,7 @@ body {
     font-size: 1.5rem;
     cursor: pointer;
     transition: color 0.2s ease;
-    line-height: 1; /* Ensure consistent alignment */
+    line-height: 1; 
 }
 
 .close-button:hover {
@@ -344,25 +348,25 @@ body {
 
 .building-content-grid {
     flex-grow: 1;
-    display: flex; /* Use flexbox for side-by-side layout */
+    display: flex; 
     padding: 15px;
     gap: 15px;
-    overflow: hidden; /* Prevent scrollbars within this container */
+    overflow: hidden; 
 }
 
 #tool-info-area {
-    flex: 0 0 200px; /* Fixed width for tool info/selection panel */
+    flex: 0 0 200px; 
     background-color: rgba(0, 0, 0, 0.2);
     padding: 10px;
     border-radius: 4px;
-    overflow-y: auto; /* Allow scrolling if content exceeds height */
-    display: flex; /* Use flexbox for vertical layout */
+    overflow-y: auto; 
+    display: flex; 
     flex-direction: column;
-    gap: 10px; /* Space between sections */
+    gap: 10px; 
 }
 #tool-info-area h4 {
     font-size: 1.1rem;
-    margin: 0 0 5px 0; /* Adjust margin */
+    margin: 0 0 5px 0; 
     border-bottom: 1px solid var(--ui-border);
     padding-bottom: 5px;
 }
@@ -373,30 +377,56 @@ body {
 }
 
 #object-selection-container {
-    /* Style for the container itself if needed */
+    
 }
 
-#object-buttons {
-    display: grid; /* Use grid for better alignment */
-    grid-template-columns: 1fr; /* Single column layout */
+#object-buttons.object-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr; 
     gap: 5px;
 }
 
 .object-select-button {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between; 
     padding: 6px 8px;
     background-color: rgba(0, 0, 0, 0.3);
     border: 1px solid var(--ui-border);
     border-radius: 4px;
     color: var(--ui-text);
     cursor: pointer;
-    text-align: left;
     transition: background-color 0.2s, border-color 0.2s;
     font-family: var(--font-main);
     font-size: 0.9rem;
-    width: 100%; /* Take full width of container */
+    width: 100%; 
+}
+
+.object-select-button .object-icon {
+    flex-shrink: 0; 
+    margin-right: 8px;
+}
+
+.object-select-button .object-name {
+    flex-grow: 1; 
+    margin-right: 8px; 
+    white-space: nowrap; 
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.object-cost {
+    font-size: 0.8em;
+    margin-left: auto; 
+    display: flex;
+    gap: 4px; 
+    align-items: center;
+    flex-shrink: 0; 
+}
+.object-cost span span { 
+    display: inline-block;
+    min-width: 20px; 
+    text-align: right;
 }
 
 .object-select-button:hover:not(:disabled) {
@@ -425,11 +455,11 @@ body {
     text-align: center;
 }
 .object-name {
-    flex-grow: 1; /* Allow name to take available space */
+    flex-grow: 1; 
 }
 .object-cost {
     font-size: 0.8em;
-    margin-left: auto; /* Push cost to the right */
+    margin-left: auto; 
     display: flex;
     gap: 5px;
 }
@@ -438,32 +468,32 @@ body {
 .cost-free { color: var(--ui-text-dim); font-style: italic;}
 
 #vehicle-building-canvas-container {
-    flex-grow: 1; /* Allow canvas container to take remaining space */
-    display: flex; /* Center canvas within the container */
+    flex-grow: 1; 
+    display: flex; 
     justify-content: center;
     align-items: center;
-    background-color: #111; /* Dark background for the canvas area */
+    background-color: #111; 
     border: 1px solid var(--ui-border);
     border-radius: 4px;
-    overflow: hidden; /* Important to contain the canvas */
-    position: relative; /* For potential overlays */
+    overflow: hidden; 
+    position: relative; 
 }
 
 #vehicle-building-canvas {
-    /* Renderer will set width/height, this ensures it doesn't overflow */
+    
     max-width: 100%;
     max-height: 100%;
-    display: block; /* Remove extra space below canvas */
-    background-color: #2a2a2a; /* Match renderer bg */
+    display: block; 
+    background-color: #2a2a2a; 
 }
 
 .building-footer {
-    padding: 8px 15px; /* Reduced padding */
+    padding: 8px 15px; 
     border-top: 1px solid var(--ui-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
-    flex-shrink: 0; /* Prevent footer from shrinking */
+    flex-shrink: 0; 
 }
 
 .footer-info {
@@ -508,7 +538,7 @@ body {
 
 .action-buttons button:hover:not(:disabled) {
     background-color: var(--ui-accent);
-    color: var(--color-dark); /* Keep dark text on accent hover */
+    color: var(--color-dark); 
 }
 
 .action-buttons button:disabled {
@@ -525,8 +555,7 @@ body {
 .module-item,
 .module-icon,
 .installed-status {
-    /* These selectors might be removed or repurposed later */
-    display: none; /* Hide old elements for now */
+    display: none; 
 }
 
 /* Inventory Items */
@@ -708,7 +737,7 @@ body {
 
 #debug-overlay {
     position: absolute;
-    top: 5rem; /* Adjust position to avoid overlap */
+    top: 5rem; 
     left: 1rem;
     background-color: rgba(0, 0, 0, 0.7);
     padding: 10px;
@@ -718,6 +747,6 @@ body {
     max-width: 300px;
     max-height: 200px;
     overflow: auto;
-    pointer-events: auto; /* Enable interaction if needed */
-    z-index: 50; /* Below main UI panels */
+    pointer-events: auto; 
+    z-index: 50; 
 }

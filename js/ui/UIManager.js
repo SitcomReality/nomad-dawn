@@ -2,6 +2,8 @@ import InventoryUI from './InventoryUI.js';
 import BaseBuildingUI from './BaseBuildingUI.js';
 import HUD from './HUD.js';
 import MenuUI from './MenuUI.js';
+// Import BuildingToolPanel if needed for direct access (unlikely)
+// import BuildingToolPanel from './BuildingToolPanel.js';
 
 export default class UIManager {
     constructor(game) {
@@ -12,7 +14,7 @@ export default class UIManager {
         // Initialize UI components
         this.hud = new HUD(game, 'hud');
         this.inventory = new InventoryUI(game);
-        this.baseBuilding = new BaseBuildingUI(game);
+        this.baseBuilding = new BaseBuildingUI(game); // This now internally manages its sub-panels
         this.menu = new MenuUI(game);
 
         // Debug overlay reference (controlled by DebugUtils now)
@@ -20,7 +22,7 @@ export default class UIManager {
 
         // Controls info panel reference
         this.controlsInfo = document.getElementById('controls-info-bottom-left');
-        
+
         // HUD Buttons Cache
         this.toggleControlsBtn = document.getElementById('toggle-controls');
         this.toggleDebugBtn = document.getElementById('toggle-debug');
@@ -41,7 +43,7 @@ export default class UIManager {
             },
 
             show: (message, type = 'info', duration = 3000) => {
-                if (!this.notifications.container) return; 
+                if (!this.notifications.container) return;
 
                 const notification = document.createElement('div');
                 notification.className = `notification notification-${type}`;
@@ -56,12 +58,12 @@ export default class UIManager {
                     notification.classList.add('fade-out');
                     setTimeout(() => {
                         this.notifications.remove(notification);
-                    }, 300); 
+                    }, 300);
                 }, duration);
             },
 
             remove: (notification) => {
-                if (!this.notifications.container) return; 
+                if (!this.notifications.container) return;
 
                 const index = this.notifications.queue.indexOf(notification);
                 if (index !== -1) {
@@ -74,7 +76,7 @@ export default class UIManager {
             },
 
             update: () => {
-                if (!this.notifications.container) return; 
+                if (!this.notifications.container) return;
 
                 const currentNotifications = Array.from(this.notifications.container.children);
                 currentNotifications.forEach(child => child.remove());
@@ -93,7 +95,7 @@ export default class UIManager {
 
         // Set up key bindings and event listeners
         this.setupEventListeners();
-        
+
         // Initial UI state based on potential guest mode
         this.setGuestMode(this.game.isGuestMode);
     }
@@ -105,14 +107,14 @@ export default class UIManager {
         // Example: Hide inventory and build buttons if they exist as direct HUD elements
         // If they are toggled by keys (I, B), the key handler needs the check.
         // If they are part of the main menu, the menu items could be disabled.
-        
+
         // For now, we rely on keydown listener checks, but could hide buttons too:
         // const inventoryButton = document.getElementById('hud-inventory-button'); // Example ID
         // if (inventoryButton) inventoryButton.style.display = isGuest ? 'none' : 'block';
-        
+
          const buildButton = document.getElementById('hud-build-button'); // Example ID
          if (buildButton) buildButton.style.display = isGuest ? 'none' : 'block';
-         
+
          // Ensure Inventory/Build UIs are hidden if switching to guest mode while open
          if (isGuest) {
             if(this.inventory.isVisible) this.inventory.hide();
@@ -151,7 +153,7 @@ export default class UIManager {
                             break;
                         case 'KeyB':
                             e.preventDefault();
-                            this.baseBuilding.toggle(); 
+                            this.baseBuilding.toggle();
                             break;
                     }
                 }
@@ -174,7 +176,7 @@ export default class UIManager {
 
         if (this.toggleDebugBtn && this.debugOverlay) {
             this.toggleDebugBtn.addEventListener('click', () => {
-                const enabled = this.game.debug.toggle(); 
+                const enabled = this.game.debug.toggle();
                 this.toggleDebugBtn.classList.toggle('active', enabled);
             });
             // Initial state sync
@@ -208,7 +210,7 @@ export default class UIManager {
                 this.inventory.update();
             }
             if (this.baseBuilding.isVisible) {
-                this.baseBuilding.update();
+                this.baseBuilding.update(); // BaseBuildingUI.update now calls toolPanel.update()
             }
             // Menu usually doesn't need per-frame updates
         }
