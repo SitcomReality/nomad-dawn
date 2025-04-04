@@ -51,7 +51,14 @@ export default class NetworkManager {
                 this.worldSeedConfirmed = false; // Not confirmed until echoed back
                 this.game.debug.log(`No world seed found. Proposing seed: ${this.worldSeed}`);
                 // Send update immediately, hoping to establish the seed
-                this.updateRoomState({ worldSeed: this.worldSeed });
+                // --- NEW: Also propose initial timeOfDay if authority ---
+                 const initialState = { worldSeed: this.worldSeed };
+                 if (this.game.timeAuthority && initialRoomState.timeOfDay === undefined) {
+                     initialState.timeOfDay = this.game.timeOfDay;
+                     this.game.lastTimeSync = performance.now(); // Set initial sync time
+                 }
+                 this.updateRoomState(initialState);
+                 // --- END NEW ---
             } else {
                  // Is a guest and no seed exists yet. Wait for subscription callback.
                  this.game.debug.log("Guest mode: Waiting for world seed from room state...");
@@ -116,8 +123,21 @@ export default class NetworkManager {
              }
              // --- END NEW ---
 
-            if (this.game.world) {
+            if (this.game.world?.syncFromNetworkState) { // Check if method exists
                 this.game.world.syncFromNetworkState(roomState);
+            } else if (this.game.world) {
+                 // Fallback if syncFromNetworkState isn't on World (it should be)
+                 if (roomState.resources) {
+                     this.game.world.resourceOverrides = roomState.resources || {};
+                 }
+                 if (roomState.worldObjects) {
+                     this.game.world.updateWorldObjectsFromNetwork(roomState.worldObjects);
+                 }
+                 // --- NEW: Apply time sync fallback here too ---
+                 if (roomState.timeOfDay !== undefined && typeof this.game.setTimeOfDay === 'function') {
+                     this.game.setTimeOfDay(roomState.timeOfDay);
+                 }
+                 // --- END NEW ---
             }
              // Sync vehicle states if they are in roomState
              if (roomState.vehicles) {
@@ -362,11 +382,17 @@ export default class NetworkManager {
                           this.game.entities.syncFromNetworkPresence(this.room.presence, this.clientId);
                      }
                  }
+                 // --- NEW: Re-check time authority when peers change ---
+                 this.game.handlePeersChanged?.();
+                 // --- END NEW ---
                  break;
 
              case 'disconnected':
                  this.game.debug.log(`Player disconnected: ${eventData.username || 'Unknown'} (${eventData.clientId})`);
                  // Entity removal handled by syncFromNetworkPresence
+                 // --- NEW: Re-check time authority when peers change ---
+                 this.game.handlePeersChanged?.();
+                 // --- END NEW ---
                  break;
 
              case 'explosion':

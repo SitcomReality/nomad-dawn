@@ -1,8 +1,9 @@
+import SeedableRNG from '../utils/SeedableRNG.js'; // Import the RNG
+
 export default class FeatureGenerator {
     constructor(world) {
         this.world = world;
-        this.rng = world.rng;
-        
+
         this.featureDefinitions = {
             'tree': {
                 size: { min: 15, max: 25 },
@@ -55,33 +56,49 @@ export default class FeatureGenerator {
              }
         };
     }
-    
-    generateFeaturesForChunk(chunk) {
+
+    /**
+     * Generates features for a given chunk using a deterministic RNG based on chunk coordinates and world seed.
+     * @param {Object} chunk - The chunk object.
+     * @param {number} worldSeed - The world's base seed.
+     */
+    generateFeaturesForChunk(chunk, worldSeed) { // Accept worldSeed
         if (!chunk.biome) return [];
-        
-        // Determine feature count based on biome
-        const baseFeatureCount = 5;
+
+        // --- NEW: Create chunk-specific RNG ---
+        const chunkBaseX = Math.floor(chunk.x / this.world.chunkSize);
+        const chunkBaseY = Math.floor(chunk.y / this.world.chunkSize);
+        const chunkSeed = SeedableRNG.combineSeeds(worldSeed, chunkBaseX, chunkBaseY, 1); // Added 1 for feature type seed offset
+        const rng = new SeedableRNG(chunkSeed);
+        // --- END NEW ---
+
+        // Determine feature count based on biome and chunk RNG
+        const baseFeatureCount = 5; // Example base count
         const featureDensity = chunk.biome.featureDensity || 1;
-        const featureCount = Math.floor(baseFeatureCount * featureDensity * (0.5 + this.rng()));
-        
+        // Use chunk RNG for count variation
+        const featureCount = Math.floor(baseFeatureCount * featureDensity * (0.5 + rng.next()));
+
+        // Ensure chunk.features is initialized
+        chunk.features = chunk.features || [];
+
         // Generate features
         for (let i = 0; i < featureCount; i++) {
-            // Random position within chunk
-            const offsetX = (this.rng() - 0.5) * chunk.size;
-            const offsetY = (this.rng() - 0.5) * chunk.size;
+            // Use chunk RNG for position
+            const offsetX = (rng.next() - 0.5) * chunk.size;
+            const offsetY = (rng.next() - 0.5) * chunk.size;
             const featureX = chunk.x + offsetX;
             const featureY = chunk.y + offsetY;
-            
-            // Determine feature type based on biome
-            const featureType = this.getFeatureType(chunk.biome);
+
+            // Determine feature type based on biome (using chunk RNG)
+            const featureType = this.getFeatureType(chunk.biome, rng); // Pass RNG
             const featureDef = this.featureDefinitions[featureType];
-            
+
             if (!featureDef) continue;
-            
-            // Create feature
+
+            // Create feature (using chunk RNG for size variation)
             const sizeRange = featureDef.size;
-            const size = sizeRange.min + this.rng() * (sizeRange.max - sizeRange.min);
-            
+            const size = sizeRange.min + rng.next() * (sizeRange.max - sizeRange.min);
+
             const feature = {
                 id: `feature-${chunk.id}-${i}`,
                 type: featureType,
@@ -94,20 +111,26 @@ export default class FeatureGenerator {
                 spriteCellId: featureDef.spriteCellId, // Pass sprite info
                 name: featureType.charAt(0).toUpperCase() + featureType.slice(1) // Add a name
             };
-            
+
             // Add to chunk features
             chunk.features.push(feature);
         }
-        
+
         return chunk.features;
     }
-    
-    getFeatureType(biome) {
+
+    /**
+     * Gets a feature type suitable for the biome using the provided RNG.
+     * @param {Object} biome - The biome object.
+     * @param {SeedableRNG} rng - The seeded RNG instance to use.
+     * @returns {string} The selected feature type ID.
+     */
+    getFeatureType(biome, rng) { // Accept RNG
         if (!biome.features || biome.features.length === 0) {
             return 'rock'; // Default fallback
         }
-        
-        // Pick random feature from biome's feature list
-        return biome.features[Math.floor(this.rng() * biome.features.length)];
+
+        // Pick random feature from biome's feature list using the provided RNG
+        return biome.features[rng.nextInt(0, biome.features.length)];
     }
 }

@@ -1,3 +1,5 @@
+import SeedableRNG from '../utils/SeedableRNG.js';
+
 export default class ChunkManager {
     constructor(world) {
         this.world = world;
@@ -34,10 +36,10 @@ export default class ChunkManager {
     
     async generateChunk(x, y) {
         const chunkId = this.getChunkId(x, y);
-        
+
         // Skip if already generated
         if (this.chunks[chunkId]) return this.chunks[chunkId];
-        
+
         // Calculate chunk center
         const chunkCenterX = Math.floor(x / this.chunkSize) * this.chunkSize + this.chunkSize / 2;
         const chunkCenterY = Math.floor(y / this.chunkSize) * this.chunkSize + this.chunkSize / 2;
@@ -45,10 +47,10 @@ export default class ChunkManager {
         // Generate terrain height/moisture at chunk center for biome determination
         const height = this.world.getNoise(chunkCenterX * this.world.terrainScale, chunkCenterY * this.world.terrainScale, 0);
         const moisture = this.world.getNoise(chunkCenterX * this.world.terrainScale, chunkCenterY * this.world.terrainScale, 1000);
-        
+
         // Determine biome based on height and moisture
         const biome = this.world.getBiome(height, moisture);
-        
+
         // Create chunk object
         const chunk = {
             id: chunkId,
@@ -59,16 +61,16 @@ export default class ChunkManager {
             features: [],
             resources: []
         };
-        
-        // Generate chunk features based on biome
-        this.world.featureGenerator.generateFeaturesForChunk(chunk);
-        
-        // Generate chunk resources based on biome
-        this.world.resourceGenerator.generateResourcesForChunk(chunk);
-        
+
+        // Generate chunk features based on biome (passing world seed)
+        this.world.featureGenerator.generateFeaturesForChunk(chunk, this.world.seed);
+
+        // Generate chunk resources based on biome (passing world seed)
+        this.world.resourceGenerator.generateResourcesForChunk(chunk, this.world.seed);
+
         // Store chunk in world
         this.chunks[chunkId] = chunk;
-        
+
         return chunk;
     }
     

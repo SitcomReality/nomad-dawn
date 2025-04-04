@@ -16,6 +16,9 @@ import PerformanceMonitor from './PerformanceMonitor.js'; // NEW
 window.Player = Player;
 // Make Vehicle class accessible if needed by NetworkManager sync (consider better dependency management later)
 window.Vehicle = Vehicle;
+// Make Perlin globally available (consider passing via dependency injection later)
+import Perlin from 'perlin';
+window.perlin = Perlin;
 
 export default class Game {
     constructor(options) {
@@ -28,7 +31,12 @@ export default class Game {
         this.deltaTime = 0; // Capped delta time for updates
         this.rawDeltaTime = 0; // Uncapped delta time for FPS calculation
         this.isGuestMode = false; // Flag for guest observer mode
-        this.timeOfDay = 0.25; // Start at dawn (0 = midnight, 0.5 = noon, 1 = next midnight)
+        // --- MODIFIED: Time of day is now primarily driven by network state ---
+        this.timeOfDay = 0.25; // Local default start time
+        this.timeAuthority = false; // Is this client responsible for updating time?
+        this.lastTimeSync = 0;
+        this.timeSyncInterval = 15000; // Update time every 15 seconds if authority
+        // --- END MODIFIED ---
 
         // Initialize core systems
         this.resources = new ResourceManager();
@@ -79,6 +87,9 @@ export default class Game {
                  if (this.network.worldSeedConfirmed) {
                     this.worldSeedResolve(this.network.worldSeed);
                  }
+                 // --- NEW: Guests never have time authority ---
+                 this.timeAuthority = false;
+                 // --- END NEW ---
             } else {
                  this.isGuestMode = false;
                  this.player = new Player(this.network.clientId, this);
@@ -89,6 +100,9 @@ export default class Game {
                  if (this.network.worldSeed !== null) {
                     this.worldSeedResolve(this.network.worldSeed);
                  }
+                 // --- NEW: Determine time authority (e.g., lowest client ID) ---
+                 this.determineTimeAuthority();
+                 // --- END NEW ---
             }
 
             this.addInitialTestVehicle();
@@ -104,7 +118,43 @@ export default class Game {
         }
     }
 
-    // --- NEW: Method called by NetworkManager when seed is confirmed ---
+    // --- NEW: Method to determine time authority ---
+    determineTimeAuthority() {
+         if (this.isGuestMode || !this.network?.clientId || !this.network?.room?.peers) {
+             this.timeAuthority = false;
+             return;
+         }
+         // Simple rule: client with the lexicographically smallest ID is the authority
+         const clientIds = Object.keys(this.network.room.peers).sort();
+         this.timeAuthority = clientIds.length > 0 && this.network.clientId === clientIds[0];
+         this.debug.log(`Time authority check: ${this.timeAuthority ? 'Yes' : 'No'} (My ID: ${this.network.clientId}, Authority: ${clientIds[0]})`);
+
+          // If becoming authority, immediately propose time if needed
+          if (this.timeAuthority && this.network.room.roomState?.timeOfDay === undefined) {
+              this.debug.log("Assuming time authority and proposing initial timeOfDay.");
+              this.network.updateRoomState({ timeOfDay: this.timeOfDay });
+              this.lastTimeSync = performance.now();
+          }
+    }
+    // --- END NEW ---
+
+    // --- NEW: Method called by NetworkManager when peers change ---
+    handlePeersChanged() {
+        this.determineTimeAuthority();
+    }
+    // --- END NEW ---
+
+    // --- NEW: Method to set time of day (called by NetworkManager) ---
+    setTimeOfDay(networkTime) {
+         // Prevent local time simulation from overriding network time
+         // Apply a small interpolation/smoothing? For now, direct set.
+         if (Math.abs(this.timeOfDay - networkTime) > 0.001) { // Check difference before updating
+              this.timeOfDay = networkTime % 1; // Ensure it wraps
+         }
+    }
+    // --- END NEW ---
+
+    // --- NEW: Seed Handling ---
     confirmWorldSeed(seed) {
          if (this.worldSeed === null && this.worldSeedResolve) {
             this.worldSeed = seed;
@@ -275,7 +325,7 @@ export default class Game {
         this.interactions.handleInput(now); // Call interaction manager
 
         // Update game logic
-        this.update(this.deltaTime);
+        this.update(this.deltaTime, timestamp); // Pass timestamp
 
         // Render the scene
         this.render();
@@ -284,11 +334,24 @@ export default class Game {
         requestAnimationFrame(this.gameLoop);
     }
 
-    update(deltaTime) {
+    update(deltaTime, timestamp) { 
         // --- Update Time of Day ---
-        const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
-        const timeIncrement = deltaTime / cycleDuration;
-        this.timeOfDay = (this.timeOfDay + timeIncrement) % 1;
+        if (this.timeAuthority) {
+            // Increment time locally if authority
+            const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
+            const timeIncrement = deltaTime / cycleDuration;
+            this.timeOfDay = (this.timeOfDay + timeIncrement) % 1;
+
+            // Sync time periodically if authority
+            if (timestamp - this.lastTimeSync > this.timeSyncInterval) {
+                this.network.updateRoomState({ timeOfDay: this.timeOfDay });
+                this.lastTimeSync = timestamp;
+                // this.debug.log(`Syncing time: ${this.timeOfDay.toFixed(3)}`); // Optional debug
+            }
+        } else {
+            // Non-authority clients receive time via network in world.syncFromNetworkState
+            // We might still want a *visual* interpolation here if network updates are infrequent
+        }
 
         // --- Player & Vehicle Update (Driven) ---
         if (this.player && !this.isGuestMode) {
@@ -348,7 +411,7 @@ export default class Game {
         if (!this.renderer) return;
 
         this.renderer.lastFrameTime = this.lastFrameTime;
-        this.renderer.setTimeOfDay(this.timeOfDay);
+        this.renderer.setTimeOfDay(this.timeOfDay); // Ensure renderer gets the potentially updated time
         this.renderer.clear();
 
         if (this.player?.playerState === 'Interior') {
@@ -385,7 +448,6 @@ export default class Game {
 
         this.renderer.renderUI(this);
         // Debug info rendering is now handled by PerformanceMonitor calling renderer.renderDebugInfo
-
     }
 
     renderFallbackBackground() {

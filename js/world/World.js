@@ -26,10 +26,6 @@ export default class World {
         // Debug flag
         this.debug = options.debug || false;
 
-        // Create RNG (potentially unused now if generators use per-chunk RNGs)
-        // Keep it for now for potential other uses like getRandomSpawnPoint
-        this.rng = this.createRNG(this.seed);
-
         // Initialize managers
         this.chunkManager = new ChunkManager(this);
         this.resourceGenerator = new ResourceGenerator(this);
@@ -46,15 +42,6 @@ export default class World {
         await this.generateSpawnArea();
 
         return true;
-    }
-
-    createRNG(seed) {
-        // Simple deterministic RNG
-        let s = seed;
-        return function() {
-            s = (s * 9301 + 49297) % 233280;
-            return s / 233280;
-        };
     }
 
     async generateSpawnArea() {
@@ -114,11 +101,18 @@ export default class World {
         // Update world state from network
         if (roomState.resources) {
             this.resourceOverrides = roomState.resources || {};
+            // TODO: Apply these overrides to the generated resources in chunks
         }
 
         if (roomState.worldObjects) {
             this.updateWorldObjectsFromNetwork(roomState.worldObjects);
         }
+
+        // --- NEW: Sync time of day ---
+        if (roomState.timeOfDay !== undefined && typeof window.game?.setTimeOfDay === 'function') {
+            window.game.setTimeOfDay(roomState.timeOfDay);
+        }
+        // --- END NEW ---
     }
 
     findResourceById(resourceId) {

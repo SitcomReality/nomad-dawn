@@ -1,7 +1,9 @@
+import SeedableRNG from '../utils/SeedableRNG.js';
+
 export default class ResourceGenerator {
     constructor(world) {
         this.world = world;
-        this.rng = world.rng;
+
         this.resourceDefinitions = {
             'metal': {
                 name: 'Metal',
@@ -80,25 +82,52 @@ export default class ResourceGenerator {
         };
     }
 
-    generateResourcesForChunk(chunk) {
-        this.generateCommonResources(chunk);
-        this.generateRareResources(chunk);
+    /**
+     * Generates resources for a chunk using deterministic RNG.
+     * @param {Object} chunk - The chunk object.
+     * @param {number} worldSeed - The world's base seed.
+     * @returns {Array<Object>} The generated resources array for the chunk.
+     */
+    generateResourcesForChunk(chunk, worldSeed) {
+        // --- NEW: Create chunk-specific RNG ---
+        const chunkBaseX = Math.floor(chunk.x / this.world.chunkSize);
+        const chunkBaseY = Math.floor(chunk.y / this.world.chunkSize);
+        // Use different offset for resource RNG vs feature RNG
+        const commonSeed = SeedableRNG.combineSeeds(worldSeed, chunkBaseX, chunkBaseY, 2);
+        const rareSeed = SeedableRNG.combineSeeds(worldSeed, chunkBaseX, chunkBaseY, 3);
+        const commonRng = new SeedableRNG(commonSeed);
+        const rareRng = new SeedableRNG(rareSeed);
+        // --- END NEW ---
+
+        // Ensure chunk.resources is initialized
+        chunk.resources = chunk.resources || [];
+
+        this.generateCommonResources(chunk, commonRng); 
+        this.generateRareResources(chunk, rareRng);     
+
         return chunk.resources;
     }
 
-    generateCommonResources(chunk) {
+    /**
+     * Generates common resources for the chunk using the provided RNG.
+     * @param {Object} chunk - The chunk object.
+     * @param {SeedableRNG} rng - The seeded RNG instance to use.
+     */
+    generateCommonResources(chunk, rng) { 
         if (!chunk.biome || !chunk.biome.resources) return;
 
         chunk.biome.resources.forEach(resourceType => {
             const resourceDef = this.resourceDefinitions[resourceType];
             if (!resourceDef) return;
 
+            // Use RNG for density calculation
             const baseCount = Math.ceil(this.world.resourceDensity * chunk.size / 100);
-            const resourceCount = Math.floor(baseCount * resourceDef.density * (0.7 + this.rng() * 0.6));
+            const resourceCount = Math.floor(baseCount * resourceDef.density * (0.7 + rng.next() * 0.6));
 
             for (let i = 0; i < resourceCount; i++) {
-                const offsetX = (this.rng() - 0.5) * chunk.size;
-                const offsetY = (this.rng() - 0.5) * chunk.size;
+                // Use RNG for position and variation
+                const offsetX = (rng.next() - 0.5) * chunk.size;
+                const offsetY = (rng.next() - 0.5) * chunk.size;
                 const resourceX = chunk.x + offsetX;
                 const resourceY = chunk.y + offsetY;
 
@@ -109,11 +138,11 @@ export default class ResourceGenerator {
                     name: resourceDef.name,
                     x: resourceX,
                     y: resourceY,
-                    size: resourceDef.size + this.rng() * 5 - 2.5,
-                    amount: resourceDef.baseAmount + Math.floor(this.rng() * 30 - 15),
+                    size: resourceDef.size + rng.next() * 5 - 2.5, 
+                    amount: resourceDef.baseAmount + Math.floor(rng.next() * 30 - 15), 
                     color: resourceDef.color,
                     collides: true,
-                    spriteCellId: resourceDef.spriteCellId 
+                    spriteCellId: resourceDef.spriteCellId
                 };
 
                 chunk.resources.push(resource);
@@ -121,13 +150,20 @@ export default class ResourceGenerator {
         });
     }
 
-    generateRareResources(chunk) {
+    /**
+     * Generates rare resources for the chunk using the provided RNG.
+     * @param {Object} chunk - The chunk object.
+     * @param {SeedableRNG} rng - The seeded RNG instance to use.
+     */
+    generateRareResources(chunk, rng) { 
         if (!chunk.biome || !chunk.biome.rareResources) return;
 
-        if (this.rng() > 0.08) return;
+        // Use RNG to decide if rare resources spawn
+        if (rng.next() > 0.08) return; 
 
         const biomeRareResources = chunk.biome.rareResources;
-        const rareType = biomeRareResources[Math.floor(this.rng() * biomeRareResources.length)];
+        // Use RNG to pick which rare resource
+        const rareType = biomeRareResources[rng.nextInt(0, biomeRareResources.length)];
         const resourceDef = this.resourceDefinitions[rareType];
 
         if (!resourceDef || !resourceDef.isRare) return;
@@ -135,14 +171,16 @@ export default class ResourceGenerator {
         const clusterSize = resourceDef.clusterSize || 3;
         const clusterRadius = chunk.size * 0.3;
 
-        const clusterCenterOffsetX = (this.rng() - 0.5) * (chunk.size - clusterRadius * 2);
-        const clusterCenterOffsetY = (this.rng() - 0.5) * (chunk.size - clusterRadius * 2);
+        // Use RNG for cluster center position
+        const clusterCenterOffsetX = (rng.next() - 0.5) * (chunk.size - clusterRadius * 2);
+        const clusterCenterOffsetY = (rng.next() - 0.5) * (chunk.size - clusterRadius * 2);
         const clusterCenterX = chunk.x + clusterCenterOffsetX;
         const clusterCenterY = chunk.y + clusterCenterOffsetY;
 
         for (let i = 0; i < clusterSize; i++) {
-            const angle = this.rng() * Math.PI * 2;
-            const distance = this.rng() * clusterRadius;
+            // Use RNG for position within cluster
+            const angle = rng.next() * Math.PI * 2;
+            const distance = rng.next() * clusterRadius;
             const resourceX = clusterCenterX + Math.cos(angle) * distance;
             const resourceY = clusterCenterY + Math.sin(angle) * distance;
 
@@ -153,12 +191,12 @@ export default class ResourceGenerator {
                 name: resourceDef.name,
                 x: resourceX,
                 y: resourceY,
-                size: resourceDef.size + this.rng() * 4 - 2,
-                amount: resourceDef.baseAmount + Math.floor(this.rng() * 10),
+                size: resourceDef.size + rng.next() * 4 - 2, 
+                amount: resourceDef.baseAmount + Math.floor(rng.next() * 10), 
                 color: resourceDef.color,
                 collides: true,
                 rare: true,
-                spriteCellId: resourceDef.spriteCellId 
+                spriteCellId: resourceDef.spriteCellId
             };
 
             chunk.resources.push(resource);
