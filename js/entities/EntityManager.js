@@ -2,52 +2,54 @@ export default class EntityManager {
     constructor() {
         this.entities = {};
         this.playerEntities = {}; // Maps clientId to player entity
+        this.lightSources = {}; // NEW: Track light sources separately
     }
 
     add(entity) {
         if (!entity || !entity.id) {
-             // Use game debug if available, otherwise console
              const logger = window.game?.debug || console;
              logger.error("[EntityManager] Attempted to add invalid entity:", entity);
              return null;
         }
         if (this.entities[entity.id]) {
-            // Use game debug if available, otherwise console
             const logger = window.game?.debug || console;
-             // This is common during sync, make it a log instead of warn
              logger.log(`[EntityManager] Entity with ID ${entity.id} already exists. Overwriting.`);
         }
+        // Use a single collection for core entity management
         this.entities[entity.id] = entity;
 
-        // Log adding vehicles specifically
-        if (entity.type === 'vehicle') {
-             // Use game debug if available, otherwise console
-             const logger = window.game?.debug || console;
-             logger.log(`[EntityManager] Added vehicle entity: ${entity.id}`, entity);
-        }
-
-        // Track player entities separately for quick access using clientId
+        // Maintain specific maps for faster lookups by type/ID
         if (entity.type === 'player') {
             this.playerEntities[entity.id] = entity;
+        } else if (entity.type === 'light_source') { // NEW: Handle light sources
+            this.lightSources[entity.id] = entity;
         }
 
-        return entity; // Return the added entity
+        // Log adding vehicles or lights specifically
+        if (entity.type === 'vehicle' || entity.type === 'light_source') { // Modified log condition
+             const logger = window.game?.debug || console;
+             logger.log(`[EntityManager] Added ${entity.type} entity: ${entity.id}`, entity);
+        }
+
+        return entity;
     }
 
     remove(entityId) {
         const entity = this.entities[entityId];
         if (entity) {
-            // Log removing vehicles specifically
-             if (entity.type === 'vehicle') {
-                 // Use game debug if available, otherwise console
+            // Log removing vehicles or lights specifically
+             if (entity.type === 'vehicle' || entity.type === 'light_source') { // Modified log condition
                  const logger = window.game?.debug || console;
-                 logger.log(`[EntityManager] Removing vehicle entity: ${entityId}`);
+                 logger.log(`[EntityManager] Removing ${entity.type} entity: ${entityId}`);
              }
+            // Clean up specific maps
             if (entity.type === 'player') {
                 delete this.playerEntities[entityId];
+            } else if (entity.type === 'light_source') { // NEW: Handle light sources
+                 delete this.lightSources[entityId];
             }
+            // Remove from the main collection
             delete this.entities[entityId];
-             // logger.log(`Removed entity: ${entityId}`); // Debugging removal
             return true;
         }
         return false;
@@ -66,24 +68,46 @@ export default class EntityManager {
     }
 
     getPlayersInRadius(x, y, radius) {
-        const radiusSq = radius * radius; // Use squared distance for efficiency
+        const radiusSq = radius * radius;
         return Object.values(this.playerEntities).filter(player => {
+            if (!player) return false; // Safety check
             const dx = player.x - x;
             const dy = player.y - y;
             return (dx * dx + dy * dy) <= radiusSq;
         });
     }
 
+    // NEW: Get light sources within a specific radius
+    getLightsInRadius(x, y, radius) {
+        const radiusSq = radius * radius;
+        const nearbyLights = [];
+        for (const lightId in this.lightSources) {
+             const light = this.lightSources[lightId];
+             if (!light) continue; // Safety check
+
+             const dx = light.x - x;
+             const dy = light.y - y;
+             if ((dx * dx + dy * dy) <= radiusSq) {
+                 nearbyLights.push(light);
+             }
+        }
+        return nearbyLights;
+    }
+
     update(deltaTime) {
         for (const entityId in this.entities) {
             const entity = this.entities[entityId];
-             // Check if entity still exists (could be removed during loop?) - unlikely here but good practice
              if (!entity) continue;
 
-            if (entity.update && typeof entity.update === 'function') {
-                // Only update if the entity has an update method
+             // Special handling for light sources if they have owners
+             if (entity.type === 'light_source' && entity.ownerId) {
+                 if (entity.update && typeof entity.update === 'function') {
+                      entity.update(deltaTime, window.game); // Pass game instance
+                 }
+             } else if (entity.update && typeof entity.update === 'function') {
+                // Standard update for other entities
                 entity.update(deltaTime);
-            }
+             }
         }
     }
 
@@ -94,6 +118,7 @@ export default class EntityManager {
     clear() {
         this.entities = {};
         this.playerEntities = {};
+        this.lightSources = {}; // Clear lights too
     }
 
     // Added localPlayerId to prevent self-update/creation loop
@@ -114,10 +139,6 @@ export default class EntityManager {
 
             if (!entity) {
                 // Create new remote player entity if it doesn't exist
-                 // console.log(`Creating remote player entity for ${clientId}`); // Debugging creation
-
-                // Create a Player instance for remote players too, for consistency
-                 // Ensure game reference is passed correctly
                  const Player = window.Player; // Ensure Player class is accessible
                  if (!Player) {
                     console.error("Player class not globally accessible in EntityManager");
@@ -135,15 +156,14 @@ export default class EntityManager {
                  entity.health = data.health ?? entity.maxHealth; // Use default maxHealth if health missing
                  entity.maxHealth = data.maxHealth ?? entity.maxHealth;
                  entity.resources = data.resources || {}; // Use default from Player class if not provided
-                 entity.vehicleId = data.vehicleId ?? null;
+                 // entity.vehicleId = data.vehicleId ?? null; // This seems deprecated by playerState
                  entity.color = '#5af'; // Remote player color override
 
-                 // --- NEW: Sync interior state ---
+                 // Sync interior state
                  entity.playerState = data.playerState ?? 'Overworld';
                  entity.currentVehicleId = data.currentVehicleId ?? null;
                  entity.gridX = data.gridX ?? 0;
                  entity.gridY = data.gridY ?? 0;
-                 // --- END NEW ---
 
                 // Store target state for interpolation
                 entity._targetX = entity.x;
@@ -153,13 +173,9 @@ export default class EntityManager {
 
                  // Override the update method for remote player interpolation
                  entity.update = function(deltaTime) {
-                     // Interpolate towards target state
                      const lerpFactor = 0.2; // Adjust for smoothness
-
                      this.x += (this._targetX - this.x) * lerpFactor;
                      this.y += (this._targetY - this.y) * lerpFactor;
-
-                     // Interpolate angle carefully (handle wrapping)
                      if (typeof this.normalizeAngle === 'function') {
                         const angleDiff = this.normalizeAngle(this._targetAngle - this.angle);
                          this.angle = this.normalizeAngle(this.angle + angleDiff * lerpFactor);
@@ -171,7 +187,6 @@ export default class EntityManager {
                 this.add(entity); // Add the fully configured remote player
             } else {
                 // Update existing remote player entity
-                // Update target positions for interpolation
                  entity._targetX = data.x ?? entity._targetX;
                  entity._targetY = data.y ?? entity._targetY;
                  entity._targetAngle = data.angle ?? entity._targetAngle;
@@ -181,18 +196,16 @@ export default class EntityManager {
                 entity.speed = data.speed ?? entity.speed;
                  if (data.health !== undefined) entity.health = data.health;
                  if (data.maxHealth !== undefined) entity.maxHealth = data.maxHealth;
-                 if (data.resources) entity.resources = data.resources; // Overwrite if present
-                 if (data.vehicleId !== undefined) entity.vehicleId = data.vehicleId;
+                 if (data.resources) entity.resources = data.resources;
+                 // if (data.vehicleId !== undefined) entity.vehicleId = data.vehicleId; // Deprecated?
                  if (data.size !== undefined) entity.size = data.size;
 
-                 // --- NEW: Sync interior state ---
+                 // Sync interior state
                  if (data.playerState !== undefined) entity.playerState = data.playerState;
                  if (data.currentVehicleId !== undefined) entity.currentVehicleId = data.currentVehicleId;
                  if (data.gridX !== undefined) entity.gridX = data.gridX;
                  if (data.gridY !== undefined) entity.gridY = data.gridY;
-                 // --- END NEW ---
 
-                 // Update name if peer info is available and different
                  if (peerInfo && entity.name !== peerInfo.username) {
                      entity.name = peerInfo.username;
                  }
@@ -203,7 +216,6 @@ export default class EntityManager {
         const currentRemotePlayers = Object.keys(this.playerEntities);
         for (const clientId of currentRemotePlayers) {
             if (clientId !== localPlayerId && !presentIds.has(clientId)) {
-                // console.log(`Removing remote player entity ${clientId} (no longer present)`); // Debugging removal
                 this.remove(clientId);
             }
         }
