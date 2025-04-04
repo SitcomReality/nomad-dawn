@@ -3,6 +3,7 @@ import EntityRenderer from './EntityRenderer.js';
 import EffectRenderer from './EffectRenderer.js';
 import UIRenderer from './UIRenderer.js';
 import SpriteManager from './SpriteManager.js';
+import InteriorRenderer from './InteriorRenderer.js';
 
 export default class Renderer {
     // Pass game instance to constructor
@@ -30,6 +31,7 @@ export default class Renderer {
         this.entityRenderer = new EntityRenderer(this, game);
         this.effectRenderer = new EffectRenderer(this, game);
         this.uiRenderer = new UIRenderer(this, game);
+        this.interiorRenderer = new InteriorRenderer(this, game);
 
         // Track last frame time for effects delta calculation
         this.lastFrameTime = performance.now();
@@ -59,6 +61,7 @@ export default class Renderer {
         if (this.uiRenderer && this.uiRenderer.onResize) {
             this.uiRenderer.onResize();
         }
+        // Add interior renderer resize if needed later
     }
 
     setupResizeListener() {
@@ -112,8 +115,7 @@ export default class Renderer {
         return { x: worldX, y: worldY };
     }
 
-    // Main render function that delegates to specialized renderers
-    // Now takes cameraTarget directly instead of player
+    // Renders the main game world (background, chunks, objects)
     renderWorld(world, cameraTarget) {
         if (!world) return;
 
@@ -129,9 +131,18 @@ export default class Renderer {
         this.worldRenderer.render(world, cameraTarget, viewWidthWorld, viewHeightWorld);
     }
 
-    // Takes localPlayer (can be null) for highlighting purposes
+    // Renders entities in the main world view
     renderEntities(entities, localPlayer) {
         this.entityRenderer.render(entities, localPlayer);
+    }
+
+    // Renders the interior view of a vehicle
+    renderVehicleInterior(vehicle, player) {
+        if (!this.interiorRenderer) {
+             this.game.debug.error("InteriorRenderer not initialized!");
+             return;
+        }
+        this.interiorRenderer.render(vehicle, player);
     }
 
     renderEffects() {
