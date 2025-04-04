@@ -422,6 +422,14 @@ export default class Game {
              player._stateChanged = true;
              transitionMade = true;
         }
+        // Add handling for 'Building' state if 'E' should do something here
+        // (Currently, closing via Esc is handled by UIManager/BaseBuildingUI)
+        else if (playerState === 'Building') {
+            // Maybe 'E' confirms a placement or exits? For now, do nothing.
+            this.debug.log("'E' pressed while in Building mode. No action defined.");
+            // Allow Esc to close handled by UIManager/BaseBuildingUI.hide()
+        }
+
 
         if (transitionMade) {
             this.lastInteractionTime = currentTime; // Apply cooldown
@@ -445,11 +453,8 @@ export default class Game {
             // Update based on player state
             switch (playerState) {
                 case 'Overworld':
-                    // Player movement/action update (if not interacting with anything else)
-                    this.player.update(deltaTime, this.input);
-                    break;
                 case 'Interior':
-                    // Player movement within vehicle grid
+                    // Player movement/action update handled by player.update
                     this.player.update(deltaTime, this.input);
                     break;
                 case 'Piloting':
@@ -468,7 +473,13 @@ export default class Game {
                      }
                     break;
                 case 'Building':
-                    // No player movement, building UI handles input
+                    // No player movement update needed in Building mode.
+                    // The player entity still exists, but its position etc. is static.
+                    // Input is handled by the Building UI and Building Manager.
+                    // Call Building Manager update if it needs per-frame logic
+                    if (this.ui?.baseBuilding?.buildingManager?.update) {
+                        this.ui.baseBuilding.buildingManager.update(deltaTime);
+                    }
                     break;
             }
 
@@ -491,9 +502,9 @@ export default class Game {
         // Update all other entities (remote players, AI, non-driven vehicles)
         // Make sure vehicles only update if NOT driven by local player (handled above)
         for (const entity of this.entities.getAll()) {
-             // Skip local player (already updated)
+             // Skip local player (already updated or state handled above)
              if (this.player && entity.id === this.player.id) continue;
-             // Skip vehicle driven by local player (already updated)
+             // Skip vehicle driven by local player (already updated in Piloting state)
              if (entity.type === 'vehicle' && this.player && entity.driver === this.player.id && this.player.playerState === 'Piloting') continue;
 
              if (entity.update && typeof entity.update === 'function') {
@@ -543,14 +554,16 @@ export default class Game {
                  this.renderer.ctx.fillText(`Error: ${errorMsg}`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
             }
         } else if (this.player && this.player.playerState === 'Building') {
-             // Render Building UI (Phase 3 implementation)
-             // Placeholder: Render grey screen
-             this.renderer.ctx.fillStyle = 'grey';
+             // Render Building UI Background (Placeholder)
+             // The actual UI (canvas grid + tools) is a DOM overlay managed by BaseBuildingUI
+             // We might want a simplified world view or just a dark screen behind the DOM UI.
+             this.renderer.ctx.fillStyle = '#151515'; // Very dark background
              this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-             this.renderer.ctx.fillStyle = 'white';
-             this.renderer.ctx.font = '20px monospace';
-             this.renderer.ctx.textAlign = 'center';
-             this.renderer.ctx.fillText('BUILDING MODE', this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
+             // Optionally, render a dim overlay text if the UI fails to show
+             // this.renderer.ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+             // this.renderer.ctx.font = '30px monospace';
+             // this.renderer.ctx.textAlign = 'center';
+             // this.renderer.ctx.fillText('BUILDING MODE ACTIVE', this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
 
         } else {
             // --- Default Overworld Rendering ---
@@ -579,7 +592,7 @@ export default class Game {
             this.renderer.renderEffects();
         }
         
-        // Render UI overlays (Minimap, HUD elements are DOM) - Always render UI?
+        // Render canvas UI overlays (Minimap) - Always render UI?
         this.renderer.renderUI(this);
         
         // Render debug information onto the DOM overlay
@@ -604,6 +617,7 @@ export default class Game {
                  const playerPos = this.player ? (
                       this.player.playerState === 'Interior' ? `Interior (${this.player.gridX.toFixed(1)}, ${this.player.gridY.toFixed(1)})` :
                       this.player.playerState === 'Piloting' ? `Piloting (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : // Show vehicle pos when piloting
+                      this.player.playerState === 'Building' ? `Building (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : // Show player world pos (static) in building mode
                       `Overworld (${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})`
                  ) : (this.isGuestMode ? 'Guest Mode' : 'N/A');
                  const playerStateStr = this.player ? this.player.playerState : (this.isGuestMode ? 'Guest' : 'N/A');
