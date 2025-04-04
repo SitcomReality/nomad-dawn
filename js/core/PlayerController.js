@@ -1,5 +1,3 @@
-// New file: js/core/PlayerController.js
-
 /**
  * Handles player input processing, state transitions, and interactions related
  * to movement and vehicle entry/exit.
@@ -14,14 +12,17 @@ export default class PlayerController {
 
         this.interactionCooldown = 200; // Milliseconds between interaction checks
         this.lastInteractionTime = 0;
+        this.gridMoveCooldown = 150; // Milliseconds between grid movements
+        this.lastGridMoveTime = 0;
     }
 
     update(deltaTime) {
         const player = this.game.player;
         if (!player || this.game.isGuestMode) return;
 
-        // --- Check for Interaction Input (E key) ---
         const now = performance.now();
+
+        // --- Check for Interaction Input (E key) ---
         if (this.input.isKeyDown('KeyE') && now - this.lastInteractionTime > this.interactionCooldown) {
             this.handleInteractionKeyPress();
             this.lastInteractionTime = now;
@@ -39,9 +40,7 @@ export default class PlayerController {
                 break;
 
             case 'Interior':
-                // TODO: Implement grid-based movement using input
-                // Example: Check WASD -> calculate target grid cell -> move player gridX/gridY
-                // Make sure to update player._stateChanged = true; when grid position changes
+                // Handle grid-based movement using input
                 this.handleInteriorGridMovement(deltaTime, player);
                 break;
 
@@ -52,9 +51,11 @@ export default class PlayerController {
                     vehicle.update(deltaTime, this.input);
                     // Sync vehicle state if it changed
                     if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
+                        // Only send minimal state frequently during piloting
+                        const minimalState = vehicle.getMinimalNetworkState ? vehicle.getMinimalNetworkState() : { x: vehicle.x, y: vehicle.y, angle: vehicle.angle, speed: vehicle.speed, health: vehicle.health, driver: vehicle.driver };
                         this.network.updateRoomState({
                             vehicles: {
-                                [vehicle.id]: vehicle.getFullNetworkState() // Send full state when driven
+                                [vehicle.id]: minimalState
                             }
                         });
                         if (vehicle.clearStateChanged) vehicle.clearStateChanged();
@@ -69,9 +70,67 @@ export default class PlayerController {
     }
 
     handleInteriorGridMovement(deltaTime, player) {
-        // Placeholder for grid movement logic
-        // If player moves (changes gridX/gridY), set player._stateChanged = true;
-        // This needs collision checking against vehicle walls/objects eventually.
+        const now = performance.now();
+        if (now - this.lastGridMoveTime < this.gridMoveCooldown) {
+            return; // Wait for cooldown
+        }
+
+        const direction = this.input.getMovementDirection();
+        if (direction.x === 0 && direction.y === 0) {
+            return; // No movement input
+        }
+
+        const vehicle = player.currentVehicleId ? this.entities.get(player.currentVehicleId) : null;
+        if (!vehicle || !vehicle.gridTiles) {
+            this.debug.warn(`Cannot perform grid movement: Vehicle ${player.currentVehicleId} or its gridTiles not found.`);
+            return;
+        }
+
+        // Determine primary movement direction (prioritize one axis if diagonal)
+        let moveX = 0;
+        let moveY = 0;
+        if (Math.abs(direction.x) > Math.abs(direction.y)) {
+             moveX = Math.sign(direction.x);
+        } else if (Math.abs(direction.y) > Math.abs(direction.x)) {
+             moveY = Math.sign(direction.y);
+        } else if (direction.x !== 0) { // Diagonal, pick one (e.g., horizontal)
+             moveX = Math.sign(direction.x);
+        } else if (direction.y !== 0) {
+             moveY = Math.sign(direction.y);
+        }
+
+
+        const targetGridX = player.gridX + moveX;
+        const targetGridY = player.gridY + moveY;
+
+        // Check bounds
+        if (targetGridX < 0 || targetGridX >= vehicle.gridWidth ||
+            targetGridY < 0 || targetGridY >= vehicle.gridHeight) {
+            return; // Out of bounds
+        }
+
+        // Check if target tile is walkable (e.g., not 'Wall')
+        // Assume 'Floor', 'Door', 'PilotSeat' are walkable, others are not unless specified.
+        const targetTileKey = `${targetGridX},${targetGridY}`;
+        const targetTileType = vehicle.gridTiles[targetTileKey] || 'Empty'; // Default to Empty if not defined
+
+        // Define non-walkable tile types
+        const nonWalkableTiles = ['Wall', 'Empty']; // Add other blocking types as needed
+
+        if (nonWalkableTiles.includes(targetTileType)) {
+            return; // Cannot move into this tile type
+        }
+
+        // TODO: Check collision with gridObjects later if needed
+
+        // Move player
+        player.gridX = targetGridX;
+        player.gridY = targetGridY;
+        player._stateChanged = true; // Mark state changed for network sync
+        this.lastGridMoveTime = now; // Reset cooldown timer
+
+        // Debug log
+        // this.debug.log(`Player moved to grid (${player.gridX}, ${player.gridY})`);
     }
 
     handleInteractionKeyPress() {
@@ -87,6 +146,7 @@ export default class PlayerController {
                     // --- Transition to Interior state ---
                     player.playerState = 'Interior';
                     player.currentVehicleId = nearbyVehicle.id;
+                    // Use nullish coalescing for safety
                     player.gridX = nearbyVehicle.doorLocation?.x ?? 0;
                     player.gridY = nearbyVehicle.doorLocation?.y ?? 0;
                     player._stateChanged = true;
@@ -100,17 +160,23 @@ export default class PlayerController {
 
             case 'Interior':
                 if (currentVehicle) {
-                    const isAtDoor = player.gridX === currentVehicle.doorLocation?.x &&
-                                     player.gridY === currentVehicle.doorLocation?.y;
-                    const isAtPilotSeat = player.gridX === currentVehicle.pilotSeatLocation?.x &&
-                                          player.gridY === currentVehicle.pilotSeatLocation?.y;
+                    // Check grid properties exist before accessing
+                    const doorX = currentVehicle.doorLocation?.x;
+                    const doorY = currentVehicle.doorLocation?.y;
+                    const pilotX = currentVehicle.pilotSeatLocation?.x;
+                    const pilotY = currentVehicle.pilotSeatLocation?.y;
+
+                    const isAtDoor = (doorX !== undefined && doorY !== undefined) &&
+                                     player.gridX === doorX && player.gridY === doorY;
+                    const isAtPilotSeat = (pilotX !== undefined && pilotY !== undefined) &&
+                                          player.gridX === pilotX && player.gridY === pilotY;
 
                     if (isAtDoor) {
                         // --- Transition to Overworld state ---
                         player.playerState = 'Overworld';
                         // Place player slightly outside vehicle (behind the door relative to vehicle angle)
                         const exitOffset = (currentVehicle.size || 30) / 2 + 15; // Increased offset
-                        const exitAngle = currentVehicle.angle + Math.PI; // Opposite vehicle direction
+                        const exitAngle = (currentVehicle.angle ?? 0) + Math.PI; // Opposite vehicle direction
                         player.x = currentVehicle.x + Math.cos(exitAngle) * exitOffset;
                         player.y = currentVehicle.y + Math.sin(exitAngle) * exitOffset;
                         player.angle = exitAngle; // Face away from vehicle
@@ -120,7 +186,7 @@ export default class PlayerController {
                     } else if (isAtPilotSeat) {
                         // --- Transition to Piloting state ---
                         player.playerState = 'Piloting';
-                        currentVehicle.setDriver(player.id);
+                        if (currentVehicle.setDriver) currentVehicle.setDriver(player.id);
                         // Send network update for driver change
                         this.network.updateRoomState({
                             vehicles: {
@@ -149,7 +215,7 @@ export default class PlayerController {
                      // Place player back at pilot seat
                      player.gridX = currentVehicle.pilotSeatLocation?.x ?? 0;
                      player.gridY = currentVehicle.pilotSeatLocation?.y ?? 0;
-                     currentVehicle.removeDriver();
+                     if (currentVehicle.removeDriver) currentVehicle.removeDriver();
                      // Send network update for driver change
                      this.network.updateRoomState({
                          vehicles: {

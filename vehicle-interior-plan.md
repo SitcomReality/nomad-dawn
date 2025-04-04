@@ -1,185 +1,33 @@
-// Vehicle.js
-class Vehicle {
-    constructor() {
-        this.gridWidth = 10;
-        this.gridHeight = 10;
-        this.gridTiles = {};
-        this.gridObjects = {};
-        this.doorLocation = { x: 0, y: 0 };
-        this.pilotSeatLocation = { x: 0, y: 0 };
-    }
+# Plan for Implementing Vehicle Interiors and Building
 
-    getFullNetworkState() {
-        return {
-            gridWidth: this.gridWidth,
-            gridHeight: this.gridHeight,
-            gridTiles: this.gridTiles,
-            gridObjects: this.gridObjects,
-            doorLocation: this.doorLocation,
-            pilotSeatLocation: this.pilotSeatLocation,
-        };
-    }
+**Phase 1: Basic Interior State & Transitions (COMPLETE)**
 
-    update() {
-        if (this.driver && game.player.playerState === 'Piloting') {
-            // Movement logic
-        }
-    }
-}
+1.  **Vehicle.js:** Add grid properties (`gridWidth`, `gridHeight`, `gridTiles`, `gridObjects`, `doorLocation`, `pilotSeatLocation`). Include these in `getFullNetworkState`. (COMPLETE)
+2.  **Player.js:** Add player state properties (`playerState`, `currentVehicleId`, `gridX`, `gridY`). Include in `getNetworkState` and `hasStateChanged`. Modify `update` to skip overworld movement when not in 'Overworld' state. (COMPLETE)
+3.  **PlayerController.js:** Implement `handleInteractionKeyPress` to manage transitions between 'Overworld', 'Interior', and 'Piloting' states based on player position and 'E' key presses. (COMPLETE)
+4.  **NetworkManager.js:** Ensure vehicle grid properties are synced correctly in `syncVehiclesFromNetwork` and included in `updateRoomState` payloads when vehicles are modified/created. (COMPLETE)
+5.  **Renderer.js:** Add `InteriorRenderer`. Modify `render` to conditionally call `interiorRenderer.render` when player state is 'Interior', skipping world/entity rendering. (COMPLETE)
+6.  **InteriorRenderer.js:** Create basic `InteriorRenderer` to draw a placeholder grid, tiles (Floor, Wall, Door, PilotSeat), and the player character at their grid position. (COMPLETE)
 
-// Player.js
-class Player {
-    constructor() {
-        this.playerState = 'Overworld';
-        this.currentVehicleId = null;
-        this.gridX = 0;
-        this.gridY = 0;
-    }
+**Phase 2: Player Movement Inside Vehicle (COMPLETE)**
 
-    update() {
-        if (this.playerState === 'Piloting' || this.playerState === 'Interior') return;
+7.  **PlayerController.js - `handleInteriorGridMovement`:** Implement grid-based movement using WASD input. Check for valid moves (bounds, walkable tiles like 'Floor'). Update `player.gridX`, `player.gridY`, and set `player._stateChanged = true`. Add a movement cooldown. (COMPLETE)
 
-        // Overworld movement logic
-    }
+**Phase 3: Building UI & Grid Modification (NEXT)**
 
-    getNetworkState() {
-        return {
-            playerState: this.playerState,
-            currentVehicleId: this.currentVehicleId,
-            gridX: this.gridX,
-            gridY: this.gridY,
-        };
-    }
+8.  **UIManager.js / BaseBuildingUI.js:** Update the 'B' key handler in `UIManager` (or potentially move it to `PlayerController`) to transition the player to a 'Building' state when near their owned vehicle. The `BaseBuildingUI` needs to be triggered in this state.
+9.  **BaseBuildingUI.js:** Refactor `BaseBuildingUI` to display the *vehicle's interior grid* instead of the module list/preview canvas when active. This might involve creating a new component/renderer (`VehicleGridEditorRenderer`?) or embedding grid rendering logic within `BaseBuildingUI`.
+10. **VehicleGridEditorRenderer (New File/Component):** Create a component responsible for rendering the vehicle grid within the `BaseBuildingUI`. It should display tiles and objects visually. It needs to handle clicks on grid cells.
+11. **BaseBuildingUI.js / PlayerController.js:** Implement click handling for the grid editor. When a cell is clicked:
+    *   Determine the clicked `gridX`, `gridY`.
+    *   Based on a selected tool/tile type (e.g., 'Place Floor', 'Place Wall'), prepare an update payload for the vehicle's `gridTiles` or `gridObjects`.
+    *   Use `NetworkManager.updateRoomState` to send the updated `gridTiles`/`gridObjects` for the specific vehicle.
+12. **InteriorRenderer.js:** Enhance to render different `gridTiles` (e.g., 'Wall' looks different from 'Floor') and basic `gridObjects` (e.g., simple shapes/colors for storage, crafting stations).
 
-    hasStateChanged() {
-        // Check if player state or position has changed
-    }
-}
+**Phase 4: Refining Interactions & Polish**
 
-// PlayerController.js
-class PlayerController {
-    handleInteractionKeyPress() {
-        if (input.isKeyPressed('E')) {
-            if (player.playerState === 'Overworld' && player.isNearVehicle()) {
-                player.playerState = 'Interior';
-                player.currentVehicleId = vehicle.id;
-                player.gridX = vehicle.doorLocation.x;
-                player.gridY = vehicle.doorLocation.y;
-                console.log("Transitioning to Interior");
-            } else if (player.playerState === 'Interior') {
-                if (player.gridX === vehicle.doorLocation.x && player.gridY === vehicle.doorLocation.y) {
-                    player.playerState = 'Overworld';
-                    player.currentVehicleId = null;
-                    console.log("Transitioning to Overworld");
-                } else if (player.gridX === vehicle.pilotSeatLocation.x && player.gridY === vehicle.pilotSeatLocation.y) {
-                    player.playerState = 'Piloting';
-                    vehicle.setDriver(player.id);
-                    console.log("Transitioning to Piloting");
-                }
-            } else if (player.playerState === 'Piloting') {
-                player.playerState = 'Interior';
-                player.gridX = vehicle.pilotSeatLocation.x;
-                player.gridY = vehicle.pilotSeatLocation.y;
-                vehicle.removeDriver();
-                console.log("Transitioning back to Interior");
-            } else if (player.playerState === 'Overworld' && input.isKeyPressed('B')) {
-                // Transition to Building state
-                player.playerState = 'Building';
-            }
-        }
-    }
+13. **PlayerController.js:** Add collision checks against `gridObjects` during `handleInteriorGridMovement`.
+14. **PlayerController.js:** Implement interactions with `gridObjects` when pressing 'E' inside the vehicle (e.g., open storage, use crafting station).
+15. **UI:** Add tool selection to `BaseBuildingUI` for placing different tiles/objects. Provide visual feedback during building.
+16. **Sound/Effects:** Add sound effects for entering/exiting, moving, building actions.
 
-    handleInteriorGridMovement(deltaTime, player) {
-        // Implement grid-based movement using WASD input
-        // Check for collisions with vehicle walls/objects (based on gridTiles/gridObjects)
-        // Update player.gridX, player.gridY and set player._stateChanged = true
-    }
-}
-
-// NetworkManager.js
-class NetworkManager {
-    constructor() {
-        // ...
-    }
-
-    syncVehiclesFromNetwork() {
-        // Ensure gridTiles and gridObjects updates are merged correctly
-    }
-
-    updateRoomState() {
-        // Ensure grid properties are included in the payload
-    }
-}
-
-// Renderer.js
-class Renderer {
-    constructor() {
-        // ...
-        this.interiorRenderer = new InteriorRenderer(this, game);
-    }
-
-    render() {
-        // ...
-        if (game.player.playerState === 'Interior') {
-            this.interiorRenderer.render(currentVehicle, game.player);
-            // Skip rendering world and entities
-        }
-    }
-}
-
-// InteriorRenderer.js
-class InteriorRenderer {
-    constructor(renderer, game) {
-        this.renderer = renderer;
-        this.game = game;
-    }
-
-    render(vehicle, player) {
-        // Clear background
-        // Draw grid lines
-        // Draw tiles (Floor, Wall, Door, PilotSeat) with basic colors/shapes
-        // Draw placed objects (basic shapes for now)
-        // Draw the player character at player.gridX, player.gridY
-    }
-}
-
-// VehicleBuildingRenderer.js
-class VehicleBuildingRenderer {
-    constructor() {
-        // ...
-    }
-
-    renderGrid(vehicle) {
-        // Generate HTML/SVG/Canvas elements to represent the vehicle.gridTiles and vehicle.gridObjects
-        // Add click listeners to grid cells/elements, calling back to VehicleBuildingManager
-    }
-
-    show() {
-        // ...
-    }
-
-    hide() {
-        // ...
-    }
-
-    update() {
-        // ...
-    }
-}
-
-// VehicleBuildingManager.js
-class VehicleBuildingManager {
-    constructor() {
-        // ...
-    }
-
-    handleGridClick() {
-        // Determine clicked gridX, gridY
-        // Based on selectedTool, prepare the grid update data (modify gridTiles)
-        // Send roomState update via NetworkManager
-    }
-
-    renderGrid() {
-        // Call renderer.renderGrid(activeVehicle)
-    }
-}
