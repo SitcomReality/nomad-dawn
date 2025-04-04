@@ -271,9 +271,9 @@ body {
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%);
-    width: 700px;
-    max-width: 90vw;
-    height: 500px;
+    width: 800px; /* Increased width for grid view */
+    max-width: 95vw;
+    height: 600px; /* Increased height for grid view */
     max-height: 90vh;
     background-color: var(--ui-bg);
     border: 2px solid var(--ui-border);
@@ -284,19 +284,48 @@ body {
     pointer-events: auto;
     z-index: 100;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    overflow: hidden; /* Prevent internal scrollbars for now */
 }
 
 .inventory-header, .building-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 10px 15px;
+    padding: 8px 15px; /* Reduced padding */
     border-bottom: 1px solid var(--ui-border);
+    flex-shrink: 0; /* Prevent header from shrinking */
 }
 
-.inventory-header h2, .building-header h2 {
+.building-header h2 {
     margin: 0;
-    font-size: 1.5rem;
+    font-size: 1.3rem; /* Slightly smaller title */
+}
+
+.tool-buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.tool-button {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--ui-border);
+    color: var(--ui-text-dim);
+    padding: 5px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+.tool-button:hover {
+    background-color: rgba(168, 218, 220, 0.2); /* ui-highlight with alpha */
+    color: var(--ui-text);
+}
+.tool-button.active {
+    background-color: var(--ui-highlight);
+    color: var(--color-dark);
+    border-color: var(--ui-highlight);
 }
 
 .close-button {
@@ -306,58 +335,86 @@ body {
     font-size: 1.5rem;
     cursor: pointer;
     transition: color 0.2s ease;
+    line-height: 1; /* Ensure consistent alignment */
 }
 
 .close-button:hover {
     color: var(--ui-accent);
 }
 
-.inventory-tabs {
-    display: flex;
-    border-bottom: 1px solid var(--ui-border);
-}
-
-.tab-button {
-    padding: 8px 15px;
-    background: none;
-    border: none;
-    color: var(--ui-text);
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-    font-family: var(--font-main);
-    font-size: 1rem;
-}
-
-.tab-button.active {
-    background-color: var(--ui-highlight);
-    color: var(--color-dark);
-}
-
-.tab-button:hover:not(.active) {
-    background-color: rgba(168, 218, 220, 0.2);
-}
-
-.inventory-content, .building-content {
+.building-content-grid {
     flex-grow: 1;
+    display: flex; /* Use flexbox for side-by-side layout */
     padding: 15px;
-    overflow-y: auto;
+    gap: 15px;
+    overflow: hidden; /* Prevent scrollbars within this container */
 }
 
-.tab-content {
-    display: none;
-    height: 100%;
+#tool-info-area {
+    flex: 0 0 200px; /* Fixed width for tool info/selection panel */
+    background-color: rgba(0, 0, 0, 0.2);
+    padding: 10px;
+    border-radius: 4px;
+    overflow-y: auto; /* Allow scrolling if content exceeds height */
+}
+#tool-info-area h3 {
+    font-size: 1.1rem;
+    margin-bottom: 10px;
+    border-bottom: 1px solid var(--ui-border);
+    padding-bottom: 5px;
 }
 
-.tab-content.active {
-    display: block;
+#vehicle-building-canvas-container {
+    flex-grow: 1; /* Allow canvas container to take remaining space */
+    display: flex; /* Center canvas within the container */
+    justify-content: center;
+    align-items: center;
+    background-color: #111; /* Dark background for the canvas area */
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    overflow: hidden; /* Important to contain the canvas */
+    position: relative; /* For potential overlays */
 }
 
-.inventory-footer, .building-footer {
-    padding: 10px 15px;
+#vehicle-building-canvas {
+    /* Renderer will set width/height, this ensures it doesn't overflow */
+    max-width: 100%;
+    max-height: 100%;
+    display: block; /* Remove extra space below canvas */
+    background-color: #2a2a2a; /* Match renderer bg */
+}
+
+.building-footer {
+    padding: 8px 15px; /* Reduced padding */
     border-top: 1px solid var(--ui-border);
     display: flex;
     justify-content: space-between;
     align-items: center;
+    flex-shrink: 0; /* Prevent footer from shrinking */
+}
+
+.footer-info {
+    font-size: 0.9rem;
+    color: var(--ui-text-dim);
+}
+
+.module-details { 
+     font-size: 0.9rem;
+}
+.module-details h3 { 
+     font-size: 1.1rem;
+     margin-bottom: 10px;
+}
+.module-details p {
+     margin-bottom: 8px;
+}
+.module-details ul {
+     list-style: none;
+     padding-left: 0;
+     margin-left: 10px;
+}
+.module-details li {
+     margin-bottom: 4px;
 }
 
 .action-buttons {
@@ -378,12 +435,25 @@ body {
 
 .action-buttons button:hover:not(:disabled) {
     background-color: var(--ui-accent);
-    color: var(--ui-text);
+    color: var(--color-dark); /* Keep dark text on accent hover */
 }
 
 .action-buttons button:disabled {
     background-color: var(--ui-disabled);
+    color: var(--ui-text-dim);
     cursor: not-allowed;
+}
+
+/* Remove Obsolete Building UI Styles */
+.vehicle-preview,
+.vehicle-stats,
+.module-selection,
+.modules-list,
+.module-item,
+.module-icon,
+.installed-status {
+    /* These selectors might be removed or repurposed later */
+    display: none; /* Hide old elements for now */
 }
 
 /* Inventory Items */
@@ -506,83 +576,6 @@ body {
 
 .not-enough {
     color: #f44336;
-}
-
-/* Vehicle Building UI */
-.vehicle-preview {
-    display: flex;
-    margin-bottom: 20px;
-}
-
-#vehicle-preview-canvas {
-    border: 1px solid var(--ui-border);
-    background-color: #222;
-}
-
-.vehicle-stats {
-    padding: 0 15px;
-    flex-grow: 1;
-}
-
-.stat-item {
-    margin-bottom: 10px;
-}
-
-.stat-label {
-    font-weight: bold;
-    margin-right: 5px;
-}
-
-.module-selection {
-    border-top: 1px solid var(--ui-border);
-    padding-top: 15px;
-}
-
-.modules-list {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-    gap: 10px;
-    margin-top: 10px;
-}
-
-.module-item {
-    display: flex;
-    align-items: center;
-    padding: 8px;
-    background-color: rgba(0, 0, 0, 0.2);
-    border-radius: 4px;
-    cursor: pointer;
-    transition: background-color 0.2s ease;
-}
-
-.module-item:hover {
-    background-color: rgba(0, 0, 0, 0.4);
-}
-
-.module-item.selected {
-    background-color: rgba(168, 218, 220, 0.3);
-    border: 1px solid var(--ui-highlight);
-}
-
-.module-item.installed {
-    opacity: 0.7;
-    border-left: 4px solid var(--ui-success);
-}
-
-.module-item.installed:hover {
-    opacity: 0.9;
-}
-
-.installed-status {
-    color: var(--ui-success);
-    font-style: italic;
-}
-
-.module-icon {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    margin-right: 8px;
 }
 
 /* Notifications */
