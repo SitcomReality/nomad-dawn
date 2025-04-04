@@ -13,11 +13,22 @@ export default class EntityRenderer {
         for (const entity of sortedEntities) {
             if (!entity) continue;
 
+            // --- NEW: Check player state and skip rendering if inside a vehicle ---
+            // We hide players (both local and remote) from the overworld view
+            // if their state indicates they are inside a vehicle.
+            // The InteriorRenderer is responsible for drawing the player when inside.
+            if (entity.type === 'player' && (entity.playerState === 'Interior' || entity.playerState === 'Piloting' || entity.playerState === 'Building')) {
+                 // Skip rendering players who are not in the 'Overworld' state
+                 continue;
+            }
+            // --- END NEW ---
+
+
             const screenPos = this.renderer.worldToScreen(entity.x, entity.y);
             const screenSize = (entity.size || 20) * this.renderer.camera.zoom;
 
             // Culling check
-            const cullMargin = screenSize * 2; 
+            const cullMargin = screenSize * 2;
             if (
                 screenPos.x + cullMargin < 0 ||
                 screenPos.y + cullMargin < 0 ||
@@ -43,24 +54,25 @@ export default class EntityRenderer {
             this.ctx.shadowColor = 'rgba(255, 255, 255, 0.6)';
             this.ctx.shadowBlur = 8 * this.renderer.camera.zoom;
         } else if (entity.type === 'player') {
+            // Slight transparency for remote players for visual distinction
             this.ctx.globalAlpha = 0.9;
         }
 
         // --- Shadow Rendering (using new logic) ---
         if (light.enabled && light.shadowVisibility > 0 && entity.type !== 'projectile') {
-            const shadowAlpha = 0.3 * light.shadowVisibility; 
+            const shadowAlpha = 0.3 * light.shadowVisibility;
 
-            const maxShadowDisplacement = screenSize * 0.75; 
-            const baseVerticalOffset = screenSize * 0.075; 
-            const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor; 
-            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * maxShadowDisplacement; 
+            const maxShadowDisplacement = screenSize * 0.75;
+            const baseVerticalOffset = screenSize * 0.075;
+            const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor;
+            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * maxShadowDisplacement;
             const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
-            const baseWidthRadius = screenSize * 0.3; 
-            const baseHeightRadius = screenSize * 0.25; 
-            
-            const shadowWidthFactor = 1.0 + light.shadowVerticalOffsetFactor * 1.5; 
-            const shadowHeightFactor = 1.0 - light.shadowVerticalOffsetFactor * 0.55; 
+            const baseWidthRadius = screenSize * 0.3;
+            const baseHeightRadius = screenSize * 0.25;
+
+            const shadowWidthFactor = 1.0 + light.shadowVerticalOffsetFactor * 1.5;
+            const shadowHeightFactor = 1.0 - light.shadowVerticalOffsetFactor * 0.55;
 
             const shadowWidth = baseWidthRadius * shadowWidthFactor;
             const shadowHeight = baseHeightRadius * shadowHeightFactor;
@@ -83,7 +95,7 @@ export default class EntityRenderer {
         }
 
         if (entity.render && typeof entity.render === 'function') {
-            let originalColor = entity.color; 
+            let originalColor = entity.color;
             if (light.enabled && entity.color) {
                 entity.color = this.renderer.worldRenderer.adjustColorForLighting(
                     originalColor,
@@ -93,7 +105,7 @@ export default class EntityRenderer {
             }
             entity.render(this.ctx, 0, 0, screenSize);
             if (light.enabled && entity.color) {
-                entity.color = originalColor; 
+                entity.color = originalColor;
             }
         } else {
             let entityColor = entity.color || '#e04f5f';
@@ -122,6 +134,9 @@ export default class EntityRenderer {
     }
 
     renderEntityOverlays(entity, screenPos, screenSize, player) {
+        // Reset shadow blur just in case
+        this.ctx.shadowBlur = 0;
+
         if (entity.name && this.renderer.camera.zoom > 0.5) {
             this.ctx.fillStyle = (player && entity.id === player.id) ? 'white' : 'rgba(220, 220, 220, 0.9)';
             this.ctx.font = `bold ${Math.max(9, 12 * this.renderer.camera.zoom)}px monospace`;
@@ -155,6 +170,6 @@ export default class EntityRenderer {
             this.ctx.strokeRect(barX, barY, barWidth, barHeight);
         }
 
-        this.ctx.textAlign = 'left'; 
+        this.ctx.textAlign = 'left';
     }
 }
