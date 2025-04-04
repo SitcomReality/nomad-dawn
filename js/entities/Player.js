@@ -49,15 +49,13 @@ export default class Player {
         // Collision properties
         this.radius = this.size / 2;
         this.mass = 10;
+        this.collidesWith = this.collidesWith; // Reference the method for CollisionManager
+        this.onCollision = this.onCollision; // Reference the method for CollisionManager
 
         // Network state tracking
         this._lastNetworkState = this.getNetworkState();
         this._stateChanged = false;
 
-        // Collection cooldown to prevent spamming requests (Now used by InteractionManager)
-        // this.lastCollectionTime = 0; // REMOVED
-        // this.collectionCooldown = 500; // REMOVED
-        
         // Add movement controller
         this.movementController = new MovementController();
     }
@@ -93,29 +91,29 @@ export default class Player {
                  // --- Simple Grid Collision Check ---
                  if (direction.x !== 0) {
                      // Check cell player is trying to move INTO horizontally
-                     const targetCellX = Math.floor(nextGridX);
+                     const targetCellX = Math.floor(nextGridX + 0.5 * Math.sign(direction.x)); // Check slightly ahead
                      const currentCellY = Math.floor(this.gridY);
                      const cellKeyX = `${targetCellX},${currentCellY}`;
                      const objectInCellX = vehicle.gridObjects?.[cellKeyX];
+                     const objectConfigX = objectInCellX ? this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectInCellX) : null;
+
                      // Check if the object type blocks movement (e.g., walls)
-                     if (objectInCellX === 'wall_metal') { // TODO: Use config or helper func
+                     if (objectConfigX?.collides) { // Use collides property from config
                          canMoveX = false;
-                         // Optional: Snap player back to edge of current cell if moving towards wall
-                         // this.gridX = Math.round(this.gridX);
                      }
                  }
 
                  if (direction.y !== 0) {
                      // Check cell player is trying to move INTO vertically
-                     const targetCellY = Math.floor(nextGridY);
+                      const targetCellY = Math.floor(nextGridY + 0.5 * Math.sign(direction.y)); // Check slightly ahead
                      const currentCellX = Math.floor(this.gridX);
                      const cellKeyY = `${currentCellX},${targetCellY}`;
                      const objectInCellY = vehicle.gridObjects?.[cellKeyY];
+                     const objectConfigY = objectInCellY ? this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectInCellY) : null;
+
                      // Check if the object type blocks movement
-                      if (objectInCellY === 'wall_metal') { // TODO: Use config or helper func
+                      if (objectConfigY?.collides) { // Use collides property from config
                          canMoveY = false;
-                          // Optional: Snap player back to edge of current cell
-                          // this.gridY = Math.round(this.gridY);
                       }
                  }
 
@@ -191,8 +189,15 @@ export default class Player {
             // console.log(`Player ${this.id} added ${amount} ${type}. New total: ${this.resources[type]}`); // Debug log
             return true;
         }
-        console.warn(`Player ${this.id} attempted to add unknown resource type: ${type}`);
-        return false;
+         // --- NEW: Try to add resource even if type is not pre-defined (e.g., for rare resources) ---
+         this.resources[type] = amount;
+         this._stateChanged = true;
+         this.game.debug.log(`Player ${this.id} added new resource type '${type}' with amount ${amount}`);
+         return true;
+         // --- END NEW ---
+
+        // console.warn(`Player ${this.id} attempted to add unknown resource type: ${type}`); // Old warning removed
+        // return false;
     }
 
     equipItem(item) {
@@ -243,34 +248,93 @@ export default class Player {
 
     collidesWith(other) {
         // Basic circle collision detection
+         // --- MODIFICATION: Use radii defined in this class and other's size/radius ---
+         const radiusA = this.radius;
+         const radiusB = (other.radius || other.size / 2 || 0);
+         if (radiusA <= 0 || radiusB <= 0) return false; // Cannot collide if no radius
+
         const dx = this.x - other.x;
         const dy = this.y - other.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
-        return distance < (this.radius + other.radius);
+        return distance < (radiusA + radiusB);
     }
 
     // Handle collision based on the other entity's type
     onCollision(other) {
-        if (!other) return;
+        if (!other || this.playerState !== 'Overworld') return; // Only handle overworld collisions for now
 
+        // --- NEW: Collision Response for World Objects ---
+        if ((other.type === 'resource' || other.type === 'feature') && other.collides === true) {
+            const radiusA = this.radius;
+            const radiusB = (other.radius || other.size / 2 || 0);
+            if (radiusA <= 0 || radiusB <= 0) return;
+
+            const dx = this.x - other.x;
+            const dy = this.y - other.y;
+            const distanceSq = dx * dx + dy * dy;
+            const radiiSum = radiusA + radiusB;
+            const radiiSumSq = radiiSum * radiiSum;
+
+            // Ensure they are actually colliding
+            if (distanceSq < radiiSumSq && distanceSq > 0) {
+                const distance = Math.sqrt(distanceSq);
+                const penetration = radiiSum - distance;
+                const pushFactor = 0.51; // Push slightly more than needed to prevent sticking
+
+                // Calculate normalized collision vector
+                const nx = dx / distance;
+                const ny = dy / distance;
+
+                // Move player back along the collision vector
+                this.x += nx * penetration * pushFactor;
+                this.y += ny * penetration * pushFactor;
+
+                // Optional: Stop player movement upon collision
+                this.speed = 0;
+
+                 this._stateChanged = true; // Position changed, mark for network update
+            }
+            return; // Stop further processing for this collision
+        }
+        // --- END NEW ---
+
+
+        // Existing collision logic (can be expanded)
         switch(other.type) {
             case 'resource':
-                 // --- REMOVED: Resource collection logic moved to InteractionManager ---
-                // // Check cooldown before attempting collection
-                //  const now = performance.now();
-                //  if (now - this.lastCollectionTime > this.collectionCooldown) {
-                //     this.requestCollectResource(other);
-                //     this.lastCollectionTime = now; // Update last collection time
-                //  }
+                 // Collection is handled by InteractionManager ('E' key)
                 break;
             case 'vehicle':
-                // Example: Enter vehicle on key press (implementation depends on input access)
-                // This logic will move/change with the new interior system.
-                // if (!this.insideVehicle && this.game.input.isKeyDown('KeyE')) {
-                //     this.enterVehicle(other);
-                // }
+                // Interaction is handled by InteractionManager ('E' key)
                 break;
-            // Add cases for other collidable types (e.g., projectiles, hazards)
+            case 'player':
+                // Basic push-back for player-player collision
+                 const radiusA = this.radius;
+                 const radiusB = (other.radius || other.size / 2 || 0);
+                 if (radiusA <= 0 || radiusB <= 0) return;
+
+                 const dx = this.x - other.x;
+                 const dy = this.y - other.y;
+                 const distanceSq = dx * dx + dy * dy;
+                 const radiiSum = radiusA + radiusB;
+                 const radiiSumSq = radiiSum * radiiSum;
+
+                 if (distanceSq < radiiSumSq && distanceSq > 0) {
+                     const distance = Math.sqrt(distanceSq);
+                     const penetration = radiiSum - distance;
+                     const pushFactor = 0.51; // Push slightly more than needed to prevent sticking
+                     const nx = dx / distance;
+                     const ny = dy / distance;
+
+                     // Move both players back (half each)
+                     this.x += nx * penetration * pushFactor * 0.5;
+                     this.y += ny * penetration * pushFactor * 0.5;
+                     // We don't directly modify 'other' here, let its own collision check handle it
+
+                     this.speed *= 0.8; // Dampen speed on player collision
+                     this._stateChanged = true;
+                 }
+                break;
             default:
                 // Handle generic collision if needed
                 break;
@@ -387,3 +451,5 @@ export default class Player {
         this._stateChanged = false;
     }
 }
+```
+</file-path>
