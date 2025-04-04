@@ -23,6 +23,7 @@ export default class VehicleBuildingRenderer {
             gridBorder: 'rgba(255, 255, 255, 0.3)',
             hoverCell: 'rgba(168, 218, 220, 0.4)', // Light blue transparent
             selectedCell: 'rgba(230, 57, 70, 0.5)', // Red transparent
+            pendingModification: 'rgba(255, 255, 0, 0.3)', // Yellow semi-transparent for pending
             door: '#457b9d', // Blue
             pilotSeat: '#e63946', // Red
             defaultTile: '#444',
@@ -90,7 +91,6 @@ export default class VehicleBuildingRenderer {
         } else {
             this.selectedCell = { x: -1, y: -1 };
         }
-         this.game.debug.log(`[BuildingRenderer] Selected Cell: (${this.selectedCell.x}, ${this.selectedCell.y})`);
     }
 
     setVehicle(vehicle) {
@@ -140,6 +140,7 @@ export default class VehicleBuildingRenderer {
         const cellPixelSize = this.cellPixelSize;
         const gridPixelWidth = gridWidth * cellPixelSize;
         const gridPixelHeight = gridHeight * cellPixelSize;
+        const buildingManager = this.game.ui?.baseBuilding?.buildingManager; // Cache for convenience
 
         // --- Clear Background ---
         ctx.fillStyle = this.colors.background;
@@ -201,6 +202,30 @@ export default class VehicleBuildingRenderer {
             ctx.lineTo(this.gridOffsetX + gridPixelWidth, yPos);
         }
         ctx.stroke();
+
+        // --- Draw Pending Modifications Overlay ---
+         if (buildingManager?.pendingModifications[this.vehicle.id]) {
+             ctx.fillStyle = this.colors.pendingModification;
+             ctx.lineWidth = 1;
+             ctx.strokeStyle = 'rgba(255, 255, 0, 0.6)'; // Yellow border for pending
+
+             buildingManager.pendingModifications[this.vehicle.id].forEach(pendingKey => {
+                 const [cellKey, gridType] = pendingKey.split(':');
+                 const [xStr, yStr] = cellKey.split(',');
+                 const x = parseInt(xStr, 10);
+                 const y = parseInt(yStr, 10);
+
+                 if (!isNaN(x) && !isNaN(y)) {
+                     const screenX = this.gridOffsetX + x * cellPixelSize;
+                     const screenY = this.gridOffsetY + y * cellPixelSize;
+                     ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
+                     ctx.strokeRect(screenX, screenY, cellPixelSize, cellPixelSize);
+
+                     // Optional: Add a subtle animation like pulsing or rotating icon
+                     // For simplicity, a static overlay is used here.
+                 }
+             });
+         }
 
         // --- Draw Hover Highlight ---
         if (this.hoveredCell.x !== -1 && this.hoveredCell.y !== -1) {

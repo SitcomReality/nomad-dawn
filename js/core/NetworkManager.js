@@ -75,12 +75,6 @@ export default class NetworkManager {
         });
 
         this.unsubscribeRoomState = this.subscribeRoomState((roomState) => {
-            // --- DEBUG ---
-            if (roomState.vehicles) {
-                // this.game.debug.log("Received roomState update with vehicles:", JSON.parse(JSON.stringify(roomState.vehicles))); // Log a copy
-            }
-            // --- END DEBUG ---
-
             if (this.game.world) {
                 this.game.world.syncFromNetworkState(roomState);
             }
@@ -117,10 +111,14 @@ export default class NetworkManager {
 
         const presentVehicleIds = new Set(Object.keys(networkVehicles));
 
+        const confirmedModifications = {}; // vehicleId -> array of "cellKey:gridType"
+
         // Update or create vehicles
         for (const vehicleId in networkVehicles) {
             const data = networkVehicles[vehicleId];
             let vehicle = this.game.entities.get(vehicleId);
+
+            confirmedModifications[vehicleId] = [];
 
             if (data === null) { // Vehicle removed
                  if (vehicle) {
@@ -162,15 +160,18 @@ export default class NetworkManager {
                  vehicle.passengers = data.passengers ?? [];
                  vehicle.modules = data.modules ?? [];
 
-                 // --- NEW: Sync grid properties ---
                  vehicle.gridWidth = data.gridWidth ?? vehicle.gridWidth;
                  vehicle.gridHeight = data.gridHeight ?? vehicle.gridHeight;
-                 // Ensure gridTiles and gridObjects are objects, not null/undefined
-                 vehicle.gridTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : {};
-                 vehicle.gridObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : {};
+                 const newTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : {};
+                 const newObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : {};
+
+                 Object.keys(newTiles).forEach(key => confirmedModifications[vehicleId].push(`${key}:gridTiles`));
+                 Object.keys(newObjects).forEach(key => confirmedModifications[vehicleId].push(`${key}:gridObjects`));
+
+                 vehicle.gridTiles = newTiles;
+                 vehicle.gridObjects = newObjects;
                  vehicle.doorLocation = data.doorLocation ?? vehicle.doorLocation;
                  vehicle.pilotSeatLocation = data.pilotSeatLocation ?? vehicle.pilotSeatLocation;
-                 // --- END NEW ---
 
                 // Recalculate stats based on initial modules received
                 if (vehicle.recalculateStatsFromModules) {
@@ -195,15 +196,42 @@ export default class NetworkManager {
                  vehicle.passengers = data.passengers ?? [];
                  vehicle.modules = data.modules ?? [];
 
-                 // --- NEW: Sync grid properties ---
                  vehicle.gridWidth = data.gridWidth ?? vehicle.gridWidth;
                  vehicle.gridHeight = data.gridHeight ?? vehicle.gridHeight;
-                 // Ensure gridTiles and gridObjects are objects, not null/undefined
-                 vehicle.gridTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : vehicle.gridTiles;
-                 vehicle.gridObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : vehicle.gridObjects;
+
+                 const newTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : {};
+                 const currentTiles = vehicle.gridTiles || {};
+                 Object.keys(newTiles).forEach(key => {
+                     if (currentTiles[key] !== newTiles[key]) { 
+                         currentTiles[key] = newTiles[key];
+                         confirmedModifications[vehicleId].push(`${key}:gridTiles`); 
+                     }
+                 });
+                 Object.keys(currentTiles).forEach(key => {
+                     if (!(key in newTiles)) {
+                         delete currentTiles[key];
+                         confirmedModifications[vehicleId].push(`${key}:gridTiles`); 
+                     }
+                 });
+                 vehicle.gridTiles = currentTiles; 
+
+                 const newObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : {};
+                 const currentObjects = vehicle.gridObjects || {};
+                 Object.keys(newObjects).forEach(key => {
+                     if (currentObjects[key] !== newObjects[key]) { 
+                         currentObjects[key] = newObjects[key];
+                         confirmedModifications[vehicleId].push(`${key}:gridObjects`); 
+                     }
+                 });
+                 Object.keys(currentObjects).forEach(key => {
+                     if (!(key in newObjects)) {
+                         delete currentObjects[key];
+                         confirmedModifications[vehicleId].push(`${key}:gridObjects`); 
+                     }
+                 });
+                 vehicle.gridObjects = currentObjects; 
                  vehicle.doorLocation = data.doorLocation ?? vehicle.doorLocation;
                  vehicle.pilotSeatLocation = data.pilotSeatLocation ?? vehicle.pilotSeatLocation;
-                 // --- END NEW ---
 
                  // Recalculate stats ONLY if modules changed or if maxHealth isn't matching
                  const vehicleConfig = this.game.config.VEHICLE_TYPES.find(v => v.id === data.vehicleType);
@@ -228,6 +256,14 @@ export default class NetworkManager {
                  this.game.debug.log(`[SyncVehicles] Removing local vehicle ${localVehicle.id} (no longer in network state)`);
                  this.game.entities.remove(localVehicle.id);
              }
+         }
+
+         if (this.game.ui?.baseBuilding?.buildingManager?.confirmModifications) {
+            for (const vehicleId in confirmedModifications) {
+                if (confirmedModifications[vehicleId].length > 0) {
+                    this.game.ui.baseBuilding.buildingManager.confirmModifications(vehicleId, confirmedModifications[vehicleId]);
+                }
+            }
          }
     }
 
@@ -327,7 +363,6 @@ export default class NetworkManager {
 
     updateRoomState(stateData) {
         if (this.game.isGuestMode || !this.connected || !this.room) return;
-        // this.game.debug.log(`Sending updateRoomState:`, JSON.parse(JSON.stringify(stateData)));
         this.room.updateRoomState(stateData);
     }
 
