@@ -34,10 +34,37 @@ export default class HUD {
             this.healthElement.style.color = player.health / player.maxHealth < 0.3 ? 'var(--ui-accent)' : 'var(--ui-text)';
         }
 
-        // Update Position
+        // Update Position - Conditional based on player state
         if (this.positionElement) {
-            const posText = `Position: (${Math.floor(player.x)}, ${Math.floor(player.y)})`;
-             if (this.positionElement.textContent !== posText) {
+            let posX = 0;
+            let posY = 0;
+            let posText = '';
+
+            if (player.playerState === 'Overworld') {
+                 posX = Math.floor(player.x);
+                 posY = Math.floor(player.y);
+                 posText = `Position: (${posX}, ${posY})`;
+            } else if (player.playerState === 'Interior' || player.playerState === 'Piloting' || player.playerState === 'Building') {
+                 const vehicleId = player.currentVehicleId;
+                 const vehicle = vehicleId ? this.game.entities.get(vehicleId) : null;
+                 if (vehicle) {
+                     posX = Math.floor(vehicle.x);
+                     posY = Math.floor(vehicle.y);
+                     posText = `Position: (${posX}, ${posY}) [V]`; // Indicate vehicle position
+                 } else {
+                     // Fallback if vehicle data not found while inside
+                     posX = Math.floor(player.x); // Show player's last known world pos
+                     posY = Math.floor(player.y);
+                     posText = `Position: (${posX}, ${posY}) [V?]`;
+                 }
+            } else {
+                 // Fallback for unknown states
+                 posX = Math.floor(player.x);
+                 posY = Math.floor(player.y);
+                 posText = `Position: (${posX}, ${posY}) [?]`;
+            }
+
+            if (this.positionElement.textContent !== posText) {
                 this.positionElement.textContent = posText;
             }
         }
