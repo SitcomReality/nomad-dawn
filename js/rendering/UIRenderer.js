@@ -74,8 +74,9 @@ export default class UIRenderer {
             debugHTML += '<hr><strong>Lighting:</strong>';
             debugHTML += `<div>Time: ${(light.timeOfDay * 24).toFixed(2)} hr</div>`;
             debugHTML += `<div>Ambient: ${light.ambientLight.toFixed(2)}</div>`;
-            debugHTML += `<div>Shadow Dir: (${light.shadowDirection.x.toFixed(2)}, ${light.shadowDirection.y.toFixed(2)})</div>`;
-            debugHTML += `<div>Shadow Len: ${light.shadowLength.toFixed(2)}</div>`;
+            debugHTML += `<div>Shadow H Offset: ${light.shadowHorizontalOffsetFactor.toFixed(2)}</div>`;
+            debugHTML += `<div>Shadow V Offset: ${light.shadowVerticalOffsetFactor.toFixed(2)}</div>`;
+            debugHTML += `<div>Shadow Visibility: ${light.shadowVisibility.toFixed(2)}</div>`; 
             debugHTML += `<div>Light RGB: (${light.lightColor.r},${light.lightColor.g},${light.lightColor.b})</div>`;
         }
 
