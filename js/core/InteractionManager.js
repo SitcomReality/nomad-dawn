@@ -1,3 +1,5 @@
+import ResourceCollectionManager from './ResourceCollectionManager.js';
+
 export default class InteractionManager {
     constructor(game) {
         this.game = game;
@@ -5,8 +7,8 @@ export default class InteractionManager {
         this.lastInteractionTime = 0;
         this.resourceCheckRadius = 40; // Radius to check for resources when pressing 'E'
         
-        // Import ResourceCollectionManager to handle collection logic
-        this.resourceManager = new (import('./ResourceCollectionManager.js').default)(game);
+        // Create ResourceCollectionManager instance properly
+        this.resourceManager = new ResourceCollectionManager(game);
     }
 
     handleInput(currentTime) {
