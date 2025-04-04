@@ -1,4 +1,5 @@
 import MovementController from '../core/MovementController.js';
+import LightSource from '../lighting/LightSource.js'; 
 
 export default class Player {
     constructor(id, game) {
@@ -7,7 +8,7 @@ export default class Player {
 
         // Basic properties
         this.type = 'player';
-        this.name = 'Player'; // Will be updated with network username
+        this.name = 'Player'; 
         this.x = 0;
         this.y = 0;
         this.angle = 0;
@@ -15,7 +16,7 @@ export default class Player {
         this.maxSpeed = 200;
         this.acceleration = 200;
         this.deceleration = 300;
-        this.rotationSpeed = 3; // radians per second
+        this.rotationSpeed = 3; 
         this.size = 20;
 
         // Game stats
@@ -28,19 +29,14 @@ export default class Player {
         };
 
         // Vehicle / base properties
-        // this.vehicleId = null; // Deprecated, use playerState and currentVehicleId
-        // this.insideVehicle = false; // Deprecated
+        this.playerState = 'Overworld'; 
+        this.currentVehicleId = null; 
+        this.gridX = 0; 
+        this.gridY = 0; 
+        this.interiorMoveSpeed = 5; 
 
-        // Vehicle Interior State
-        this.playerState = 'Overworld'; // 'Overworld' | 'Building' | 'Interior' | 'Piloting'
-        this.currentVehicleId = null; // ID of the vehicle the player is interacting with/inside
-        this.gridX = 0; // Player's grid X position when in 'Interior' state
-        this.gridY = 0; // Player's grid Y position when in 'Interior' state
-        this.interiorMoveSpeed = 5; // Grid units per second
-
-        // --- NEW: Light Source Tracking ---
-        this.lightSourceId = null; // ID of the light source attached to the player (e.g., torch)
-        // --- END NEW ---
+        this.lightSourceId = null; 
+        this.createPersonalLightSource(); 
 
         // Equipment
         this.equipment = {
@@ -52,8 +48,8 @@ export default class Player {
         // Collision properties
         this.radius = this.size / 2;
         this.mass = 10;
-        this.collidesWith = this.collidesWith; // Reference the method for CollisionManager
-        this.onCollision = this.onCollision; // Reference the method for CollisionManager
+        this.collidesWith = this.collidesWith; 
+        this.onCollision = this.onCollision; 
 
         // Network state tracking
         this._lastNetworkState = this.getNetworkState();
@@ -61,6 +57,35 @@ export default class Player {
 
         // Add movement controller
         this.movementController = new MovementController();
+    }
+
+    createPersonalLightSource() {
+        if (!this.game?.entities || this.lightSourceId) {
+            return; 
+        }
+
+        const lightId = `playerlight-${this.id}`;
+        const lightOptions = {
+            x: this.x,
+            y: this.y,
+            color: { r: 255, g: 230, b: 180 }, 
+            intensity: 0.8,
+            range: 250, 
+            ownerId: this.id 
+        };
+
+        try {
+            const lightSource = new LightSource(lightId, lightOptions);
+            const addedLight = this.game.entities.add(lightSource);
+            if (addedLight) {
+                this.lightSourceId = lightId;
+                this.game.debug.log(`[Player ${this.id}] Created personal light source: ${lightId}`);
+            } else {
+                this.game.debug.error(`[Player ${this.id}] Failed to add personal light source to EntityManager.`);
+            }
+        } catch (error) {
+            this.game.debug.error(`[Player ${this.id}] Error creating LightSource:`, error);
+        }
     }
 
     update(deltaTime, input) {
@@ -135,7 +160,6 @@ export default class Player {
     }
 
     normalizeAngle(angle) {
-        // Normalize angle to be between -PI and PI
         while (angle > Math.PI) angle -= 2 * Math.PI;
         while (angle < -Math.PI) angle += 2 * Math.PI;
         return angle;
@@ -144,9 +168,6 @@ export default class Player {
     takeDamage(amount) {
         this.health = Math.max(0, this.health - amount);
         this._stateChanged = true;
-
-        // Trigger damage effect
-        // this.game.renderer.createEffect('damage', this.x, this.y);
 
         return this.health;
     }
@@ -157,14 +178,12 @@ export default class Player {
         return this.health;
     }
 
-    // Adds resource locally and flags state change
     addResource(type, amount) {
         if (this.resources[type] !== undefined) {
             this.resources[type] += amount;
-            this._stateChanged = true; // Mark state as changed when resources are added
+            this._stateChanged = true; 
             return true;
         }
-         // Add resource even if type is not pre-defined
          this.resources[type] = amount;
          this._stateChanged = true;
          this.game.debug.log(`Player ${this.id} added new resource type '${type}' with amount ${amount}`);
@@ -193,7 +212,7 @@ export default class Player {
             for (const [stat, value] of Object.entries(item.effect)) {
                 if (stat === 'maxHealth') {
                     this.maxHealth -= value;
-                    this.health = Math.min(this.health, this.maxHealth); // Cap health
+                    this.health = Math.min(this.health, this.maxHealth); 
                 }
             }
         }
@@ -213,7 +232,7 @@ export default class Player {
     }
 
     onCollision(other) {
-        if (!other || this.playerState !== 'Overworld') return; // Only handle overworld collisions
+        if (!other || this.playerState !== 'Overworld') return; 
 
         if ((other.type === 'resource' || other.type === 'feature') && other.collides === true) {
             const radiusA = this.radius;
@@ -238,7 +257,6 @@ export default class Player {
             return;
         }
 
-        // Existing collision logic for other players
         if (other.type === 'player') {
             const radiusA = this.radius;
             const radiusB = (other.radius || other.size / 2 || 0);
@@ -297,8 +315,6 @@ export default class Player {
             currentVehicleId: this.currentVehicleId,
             gridX: this.gridX,
             gridY: this.gridY,
-            // Add lightSourceId if needed for network sync later
-            // lightSourceId: this.lightSourceId
         };
     }
 

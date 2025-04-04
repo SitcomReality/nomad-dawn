@@ -31,10 +31,10 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 
 ---
 
-**Phase 4: Adding Light Sources (NEXT)**
+**Phase 4: Adding Light Sources (Step 11 COMPLETE, Step 12 NEXT)**
 
-11. Modify relevant systems (e.g., `Player` for torches, `Vehicle` for headlights, `VehicleBuildingManager` for placeable lights) to create/destroy `LightSource` entities and add/remove them via `EntityManager`.
-12. Ensure `LightSource` positions are updated correctly if attached to moving entities (e.g., in `LightSource.update` or `EntityManager.update`).
+11. Modify relevant systems (e.g., `Player` for torches) to create/destroy `LightSource` entities and add/remove them via `EntityManager`. (**COMPLETE - Added player light**)
+12. Ensure `LightSource` positions are updated correctly if attached to moving entities (e.g., in `LightSource.update` or `EntityManager.update`). **(NEXT - Currently handled by `LightSource.update`)**
 
 ---
 

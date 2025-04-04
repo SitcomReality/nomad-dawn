@@ -2,7 +2,7 @@ export default class EntityManager {
     constructor() {
         this.entities = {};
         this.playerEntities = {}; // Maps clientId to player entity
-        this.lightSources = {}; // NEW: Track light sources separately
+        this.lightSources = {}; // Track light sources separately
     }
 
     add(entity) {
@@ -21,7 +21,7 @@ export default class EntityManager {
         // Maintain specific maps for faster lookups by type/ID
         if (entity.type === 'player') {
             this.playerEntities[entity.id] = entity;
-        } else if (entity.type === 'light_source') { // NEW: Handle light sources
+        } else if (entity.type === 'light_source') { // Handle light sources
             this.lightSources[entity.id] = entity;
         }
 
@@ -37,6 +37,12 @@ export default class EntityManager {
     remove(entityId) {
         const entity = this.entities[entityId];
         if (entity) {
+            // --- NEW: Clean up owned lights ---
+            if (entity.type === 'player' || entity.type === 'vehicle') {
+                this.removeOwnedLights(entityId);
+            }
+            // --- END NEW ---
+
             // Log removing vehicles or lights specifically
              if (entity.type === 'vehicle' || entity.type === 'light_source') { // Modified log condition
                  const logger = window.game?.debug || console;
@@ -45,7 +51,7 @@ export default class EntityManager {
             // Clean up specific maps
             if (entity.type === 'player') {
                 delete this.playerEntities[entityId];
-            } else if (entity.type === 'light_source') { // NEW: Handle light sources
+            } else if (entity.type === 'light_source') { // Handle light sources
                  delete this.lightSources[entityId];
             }
             // Remove from the main collection
@@ -53,6 +59,23 @@ export default class EntityManager {
             return true;
         }
         return false;
+    }
+
+    removeOwnedLights(ownerId) {
+        const lightsToRemove = [];
+        for (const lightId in this.lightSources) {
+            if (this.lightSources[lightId]?.ownerId === ownerId) {
+                lightsToRemove.push(lightId);
+            }
+        }
+        if (lightsToRemove.length > 0) {
+             const logger = window.game?.debug || console;
+             logger.log(`[EntityManager] Removing ${lightsToRemove.length} light(s) owned by entity ${ownerId}`);
+             lightsToRemove.forEach(lightId => {
+                // Use the main remove method to ensure proper cleanup
+                this.remove(lightId);
+             });
+        }
     }
 
     get(entityId) {
@@ -77,7 +100,6 @@ export default class EntityManager {
         });
     }
 
-    // NEW: Get light sources within a specific radius
     getLightsInRadius(x, y, radius) {
         const radiusSq = radius * radius;
         const nearbyLights = [];
@@ -121,7 +143,6 @@ export default class EntityManager {
         this.lightSources = {}; // Clear lights too
     }
 
-    // Added localPlayerId to prevent self-update/creation loop
     syncFromNetworkPresence(presenceData, localPlayerId) {
         const presentIds = new Set(Object.keys(presenceData));
 
@@ -184,7 +205,11 @@ export default class EntityManager {
                      }
                  };
 
-                this.add(entity); // Add the fully configured remote player
+                 const added = this.add(entity); // Add the fully configured remote player
+                 if (added && added.createPersonalLightSource) {
+                    added.createPersonalLightSource(); // Create light for remote player too
+                 }
+
             } else {
                 // Update existing remote player entity
                  entity._targetX = data.x ?? entity._targetX;
@@ -216,7 +241,8 @@ export default class EntityManager {
         const currentRemotePlayers = Object.keys(this.playerEntities);
         for (const clientId of currentRemotePlayers) {
             if (clientId !== localPlayerId && !presentIds.has(clientId)) {
-                this.remove(clientId);
+                 // Use the main remove method to ensure owned lights are cleaned up
+                 this.remove(clientId);
             }
         }
     }
