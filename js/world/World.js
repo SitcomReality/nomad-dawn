@@ -17,6 +17,7 @@ export default class World {
         // Setup noise generator (passed from Game)
         this.noiseFunction = options.noiseFunction || ((x, y) => {
             // Simple fallback if noise library not available
+            console.warn("Noise function not provided to World, using fallback.");
             const value = Math.sin(x * 0.1) * Math.cos(y * 0.1);
             return value * 0.5;
         });
@@ -30,31 +31,27 @@ export default class World {
         this.featureGenerator = new FeatureGenerator(this);
 
         // Resource deposits - maintained for network sync
-        this.resources = {};
-        this.resourceOverrides = {};
-
+        this.resources = {}; // Holds the state of specific resource nodes (e.g., collected)
     }
 
     async initialize() {
         // Generate initial world state (spawn area)
         await this.generateSpawnArea();
-
         return true;
     }
 
     async generateSpawnArea() {
         // Generate chunks around (0,0) for initial spawn area
-        const spawnRadius = 1000;
-
         // Use chunk manager to load chunks around spawn point
         await this.chunkManager.loadChunksAroundPosition(0, 0);
-
         return true;
     }
 
-    getNoise(x, y, seed = 0) {
-        // Use the injected noise function
-        return this.noiseFunction(x + seed, y + seed) * 0.5 + 0.5;
+    getNoise(x, y, seedOffset = 0) {
+        // Use the injected noise function. Add seedOffset for variety if needed.
+        // noisejs simplex2 returns values between -1 and 1. Normalize to 0-1.
+        const noiseVal = this.noiseFunction(x + seedOffset, y + seedOffset);
+        return (noiseVal + 1) / 2;
     }
 
     getBiome(height, moisture) {
@@ -98,8 +95,12 @@ export default class World {
     syncFromNetworkState(roomState) {
         // Update world state from network
         if (roomState.resources) {
-            this.resourceOverrides = roomState.resources || {};
-            // TODO: Apply these overrides to the generated resources in chunks
+             // Directly update the `resources` state from the network
+             // This object now represents the *overrides* to the generated state
+             // (e.g., { "resource-id-1": null, "resource-id-2": { amount: 30 } })
+             // A null value means it's collected/removed.
+             this.resources = roomState.resources || {};
+             // TODO: We might need to trigger a visual update if a resource visible on screen gets updated.
         }
 
         if (roomState.worldObjects) {
@@ -112,7 +113,14 @@ export default class World {
         }
     }
 
+    isResourceActive(resourceId) {
+        // If the resource ID exists as a key in `this.resources` and its value is null,
+        // it means it has been collected/removed according to the network state.
+        return !(this.resources[resourceId] === null);
+    }
+
     findResourceById(resourceId) {
+        // This might need refinement later if resources aren't always loaded
         for (const chunkId in this.chunkManager.chunks) {
             const chunk = this.chunkManager.chunks[chunkId];
             if (chunk && chunk.resources) {

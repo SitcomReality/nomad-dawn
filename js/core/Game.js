@@ -16,8 +16,6 @@ import PerformanceMonitor from './PerformanceMonitor.js'; // NEW
 window.Player = Player;
 // Make Vehicle class accessible if needed by NetworkManager sync (consider better dependency management later)
 window.Vehicle = Vehicle;
-// Import the specific noise function needed
-import { simplex2 } from 'perlin';
 
 export default class Game {
     constructor(options) {
@@ -52,8 +50,8 @@ export default class Game {
         // Player reference (potentially null in guest mode)
         this.player = null;
         this.world = null; // Initialize world as null
-        // Store the noise function obtained from import
-        this.noiseFunction = simplex2;
+        this.noiseGenerator = null;
+        this.noiseFunction = null; // Will be assigned after noiseGenerator is seeded
 
         // Seed Handling
         this.worldSeed = null;
@@ -230,12 +228,18 @@ export default class Game {
                 this.debug.log(`World seed obtained: ${this.worldSeed}`);
             }
 
+            if (typeof Noise === 'undefined') {
+                throw new Error("Noise library (noisejs) not loaded.");
+            }
+            this.noiseGenerator = new Noise(this.worldSeed);
+            this.noiseFunction = this.noiseGenerator.simplex2.bind(this.noiseGenerator); // Bind context
+            this.debug.log(`Noise generator initialized with seed ${this.worldSeed}`);
+
             this.world = new World({
                 seed: this.worldSeed,
                 size: this.config.WORLD_SIZE,
                 chunkSize: this.config.CHUNK_SIZE,
                 maxLoadDistance: this.config.MAX_LOAD_DISTANCE,
-                // Pass the specific noise function
                 noiseFunction: this.noiseFunction,
                 debug: this.debug,
             });
