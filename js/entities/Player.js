@@ -451,5 +451,3 @@ export default class Player {
         this._stateChanged = false;
     }
 }
-```
-</file-path>
