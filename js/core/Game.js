@@ -11,7 +11,8 @@ import Vehicle from '../entities/Vehicle.js'; // Needed for initial spawn
 import CollisionManager from './CollisionManager.js';
 import InteractionManager from './InteractionManager.js';
 import PerformanceMonitor from './PerformanceMonitor.js';
-import WorldObjectManager from '../world/WorldObjectManager.js'; // NEW
+import WorldObjectManager from '../world/WorldObjectManager.js';
+import LightManager from '../lighting/LightManager.js'; // NEW
 
 // Make Player class globally accessible for EntityManager remote player creation
 window.Player = Player;
@@ -44,7 +45,8 @@ export default class Game {
         this.collisions = new CollisionManager(this);
         this.interactions = new InteractionManager(this);
         this.performance = new PerformanceMonitor(this);
-        this.worldObjectManager = new WorldObjectManager(this); // NEW
+        this.worldObjectManager = new WorldObjectManager(this);
+        this.lightManager = new LightManager(this); // NEW: Instantiate LightManager
 
         // Make config available to the game
         this.config = Config;
@@ -320,6 +322,17 @@ export default class Game {
             }
         }
 
+        const ambientFactor = Math.cos((this.timeOfDay - 0.5) * Math.PI * 2) * 0.5 + 0.5; // 0 at midnight, 1 at noon
+        const ambientIntensity = Math.max(0.1, ambientFactor); // Min ambient
+        const baseAmbient = { r: 50, g: 50, b: 70 }; // Base night color
+        const dayAmbient = { r: 200, g: 200, b: 220 }; // Brighter day color
+        const currentAmbient = {
+            r: Math.floor(baseAmbient.r + (dayAmbient.r - baseAmbient.r) * ambientIntensity),
+            g: Math.floor(baseAmbient.g + (dayAmbient.g - baseAmbient.g) * ambientIntensity),
+            b: Math.floor(baseAmbient.b + (dayAmbient.b - baseAmbient.b) * ambientIntensity),
+        };
+        this.lightManager.setGlobalAmbientLight(currentAmbient);
+
         const cameraCenterX = this.player ? this.player.x : 0;
         const cameraCenterY = this.player ? this.player.y : 0;
         this.world?.update(deltaTime, cameraCenterX, cameraCenterY);
@@ -373,7 +386,6 @@ export default class Game {
         if (!this.renderer) return;
 
         this.renderer.lastFrameTime = this.lastFrameTime;
-        this.renderer.setTimeOfDay(this.timeOfDay);
         this.renderer.clear();
 
         if (this.player?.playerState === 'Interior') {

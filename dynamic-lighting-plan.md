@@ -1,151 +1,60 @@
-// js/lighting/LightSource.js
-class LightSource {
-    constructor(id, x, y, color, intensity, range, type = 'point', ownerId = null) {
-        this.id = id;
-        this.x = x;
-        this.y = y;
-        this.color = color; // {r, g, b}
-        this.intensity = intensity; // 0-1
-        this.range = range; // world units
-        this.type = type;
-        this.ownerId = ownerId;
-    }
+# Dynamic Lighting System Plan
 
-    update(deltaTime) {
-        // Basic update method, might be empty initially
-    }
-}
+This plan outlines the steps to implement a dynamic lighting system, allowing objects like torches and headlights to cast light and potentially shadows.
 
-// js/entities/EntityManager.js
-class EntityManager {
-    constructor() {
-        // ...
-        this.lightSources = {};
-    }
+**Constraints:** Minimize changes to existing files per step, especially those identified as being at maximum length. Prefer creating new files over complex modifications to long files.
 
-    add(entity) {
-        // ...
-        if (entity instanceof LightSource) {
-            this.lightSources[entity.id] = entity;
-        }
-    }
+---
 
-    remove(entity) {
-        // ...
-        if (entity instanceof LightSource) {
-            delete this.lightSources[entity.id];
-        }
-    }
+**Phase 1: Basic Light Source Data (COMPLETE)**
 
-    getLightsInRadius(x, y, radius) {
-        const lights = [];
-        for (const light of Object.values(this.lightSources)) {
-            const distance = Math.sqrt((light.x - x) ** 2 + (light.y - y) ** 2);
-            if (distance <= radius) {
-                lights.push(light);
-            }
-        }
-        return lights;
-    }
-}
+1.  **`LightSource.js`:** Define the `LightSource` class with properties like `id`, `x`, `y`, `color`, `intensity`, `range`, `type`, `ownerId`. **(COMPLETE)**
+2.  **`EntityManager.js`:** Update to track `lightSources` separately. Add `getLightsInRadius(x, y, radius)` method. **(COMPLETE)**
+3.  **`Player.js` / `Vehicle.js`:** Add properties to track attached light source IDs (e.g., `player.lightSourceId`, `vehicle.headlightSourceIds`). **(COMPLETE)**
 
-// js/entities/Player.js
-class Player {
-    constructor() {
-        // ...
-        this.lightSourceId = null;
-    }
-}
+---
 
-// js/entities/Vehicle.js
-class Vehicle {
-    constructor() {
-        // ...
-        this.headlightSourceIds = [];
-    }
-}
+**Phase 2: Light Calculation (COMPLETE)**
 
-// js/core/Game.js
-class Game {
-    constructor() {
-        // ...
-        this.lightManager = new LightManager();
-    }
-}
+4.  **`Game.js`:** Instantiate a new `LightManager` class. **(COMPLETE)**
+5.  **`LightManager.js`:** Create the `LightManager` class. Implement `calculateLightAt(x, y)` method that finds nearby lights via `EntityManager` and calculates the combined light color/intensity at that point (considering range and falloff). Include a concept of global ambient light. **(COMPLETE)**
 
-// js/lighting/LightManager.js
-class LightManager {
-    constructor() {
-    }
+---
 
-    calculateLightAt(x, y) {
-        const lights = entityManager.getLightsInRadius(x, y, 10); // default radius
-        let effectiveColor = { r: 0, g: 0, b: 0 };
-        let effectiveIntensity = 0;
-        for (const light of lights) {
-            const distance = Math.sqrt((light.x - x) ** 2 + (light.y - y) ** 2);
-            const intensity = light.intensity * (1 - distance / light.range);
-            if (intensity > effectiveIntensity) {
-                effectiveIntensity = intensity;
-                effectiveColor = light.color;
-            }
-        }
-        return { color: effectiveColor, intensity: effectiveIntensity };
-    }
-}
+**Phase 3: Applying Light to Rendering (NEXT)**
 
-// js/rendering/Renderer.js
-class Renderer {
-    constructor() {
-        // ...
-        this.lightManager = game.lightManager;
-    }
+6.  **`Renderer.js`:**
+    *   Remove the old `lightingSystem` properties and methods (`setTimeOfDay`, `updateLightingSystem`).
+    *   Potentially keep a reference to `game.lightManager` if needed directly, but ideally, sub-renderers get it from `game`.
+7.  **`WorldRenderer.js`:**
+    *   Modify `renderChunkTerrain` to use `game.lightManager.calculateLightAt(chunk.x, chunk.y)` (or a representative point) to determine the light affecting the terrain color.
+    *   Remove direct usage of the old `renderer.lightingSystem`.
+    *   Modify `adjustColorForLighting` to take the calculated light color/intensity instead of the old properties.
+8.  **`WorldObjectRenderer.js`:**
+    *   Modify `render` to get light color/intensity using `game.lightManager.calculateLightAt(obj.x, obj.y)`.
+    *   Pass the calculated light color/intensity to `adjustColorForLighting`.
+    *   Remove direct usage of the old `renderer.lightingSystem` for tinting/shadows. (Shadows will be removed/reworked later).
+9.  **`EntityRenderer.js`:**
+    *   Modify `renderEntity` to get light color/intensity using `game.lightManager.calculateLightAt(entity.x, entity.y)`.
+    *   Modify `renderEntityOverlays` (if necessary, e.g., for health bars) or base entity rendering to use the calculated light.
+    *   Remove direct usage of the old `renderer.lightingSystem`. (Shadows will be removed/reworked later).
+10. **`SpriteManager.js`:**
+    *   Update `getTintedSprite` method signature to accept the calculated light color object `{r, g, b}` and potentially an intensity value (instead of `ambientLight`). Adjust the tinting logic and cache key accordingly.
 
-    // Remove old lighting system properties and methods
-    // ...
-}
+---
 
-// js/rendering/WorldObjectRenderer.js
-class WorldObjectRenderer {
-    constructor() {
-        // ...
-    }
+**Phase 4: Adding Light Sources**
 
-    adjustColorForLighting(obj) {
-        const light = game.lightManager.calculateLightAt(obj.x, obj.y);
-        const spriteOptions = {
-            // ...
-            tint: light.color,
-        };
-        return spriteOptions;
-    }
-}
+11. Modify relevant systems (e.g., `Player` for torches, `Vehicle` for headlights, `VehicleBuildingManager` for placeable lights) to create/destroy `LightSource` entities and add/remove them via `EntityManager`.
+12. Ensure `LightSource` positions are updated correctly if attached to moving entities (e.g., in `LightSource.update` or `EntityManager.update`).
 
-// js/rendering/EntityRenderer.js
-class EntityRenderer {
-    constructor() {
-        // ...
-    }
+---
 
-    adjustColorForLighting(entity) {
-        const light = game.lightManager.calculateLightAt(entity.x, entity.y);
-        const spriteOptions = {
-            // ...
-            tint: light.color,
-        };
-        return spriteOptions;
-    }
-}
+**Phase 5: Shadow Implementation (Advanced)**
 
-// js/rendering/SpriteManager.js
-class SpriteManager {
-    constructor() {
-        // ...
-    }
+13. Research and choose a shadow casting algorithm suitable for 2D (e.g., shadow mapping using an offscreen buffer, 2D raycasting).
+14. Implement shadow calculation in `LightManager` or a dedicated `ShadowManager`.
+15. Modify renderers (`WorldObjectRenderer`, `EntityRenderer`) to draw calculated shadows based on light source positions and occluder geometry.
 
-    getTintedSprite(sprite, effectiveLightColor, effectiveIntensity) {
-        // ...
-        const cacheKey = `tinted-${sprite}-${effectiveLightColor}-${effectiveIntensity}`;
-        // ...
-    }
-}
+---
+
