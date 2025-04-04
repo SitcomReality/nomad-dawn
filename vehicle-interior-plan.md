@@ -43,13 +43,13 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
     *   Render grid cells, existing tiles/objects.
     *   Add visual cues for placing/removing objects (hover effects, placement previews).
     *   Needs methods like `show()`, `hide()`, `setVehicle(vehicle)`.
-2.  **`VehicleBuildingManager.js` (TODO - Next Step):**
+2.  **`VehicleBuildingManager.js` (COMPLETE):**
     *   Create this new file.
     *   Handles the logic for the building UI.
     *   Manages tool selection (place tile, place object, remove).
     *   Handles clicks on the `VehicleBuildingRenderer`'s grid.
     *   Generates `updateRoomState` calls to modify `vehicle.gridTiles` and `vehicle.gridObjects` based on player actions.
-3.  **`BaseBuildingUI.js` (TODO):**
+3.  **`BaseBuildingUI.js` (TODO - Next Step):**
     *   Modify `show`/`hide` to potentially instantiate/destroy or show/hide the `VehicleBuildingRenderer` and `VehicleBuildingManager`.
     *   Connect UI elements (tool selection buttons) to the `VehicleBuildingManager`.
     *   Change the `playerState` to 'Building' when this UI is opened.
