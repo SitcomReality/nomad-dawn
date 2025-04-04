@@ -147,6 +147,10 @@ export default class InputManager {
     getMovementDirection() {
         const direction = { x: 0, y: 0 };
         
+        // For use in interior movement and other contexts
+        // Direction is now relative to screen, not to entity's facing
+        // Note: This is no longer used for Overworld player movement or vehicle piloting
+        
         // Horizontal movement
         if (this.isKeyDown('KeyA') || this.isKeyDown('ArrowLeft')) {
             direction.x = -1;
@@ -170,4 +174,3 @@ export default class InputManager {
         this.mouseWheel = 0;
     }
 }
-

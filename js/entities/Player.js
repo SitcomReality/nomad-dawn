@@ -1,3 +1,5 @@
+import MovementController from '../core/MovementController.js';
+
 export default class Player {
     constructor(id, game) {
         this.id = id;
@@ -55,6 +57,9 @@ export default class Player {
         // Collection cooldown to prevent spamming requests
         this.lastCollectionTime = 0;
         this.collectionCooldown = 500; // milliseconds
+        
+        // Add movement controller
+        this.movementController = new MovementController();
     }
 
     update(deltaTime, input) {
@@ -71,30 +76,8 @@ export default class Player {
 
         // --- Update logic based on playerState ---
         if (this.playerState === 'Overworld') {
-             // Apply movement based on directional input
-            const direction = input.getMovementDirection();
-
-            if (direction.x !== 0 || direction.y !== 0) {
-                // Calculate target angle based on direction
-                const targetAngle = Math.atan2(direction.y, direction.x);
-
-                // Smoothly rotate towards target angle
-                const angleDiff = this.normalizeAngle(targetAngle - this.angle);
-                this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.rotationSpeed * deltaTime);
-
-                // Accelerate
-                this.speed = Math.min(this.speed + this.acceleration * deltaTime, this.maxSpeed);
-            } else {
-                // Decelerate when no input
-                this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
-            }
-
-            // Apply movement
-            if (this.speed > 0) {
-                this.x += Math.cos(this.angle) * this.speed * deltaTime;
-                this.y += Math.sin(this.angle) * this.speed * deltaTime;
-            }
-
+             // Use tank-style controls from MovementController
+             this.movementController.updateTankControls(this, input, deltaTime);
         } else if (this.playerState === 'Interior') {
             // Movement within the vehicle grid
              const direction = input.getMovementDirection();

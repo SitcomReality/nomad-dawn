@@ -1,3 +1,5 @@
+import MovementController from '../core/MovementController.js';
+
 export default class Vehicle {
     constructor(id, config, owner) {
         if (!config || typeof config !== 'object') {
@@ -68,6 +70,9 @@ export default class Vehicle {
         // Network state tracking
         this._lastNetworkState = this.getMinimalNetworkState(); 
         this._stateChanged = false;
+
+        // Add movement controller
+        this.movementController = new MovementController();
     }
 
     update(deltaTime, input) {
@@ -91,23 +96,8 @@ export default class Vehicle {
 
         const prevState = { x: this.x, y: this.y, angle: this.angle, speed: this.speed };
 
-        const direction = input.getMovementDirection();
-
-        if (direction.x !== 0 || direction.y !== 0) {
-            const targetAngle = Math.atan2(direction.y, direction.x);
-
-            const angleDiff = this.normalizeAngle(targetAngle - this.angle);
-            this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.rotationSpeed * deltaTime);
-
-            this.speed = Math.min(this.speed + this.acceleration * deltaTime, this.maxSpeed);
-        } else {
-            this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
-        }
-
-        if (this.speed > 0) {
-            this.x += Math.cos(this.angle) * this.speed * deltaTime;
-            this.y += Math.sin(this.angle) * this.speed * deltaTime;
-        }
+        // Use tank-style controls from MovementController
+        this.movementController.updateTankControls(this, input, deltaTime);
 
         if (
             this.x !== prevState.x ||
