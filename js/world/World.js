@@ -32,8 +32,8 @@ export default class World {
         this.featureGenerator = new FeatureGenerator(this);
 
         // Resource deposits - maintained for network sync
-        this.resources = {}; 
-        this.resourceOverrides = {}; 
+        this.resources = {};
+        this.resourceOverrides = {};
 
     }
 
@@ -99,40 +99,24 @@ export default class World {
 
     syncFromNetworkState(roomState) {
         // Update world state from network
-        if (roomState.resources !== undefined) { 
-             // Update the overrides based on the network state.
-             // Null values indicate collected resources.
-             this.resourceOverrides = roomState.resources || {};
-             this.game?.debug?.log(`[World] Synced resource overrides. Count: ${Object.keys(this.resourceOverrides).length}`);
+        if (roomState.resources) {
+            this.resourceOverrides = roomState.resources || {};
+            // TODO: Apply these overrides to the generated resources in chunks
         }
 
         if (roomState.worldObjects) {
             this.updateWorldObjectsFromNetwork(roomState.worldObjects);
         }
 
-        // Sync time of day
-        if (roomState.timeOfDay !== undefined && typeof this.game?.setTimeOfDay === 'function') { 
-            this.game.setTimeOfDay(roomState.timeOfDay);
+        // --- NEW: Sync time of day ---
+        if (roomState.timeOfDay !== undefined && typeof window.game?.setTimeOfDay === 'function') {
+            window.game.setTimeOfDay(roomState.timeOfDay);
         }
-    }
-
-    /**
-     * Checks if a resource is marked as collected (null) in the overrides.
-     * @param {string} resourceId
-     * @returns {boolean} True if the resource is collected, false otherwise.
-     */
-    isResourceCollected(resourceId) {
-        // A resource is considered collected if its entry in overrides is exactly null.
-        // If the ID doesn't exist in overrides, it's not collected (or hasn't been interacted with).
-        return this.resourceOverrides.hasOwnProperty(resourceId) && this.resourceOverrides[resourceId] === null;
+        // --- END NEW ---
     }
 
     findResourceById(resourceId) {
-        // Iterate through all *loaded* chunks to find the resource by ID
         for (const chunkId in this.chunkManager.chunks) {
-            // Only check active/loaded chunks
-            if (!this.chunkManager.isChunkActive(chunkId)) continue;
-
             const chunk = this.chunkManager.chunks[chunkId];
             if (chunk && chunk.resources) {
                 const found = chunk.resources.find(r => r.id === resourceId);

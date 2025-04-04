@@ -4,7 +4,7 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 **Goal:** Ensure all players see the same world features and resources in the same locations, and that collected resources disappear for everyone. Ensure all players experience the same time of day.
 
-**Constraints:** Minimize changes to existing files per step, especially those identified as being at maximum length (`js/ui/InventoryUI.js`, `js/entities/VehicleBuildingManager.js`, `js/entities/Player.js`, `js/rendering/WorldRenderer.js`, `js/ui/BuildingToolPanel.js`, `js/core/Game.js`, `js/core/NetworkManager.js`). Prefer creating new files over complex modifications to long files.
+**Constraints:** Minimize changes to existing files per step, especially those identified as being at maximum length (`js/ui/InventoryUI.js`, `js/entities/VehicleBuildingManager.js`, `js/entities/Player.js`, `js/rendering/WorldRenderer.js`, `js/ui/BuildingToolPanel.js`, `js/core/NetworkManager.js`). Prefer creating new files over complex modifications to long files.
 
 ---
 
@@ -18,12 +18,11 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 **Phase 2: Deterministic Generation per Chunk (COMPLETE)**
 
-*   **Created Seeded RNG Utility:** `utils/SeedableRNG.js`.
-*   **Updated Generators:**
+1.  **Created Seeded RNG Utility:** `utils/SeedableRNG.js`.
+2.  **Updated Generators:**
     *   `FeatureGenerator.generateFeaturesForChunk` now accepts `worldSeed`, creates a chunk-specific `SeedableRNG`, and uses it for placement and variation.
     *   `ResourceGenerator.generateResourcesForChunk` now accepts `worldSeed`, creates chunk-specific `SeedableRNG` instances (separate for common/rare), and uses them for placement and variation.
-*   **Updated World/ChunkManager:** `World` passes its `seed` to `ChunkManager.generateChunk`, which then passes it to the generators.
-*   **Fixed Import:** Corrected `SeedableRNG` import path in `ChunkManager.js`.
+3.  **Updated World/ChunkManager:** `World` passes its `seed` to `ChunkManager.generateChunk`, which then passes it to the generators.
 
 *   *Files modified:* `FeatureGenerator.js`, `ResourceGenerator.js`, `World.js`, `ChunkManager.js`.
 *   *New file:* `utils/SeedableRNG.js`.
@@ -32,11 +31,11 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 **Phase 3: Time of Day Synchronization (COMPLETE)**
 
-*   **Defined `timeOfDay` in RoomState:** Standard field established.
-*   **NetworkManager Time Handling:**
+1.  **Defined `timeOfDay` in RoomState:** Standard field established.
+2.  **NetworkManager Time Handling:**
     *   Modified `subscribeRoomState` callback in `NetworkManager` to call `game.setTimeOfDay(roomState.timeOfDay)`.
     *   Modified `NetworkManager` to handle `connected` and `disconnected` events by calling `game.handlePeersChanged()`.
-*   **Game Time Update:**
+3.  **Game Time Update:**
     *   Added `timeAuthority` flag to `Game`.
     *   Added `determineTimeAuthority` method based on sorted client IDs.
     *   Added `handlePeersChanged` to re-evaluate authority when peers change.
@@ -48,34 +47,31 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 ---
 
-**Phase 4: Resource Tracking in RoomState (COMPLETE)**
+**Phase 4: Resource Tracking in RoomState (NEXT)**
 
-1.  **Defined Resource State:** Established `resources` (`roomState.resources`) mapping `resourceId` to its state (`null` if collected).
+1.  **Define Resource State:**
+    *   Establish `resources` as a standard field within `room.roomState`. This will be an object mapping `resourceId` to its *current* state (e.g., `{ amount: 50 }` or `null` if collected).
 2.  **World State Application:**
-    *   Modified `World.syncFromNetworkState`: Processes `roomState.resources` and stores them in `World.resourceOverrides`.
-    *   Added helper `World.isResourceCollected(resourceId)` to check the overrides.
-3.  **Chunk Manager Handling:** Ensured resources can be found/accessed by ID after generation (`World.findResourceById` searches loaded chunks).
+    *   Modify `World.syncFromNetworkState`: Process `roomState.resources`.
+    *   Create/Modify `World.updateResourcesFromNetwork`: Iterate received `networkResources`, find the corresponding local resource (generated deterministically), and update its state (e.g., mark as collected or change amount).
+3.  **Chunk Manager Handling:** Ensure generated resources can be found/accessed by ID after generation.
 
-*   *Files modified:* `World.js` (existing).
+*   *Files potentially modified:* `World.js` (existing). `NetworkManager.js` might need minor adjustments if it brokers this data flow explicitly (try to avoid modifying).
 
 ---
 
-**Phase 5: Update Collection Logic (NEXT)**
+**Phase 5: Update Collection Logic**
 
 1.  **Refactor Collection:**
-    *   Move the resource collection logic (`requestCollectResource`) out of `Player.js` (which is too long) and into `InteractionManager.js`. *Needs careful implementation to avoid breaking Player state updates.*
-2.  **Modify `InteractionManager.handleOverworldInteraction`:**
-    *   Add logic to check for nearby resources in addition to vehicles.
-    *   If a resource is nearby and 'E' is pressed:
-        *   Check if the resource is already collected using `world.isResourceCollected(resource.id)`.
-        *   If not collected:
-            *   Trigger local visual effect (`renderer.createEffect`).
-            *   Send `updateRoomState({ resources: { [resource.id]: null } })` to mark it collected globally.
-            *   Update player's local resource count (`player.addResource`).
-            *   Send player `presence` update for inventory: `room.updatePresence({ resources: player.resources })`.
-            *   Apply interaction cooldown.
+    *   Move the resource collection logic (`requestCollectResource`) out of `Player.js` (which is too long) and into `InteractionManager.js`.
+2.  **Modify `InteractionManager.requestCollectResource`:**
+    *   When a player collects a resource:
+        *   Trigger local visual effect.
+        *   Send `updateRoomState({ resources: { [resource.id]: null } })`.
+        *   Update player's local resource count.
+        *   Send player `presence` update for inventory: `room.updatePresence({ resources: player.resources })`.
 
-*   *Files potentially modified:* `Player.js` (existing, long - logic removal), `InteractionManager.js` (existing - logic addition). `World.js` (used via `isResourceCollected`).
+*   *Files potentially modified:* `Player.js` (existing, long - logic removal), `InteractionManager.js` (existing - logic addition).
 
 ---
 
@@ -83,8 +79,8 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 1.  **Create `WorldObjectManager`:** New class `js/world/WorldObjectManager.js`.
     *   Holds generated features/resources.
-    *   Receives `roomState.resources` updates (via `World` or directly).
-    *   Provides `getVisibleObjects(area)` method, filtering out collected resources based on `world.isResourceCollected()`.
+    *   Receives `roomState.resources` updates.
+    *   Provides `getVisibleObjects(area)` method, filtering out collected objects based on `roomState` overrides.
 2.  **Refactor `WorldRenderer`:**
     *   Modify `WorldRenderer.renderChunk`: Call `game.worldObjectManager.getVisibleObjects()` instead of iterating `chunk.features`/`resources` directly. Render only returned objects.
 3.  **Integrate `WorldObjectManager`:** Instantiate in `Game.js`, pass `roomState.resources` updates, register generated objects from chunks.
