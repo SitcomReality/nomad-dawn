@@ -34,6 +34,7 @@ export default class Player {
         this.currentVehicleId = null; // ID of the vehicle the player is interacting with/inside
         this.gridX = 0; // Player's grid X position when in 'Interior' state
         this.gridY = 0; // Player's grid Y position when in 'Interior' state
+        this.interiorMoveSpeed = 5; // Grid units per second
         // --- END NEW ---
 
         // Equipment
@@ -57,49 +58,73 @@ export default class Player {
     }
 
     update(deltaTime, input) {
-        // NEW: If player is inside a vehicle (Interior or Piloting), skip overworld movement update.
-        // Grid movement for 'Interior' state will be handled separately or here if needed.
-        if (this.playerState === 'Interior' || this.playerState === 'Piloting') {
-            // If in 'Interior', handle grid-based movement?
-            // TODO: Implement grid movement logic
-            this.speed = 0; // Ensure player doesn't keep moving in overworld coords
-            return;
-        }
-
         if (!input) return;
 
         // Store previous state to detect changes
         const prevState = {
-            x: this.x, y: this.y, angle: this.angle, health: this.health,
+            x: this.x, y: this.y, angle: this.angle, speed: this.speed, health: this.health,
             resources: { ...this.resources }, vehicleId: this.vehicleId,
-            // --- NEW: Track interior state changes ---
             playerState: this.playerState, currentVehicleId: this.currentVehicleId,
             gridX: this.gridX, gridY: this.gridY
-            // --- END NEW ---
         };
+        let stateDidChange = false; // Track changes within this update
 
-        // Apply movement based on directional input
-        const direction = input.getMovementDirection();
+        // --- Update logic based on playerState ---
+        if (this.playerState === 'Overworld') {
+             // Apply movement based on directional input
+            const direction = input.getMovementDirection();
 
-        if (direction.x !== 0 || direction.y !== 0) {
-            // Calculate target angle based on direction
-            const targetAngle = Math.atan2(direction.y, direction.x);
+            if (direction.x !== 0 || direction.y !== 0) {
+                // Calculate target angle based on direction
+                const targetAngle = Math.atan2(direction.y, direction.x);
 
-            // Smoothly rotate towards target angle
-            const angleDiff = this.normalizeAngle(targetAngle - this.angle);
-            this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.rotationSpeed * deltaTime);
+                // Smoothly rotate towards target angle
+                const angleDiff = this.normalizeAngle(targetAngle - this.angle);
+                this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.rotationSpeed * deltaTime);
 
-            // Accelerate
-            this.speed = Math.min(this.speed + this.acceleration * deltaTime, this.maxSpeed);
-        } else {
-            // Decelerate when no input
-            this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
-        }
+                // Accelerate
+                this.speed = Math.min(this.speed + this.acceleration * deltaTime, this.maxSpeed);
+            } else {
+                // Decelerate when no input
+                this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
+            }
 
-        // Apply movement
-        if (this.speed > 0) {
-            this.x += Math.cos(this.angle) * this.speed * deltaTime;
-            this.y += Math.sin(this.angle) * this.speed * deltaTime;
+            // Apply movement
+            if (this.speed > 0) {
+                this.x += Math.cos(this.angle) * this.speed * deltaTime;
+                this.y += Math.sin(this.angle) * this.speed * deltaTime;
+            }
+
+        } else if (this.playerState === 'Interior') {
+            // Movement within the vehicle grid
+             const direction = input.getMovementDirection();
+             if (direction.x !== 0 || direction.y !== 0) {
+                 const moveAmount = this.interiorMoveSpeed * deltaTime;
+                 let nextGridX = this.gridX + direction.x * moveAmount;
+                 let nextGridY = this.gridY + direction.y * moveAmount;
+
+                 // --- Basic Grid Collision (Phase 2) ---
+                 // const vehicle = this.game.entities.get(this.currentVehicleId);
+                 // if (vehicle && vehicle.gridTiles) {
+                 //     const targetTileX = Math.floor(nextGridX);
+                 //     const targetTileY = Math.floor(nextGridY);
+                 //     const tileKey = `${targetTileX},${targetTileY}`;
+                 //     const tileType = vehicle.gridTiles[tileKey];
+                 //     // Example: Check for 'Wall' type collision
+                 //     if (tileType === 'Wall') {
+                 //         // Stop movement towards wall (more sophisticated collision needed later)
+                 //         nextGridX = this.gridX;
+                 //         nextGridY = this.gridY;
+                 //     }
+                 // }
+
+                 // Update grid position (round for now, will need better handling)
+                 this.gridX = nextGridX;
+                 this.gridY = nextGridY;
+             }
+        } else if (this.playerState === 'Piloting' || this.playerState === 'Building') {
+             // No direct player movement input handled here
+             this.speed = 0; // Ensure player speed is zero
         }
 
         // Check for state changes compared to previous state *within this frame*
@@ -107,17 +132,21 @@ export default class Player {
             this.x !== prevState.x ||
             this.y !== prevState.y ||
             this.angle !== prevState.angle ||
-            this.health !== prevState.health || // Check other relevant properties
+            this.speed !== prevState.speed ||
+            this.health !== prevState.health ||
             this.vehicleId !== prevState.vehicleId ||
-            // --- NEW: Check interior state changes ---
             this.playerState !== prevState.playerState ||
             this.currentVehicleId !== prevState.currentVehicleId ||
-            this.gridX !== prevState.gridX ||
+            this.gridX !== prevState.gridX || // Use simple !== check for grid position
             this.gridY !== prevState.gridY ||
-            // --- END NEW ---
-            JSON.stringify(this.resources) !== JSON.stringify(prevState.resources) // Simple resource check
+            JSON.stringify(this.resources) !== JSON.stringify(prevState.resources)
         ) {
-            this._stateChanged = true;
+            stateDidChange = true;
+        }
+
+        // If internal logic didn't set _stateChanged, set it based on comparison
+        if (stateDidChange) {
+             this._stateChanged = true;
         }
     }
 
@@ -285,35 +314,17 @@ export default class Player {
         this._stateChanged = true; // Ensure state is marked changed after collection attempt
     }
 
-    // Old enter/exit vehicle logic, will be replaced by new state transitions
+    // Deprecate old enter/exit vehicle logic
     enterVehicle(vehicle) {
-        // Deprecated in favor of playerState transitions
-        if (!vehicle || this.insideVehicle) return false;
-
-        this.vehicleId = vehicle.id;
-        this.insideVehicle = true;
-        this._stateChanged = true;
-
-        // Activate vehicle controller
-        vehicle.setDriver(this.id);
-
-        return true;
+        console.warn("Player.enterVehicle is deprecated. Use state transitions.");
+        // Implement state transition logic here or rely on Game class handler
+        return false; // Indicate failure or handle transition
     }
 
     exitVehicle() {
-         // Deprecated in favor of playerState transitions
-        if (!this.insideVehicle) return false;
-
-        const vehicle = this.game.entities.get(this.vehicleId);
-        if (vehicle) {
-            vehicle.removeDriver();
-        }
-
-        this.vehicleId = null;
-        this.insideVehicle = false;
-        this._stateChanged = true;
-
-        return true;
+        console.warn("Player.exitVehicle is deprecated. Use state transitions.");
+        // Implement state transition logic here or rely on Game class handler
+        return false; // Indicate failure or handle transition
     }
 
     render(ctx, x, y, size) {
@@ -347,23 +358,21 @@ export default class Player {
     getNetworkState() {
         // Return the data needed for network presence updates
         return {
-            // Basic movement/state
+            // Basic movement/state (only relevant for Overworld)
             x: this.x,
             y: this.y,
             angle: this.angle,
-            speed: this.speed,
+            speed: this.speed, // Send speed even if 0
+            // Common state
             health: this.health,
             // Inventory/status
             resources: { ...this.resources },
             equipment: { ...this.equipment },
-            // Vehicle interaction (old system, might be reused/adapted)
-            vehicleId: this.vehicleId,
-            // --- NEW: Interior State ---
+            // Vehicle interaction / Interior State
             playerState: this.playerState,
             currentVehicleId: this.currentVehicleId,
             gridX: this.gridX,
             gridY: this.gridY,
-            // --- END NEW ---
         };
     }
 
@@ -372,39 +381,42 @@ export default class Player {
         // Always return true if the internal flag is set
         if (this._stateChanged) return true;
 
-        // Fallback: If flag wasn't set, do a quick check just in case
+        // Fallback: If flag wasn't set, do a comparison just in case
         const currentState = this.getNetworkState();
-        const lastState = this._lastNetworkState;
+        const lastState = this._lastNetworkState || {}; // Ensure lastState is an object
 
-        const positionThresholdSq = 1*1; // Use squared distance
-        const dx = currentState.x - lastState.x;
-        const dy = currentState.y - lastState.y;
-        const positionChanged = (dx * dx + dy * dy) > positionThresholdSq;
+        // Only check position/angle/speed if in Overworld
+        let movementChanged = false;
+        if (currentState.playerState === 'Overworld' && lastState.playerState === 'Overworld') {
+            const positionThresholdSq = 0.5*0.5; // Reduced threshold for faster updates
+            const dx = currentState.x - (lastState.x || 0);
+            const dy = currentState.y - (lastState.y || 0);
+            const positionChanged = (dx * dx + dy * dy) > positionThresholdSq;
 
-        const angleThreshold = 0.1; // Radians
-        const angleChanged = Math.abs(this.normalizeAngle(currentState.angle - lastState.angle)) > angleThreshold;
+            const angleThreshold = 0.05; // Radians
+            const angleChanged = Math.abs(this.normalizeAngle(currentState.angle - (lastState.angle || 0))) > angleThreshold;
+
+            const speedThreshold = 1;
+            const speedChanged = Math.abs(currentState.speed - (lastState.speed || 0)) > speedThreshold;
+            movementChanged = positionChanged || angleChanged || speedChanged;
+        }
 
         const healthChanged = currentState.health !== lastState.health;
-        const vehicleChanged = currentState.vehicleId !== lastState.vehicleId;
 
-        // --- NEW: Check interior state changes ---
+        // Check interior state changes
         const interiorStateChanged = currentState.playerState !== lastState.playerState ||
                                      currentState.currentVehicleId !== lastState.currentVehicleId ||
                                      currentState.gridX !== lastState.gridX ||
                                      currentState.gridY !== lastState.gridY;
-        // --- END NEW ---
 
         // More efficient resource check if resources change frequently
-        const resourcesChanged = JSON.stringify(currentState.resources) !== JSON.stringify(lastState.resources);
+        const resourcesChanged = JSON.stringify(currentState.resources) !== JSON.stringify(lastState.resources || {});
 
-        const equipmentChanged = JSON.stringify(currentState.equipment) !== JSON.stringify(lastState.equipment);
+        const equipmentChanged = JSON.stringify(currentState.equipment) !== JSON.stringify(lastState.equipment || {});
 
-        // Include interior state in the check
-        return positionChanged || angleChanged || healthChanged || vehicleChanged ||
-               resourcesChanged || equipmentChanged || interiorStateChanged;
+        return movementChanged || healthChanged || resourcesChanged || equipmentChanged || interiorStateChanged;
     }
 
-    // Stores the current state as the last sent state and resets the change flag
     clearStateChanged() {
         this._lastNetworkState = this.getNetworkState();
         this._stateChanged = false;

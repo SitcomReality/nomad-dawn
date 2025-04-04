@@ -58,12 +58,12 @@ export default class Vehicle {
         this.mass = 20; 
 
         // Vehicle Interior Grid Properties
-        this.gridWidth = config.gridWidth || 10; 
+        this.gridWidth = config.gridWidth || 10;
         this.gridHeight = config.gridHeight || 10;
         this.gridTiles = {}; 
         this.gridObjects = {}; 
-        this.doorLocation = config.doorLocation || { x: 0, y: 5 }; 
-        this.pilotSeatLocation = config.pilotSeatLocation || { x: 1, y: 1 }; 
+        this.doorLocation = config.doorLocation || { x: Math.floor(this.gridWidth / 2), y: this.gridHeight - 1 }; 
+        this.pilotSeatLocation = config.pilotSeatLocation || { x: Math.floor(this.gridWidth / 2), y: 1 }; 
 
         // Network state tracking
         this._lastNetworkState = this.getMinimalNetworkState(); 
@@ -71,47 +71,44 @@ export default class Vehicle {
     }
 
     update(deltaTime, input) {
-        // Only allow updates if driven or if it's an AI vehicle (future)
-        // For now, only update if driven AND input is provided AND player is in 'Piloting' state
-        const driverPlayer = this.driver ? this.game.entities.get(this.driver) : null;
-        if (!this.driver || !input || !driverPlayer || driverPlayer.playerState !== 'Piloting') {
-            const wasMoving = this.speed > 0;
-            this.speed = 0; 
-             // Check if state changed due to stopping
-            if (wasMoving && this._lastNetworkState.speed > 0) {
+        const driverEntity = this.driver ? window.game?.entities.get(this.driver) : null;
+        const driverState = driverEntity ? driverEntity.playerState : null;
+
+        if (!this.driver || !input || driverState !== 'Piloting') {
+            const previousSpeed = this.speed;
+            this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
+
+            if (this.speed !== previousSpeed) {
                 this._stateChanged = true;
+            }
+            if (this.speed > 0) {
+                this.x += Math.cos(this.angle) * this.speed * deltaTime;
+                this.y += Math.sin(this.angle) * this.speed * deltaTime;
+                this._stateChanged = true; 
             }
             return;
         }
 
-        // Store previous state to detect changes
         const prevState = { x: this.x, y: this.y, angle: this.angle, speed: this.speed };
 
-        // Apply movement based on directional input
         const direction = input.getMovementDirection();
 
         if (direction.x !== 0 || direction.y !== 0) {
-            // Calculate target angle based on direction
             const targetAngle = Math.atan2(direction.y, direction.x);
 
-            // Smoothly rotate towards target angle
             const angleDiff = this.normalizeAngle(targetAngle - this.angle);
             this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.rotationSpeed * deltaTime);
 
-            // Accelerate
             this.speed = Math.min(this.speed + this.acceleration * deltaTime, this.maxSpeed);
         } else {
-            // Decelerate when no input
             this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
         }
 
-        // Apply movement
         if (this.speed > 0) {
             this.x += Math.cos(this.angle) * this.speed * deltaTime;
             this.y += Math.sin(this.angle) * this.speed * deltaTime;
         }
 
-        // Check for state changes
         if (
             this.x !== prevState.x ||
             this.y !== prevState.y ||
@@ -123,7 +120,6 @@ export default class Vehicle {
     }
 
     normalizeAngle(angle) {
-        // Normalize angle to be between -PI and PI
         while (angle > Math.PI) angle -= 2 * Math.PI;
         while (angle < -Math.PI) angle += 2 * Math.PI;
         return angle;
@@ -174,14 +170,13 @@ export default class Vehicle {
     repair(amount) {
         const previousHealth = this.health;
         this.health = Math.min(this.maxHealth, this.health + amount);
-         if (this.health !== previousHealth) {
+        if (this.health !== previousHealth) {
             this._stateChanged = true; 
         }
         return this.health;
     }
 
     addModule(module) {
-        // Avoid adding duplicates? For now, allow multiple of same type
         this.modules.push(module);
         this.recalculateStatsFromModules(); 
         this._stateChanged = true; 
@@ -191,19 +186,17 @@ export default class Vehicle {
         const initialLength = this.modules.length;
         this.modules = this.modules.filter(m => m.id !== moduleId);
         if (this.modules.length !== initialLength) {
-             this.recalculateStatsFromModules(); 
-             this._stateChanged = true; 
+            this.recalculateStatsFromModules(); 
+            this._stateChanged = true; 
         }
     }
 
     recalculateStatsFromModules() {
-        // Reset stats to base values
         this.maxHealth = this.baseMaxHealth;
         this.maxSpeed = this.baseMaxSpeed;
         this.storage = this.baseStorage;
         this.scanRadius = this.baseScanRadius;
 
-        // Apply effects from all currently installed modules
         if (this.modules && Array.isArray(this.modules)) {
             this.modules.forEach(module => {
                 if (module && module.effect) {
@@ -223,34 +216,25 @@ export default class Vehicle {
                             case 'scanRadius':
                                 this.scanRadius += value;
                                 break;
-                            // Add cases for other potential stats (e.g., acceleration, armor)
                         }
                     }
                 }
             });
         } else {
-             // Log warning if modules isn't an array
-             const logger = window.game?.debug || console;
-             logger.warn(`[Vehicle ${this.id}] Attempted to recalculate stats but this.modules is not an array:`, this.modules);
-             this.modules = []; 
+            const logger = window.game?.debug || console;
+            logger.warn(`[Vehicle ${this.id}] Attempted to recalculate stats but this.modules is not an array:`, this.modules);
+            this.modules = []; 
         }
 
-        // Ensure stats don't go below reasonable minimums (e.g., 1 health, 0 speed/storage)
         this.maxHealth = Math.max(1, this.maxHealth);
         this.maxSpeed = Math.max(0, this.maxSpeed);
         this.storage = Math.max(0, this.storage);
         this.scanRadius = Math.max(0, this.scanRadius);
 
-        // Ensure current health doesn't exceed the new max health
         this.health = Math.min(this.health, this.maxHealth);
-
-        // Mark state changed if recalculation resulted in changes (optional, depends on what triggers sync)
-        // This might cause unnecessary syncs if called frequently, rely on module add/remove triggering sync.
-        // this._stateChanged = true; 
     }
 
     collidesWith(other) {
-        // Basic circle collision detection
         const radiusA = this.radius;
         const radiusB = (other.radius || other.size / 2 || 0);
         if (radiusB === 0) return false;
@@ -269,15 +253,12 @@ export default class Vehicle {
     }
 
     render(ctx, x, y, size) {
-        // Custom rendering for vehicle
         ctx.fillStyle = this.color;
 
-        // Draw vehicle body
         ctx.beginPath();
         ctx.arc(x, y, size / 2, 0, Math.PI * 2);
         ctx.fill();
 
-        // Draw direction indicator
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -316,7 +297,7 @@ export default class Vehicle {
             angle: this.angle,
             speed: this.speed,
             health: this.health,
-            maxHealth: this.maxHealth, 
+            maxHealth: this.maxHealth,
             driver: this.driver,
             passengers: [...this.passengers],
             modules: this.modules.map(m => ({ ...m })), 
@@ -330,10 +311,8 @@ export default class Vehicle {
     }
 
     hasStateChanged() {
-        // Check if internal flag is set first
         if (this._stateChanged) return true;
 
-        // Compare minimal state for frequent changes
         const currentState = this.getMinimalNetworkState();
         const lastState = this._lastNetworkState;
 
@@ -351,10 +330,7 @@ export default class Vehicle {
         const healthChanged = currentState.health !== lastState.health;
         const driverChanged = currentState.driver !== lastState.driver;
 
-        // Basic check: if any minimal state changed, return true
         return positionChanged || angleChanged || speedChanged || healthChanged || driverChanged;
-
-        // Note: Changes to modules, passengers, or grid data set _stateChanged directly.
     }
 
     clearStateChanged() {

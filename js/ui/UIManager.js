@@ -20,7 +20,7 @@ export default class UIManager {
 
         // Controls info panel reference
         this.controlsInfo = document.getElementById('controls-info-bottom-left');
-
+        
         // HUD Buttons Cache
         this.toggleControlsBtn = document.getElementById('toggle-controls');
         this.toggleDebugBtn = document.getElementById('toggle-debug');
@@ -41,7 +41,7 @@ export default class UIManager {
             },
 
             show: (message, type = 'info', duration = 3000) => {
-                if (!this.notifications.container) return;
+                if (!this.notifications.container) return; 
 
                 const notification = document.createElement('div');
                 notification.className = `notification notification-${type}`;
@@ -56,12 +56,12 @@ export default class UIManager {
                     notification.classList.add('fade-out');
                     setTimeout(() => {
                         this.notifications.remove(notification);
-                    }, 300);
+                    }, 300); 
                 }, duration);
             },
 
             remove: (notification) => {
-                if (!this.notifications.container) return;
+                if (!this.notifications.container) return; 
 
                 const index = this.notifications.queue.indexOf(notification);
                 if (index !== -1) {
@@ -74,7 +74,7 @@ export default class UIManager {
             },
 
             update: () => {
-                if (!this.notifications.container) return;
+                if (!this.notifications.container) return; 
 
                 const currentNotifications = Array.from(this.notifications.container.children);
                 currentNotifications.forEach(child => child.remove());
@@ -93,7 +93,7 @@ export default class UIManager {
 
         // Set up key bindings and event listeners
         this.setupEventListeners();
-
+        
         // Initial UI state based on potential guest mode
         this.setGuestMode(this.game.isGuestMode);
     }
@@ -105,14 +105,14 @@ export default class UIManager {
         // Example: Hide inventory and build buttons if they exist as direct HUD elements
         // If they are toggled by keys (I, B), the key handler needs the check.
         // If they are part of the main menu, the menu items could be disabled.
-
+        
         // For now, we rely on keydown listener checks, but could hide buttons too:
         // const inventoryButton = document.getElementById('hud-inventory-button'); // Example ID
         // if (inventoryButton) inventoryButton.style.display = isGuest ? 'none' : 'block';
-
+        
          const buildButton = document.getElementById('hud-build-button'); // Example ID
          if (buildButton) buildButton.style.display = isGuest ? 'none' : 'block';
-
+         
          // Ensure Inventory/Build UIs are hidden if switching to guest mode while open
          if (isGuest) {
             if(this.inventory.isVisible) this.inventory.hide();
@@ -135,40 +135,33 @@ export default class UIManager {
                 } else if (this.inventory.isVisible) {
                     this.inventory.hide();
                 } else if (this.baseBuilding.isVisible) {
-                    // PlayerController handles state exit which calls baseBuilding.hide()
-                    if (this.game.playerController && this.game.player?.playerState === 'Building') {
-                        this.game.playerController.exitBuildingMode();
-                    } else {
-                         // Fallback hide if state somehow mismatch
-                         this.baseBuilding.hide();
-                    }
+                    this.baseBuilding.hide();
                 } else if (!this.isGuestMode) { // Guests cannot open menu with Esc
                     this.menu.show();
                 }
             }
 
-            // --- Inventory Toggle ('I') ---
-            // Allow toggling inventory unless another major UI (Menu, Build) is active
-            if (e.code === 'KeyI' && !this.isGuestMode) {
-                 if (!this.menu.isVisible && !this.baseBuilding.isVisible) {
-                     e.preventDefault();
-                     this.inventory.toggle();
-                 } else if (this.inventory.isVisible) {
-                      // Allow closing inventory even if other UI is technically open (e.g., menu opened over it)
-                      e.preventDefault();
-                      this.inventory.hide();
+            // Specific UI toggles (prevent if guest)
+            if (!this.isGuestMode) {
+                 if (!this.isMajorUIActive() || e.code === 'Escape') { // Allow Esc even if UI is open
+                    switch (e.code) {
+                        case 'KeyI':
+                            e.preventDefault();
+                            this.inventory.toggle();
+                            break;
+                        case 'KeyB':
+                            e.preventDefault();
+                            this.baseBuilding.toggle(); 
+                            break;
+                    }
+                }
+            } else {
+                 // Guests might still use some keys, but not I or B for core UI
+                 // Example: Allow debug toggle for guests?
+                 if (e.code === 'Backquote' && e.ctrlKey) {
+                     // Debug toggle handled by DebugUtils globally
                  }
             }
-
-            // --- Building Toggle ('B') is now handled in PlayerController ---
-            // Guests might still use some keys, but not I or B for core UI
-            // Example: Allow debug toggle for guests?
-            if (this.isGuestMode && (e.code === 'KeyI' || e.code === 'KeyB')) {
-                 e.preventDefault(); // Prevent guest from opening these menus
-            } else if (e.code === 'Backquote' && e.ctrlKey) {
-                 // Debug toggle handled by DebugUtils globally
-            }
-
         });
 
         // HUD Button Listeners
@@ -181,7 +174,7 @@ export default class UIManager {
 
         if (this.toggleDebugBtn && this.debugOverlay) {
             this.toggleDebugBtn.addEventListener('click', () => {
-                const enabled = this.game.debug.toggle();
+                const enabled = this.game.debug.toggle(); 
                 this.toggleDebugBtn.classList.toggle('active', enabled);
             });
             // Initial state sync
@@ -209,15 +202,16 @@ export default class UIManager {
         // Update HUD data (always update, even for guests to see world state changes reflected)
         this.hud.update();
 
-        // Update specific UI components only if they are visible
-        // Guest mode check is handled internally by the component's update/show logic
-        if (this.inventory.isVisible) {
-            this.inventory.update();
+        // Update specific UI components only if they are visible and not in guest mode
+        if (!this.isGuestMode) {
+            if (this.inventory.isVisible) {
+                this.inventory.update();
+            }
+            if (this.baseBuilding.isVisible) {
+                this.baseBuilding.update();
+            }
+            // Menu usually doesn't need per-frame updates
         }
-        if (this.baseBuilding.isVisible) {
-            this.baseBuilding.update();
-        }
-        // Menu usually doesn't need per-frame updates
     }
 
     showNotification(message, type = 'info', duration = 3000) {

@@ -3,7 +3,6 @@ import EntityRenderer from './EntityRenderer.js';
 import EffectRenderer from './EffectRenderer.js';
 import UIRenderer from './UIRenderer.js';
 import SpriteManager from './SpriteManager.js';
-import InteriorRenderer from './InteriorRenderer.js';
 
 export default class Renderer {
     // Pass game instance to constructor
@@ -31,7 +30,6 @@ export default class Renderer {
         this.entityRenderer = new EntityRenderer(this, game);
         this.effectRenderer = new EffectRenderer(this, game);
         this.uiRenderer = new UIRenderer(this, game);
-        this.interiorRenderer = new InteriorRenderer(this, game);
 
         // Track last frame time for effects delta calculation
         this.lastFrameTime = performance.now();
@@ -61,7 +59,6 @@ export default class Renderer {
         if (this.uiRenderer && this.uiRenderer.onResize) {
             this.uiRenderer.onResize();
         }
-        // Add interior renderer resize if needed later
     }
 
     setupResizeListener() {
@@ -115,7 +112,8 @@ export default class Renderer {
         return { x: worldX, y: worldY };
     }
 
-    // Renders the main game world (background, chunks, objects)
+    // Main render function that delegates to specialized renderers
+    // Now takes cameraTarget directly instead of player
     renderWorld(world, cameraTarget) {
         if (!world) return;
 
@@ -131,28 +129,9 @@ export default class Renderer {
         this.worldRenderer.render(world, cameraTarget, viewWidthWorld, viewHeightWorld);
     }
 
-    // Renders entities in the main world view
+    // Takes localPlayer (can be null) for highlighting purposes
     renderEntities(entities, localPlayer) {
-        // Filter out the player if they are inside a vehicle
-        const filteredEntities = entities.filter(entity => {
-            if (entity.type === 'player' && entity.playerState !== 'Overworld') {
-                return false; // Don't render player entity if not in overworld
-            }
-             if (entity.type === 'vehicle' && entity.driver && this.game.entities.get(entity.driver)?.playerState !== 'Overworld') {
-                 // Potentially hide vehicle if driver is inside? Or keep rendering it. Let's keep rendering it.
-             }
-            return true;
-        });
-        this.entityRenderer.render(filteredEntities, localPlayer);
-    }
-
-    // Renders the interior view of a vehicle
-    renderVehicleInterior(vehicle, player) {
-        if (!this.interiorRenderer) {
-             this.game.debug.error("InteriorRenderer not initialized!");
-             return;
-        }
-        this.interiorRenderer.render(vehicle, player);
+        this.entityRenderer.render(entities, localPlayer);
     }
 
     renderEffects() {
