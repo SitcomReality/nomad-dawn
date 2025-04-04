@@ -34,8 +34,8 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 **Phase 4: Resource Tracking in RoomState (COMPLETE)**
 
-1.  **Defined Resource State:** Established `resources` in `room.roomState` (object mapping `resourceId` to `null` if collected).
-2.  **World State Application:**
+*   **Defined Resource State:** Established `resources` in `room.roomState` (object mapping `resourceId` to `null` if collected).
+*   **World State Application:**
     *   Modified `World.syncFromNetworkState`: Stores `roomState.resources` into `this.resourceOverrides`.
     *   Added `World.isResourceActive(resourceId)`: Checks `this.resourceOverrides` to see if a resource should be considered active (not `null`).
 
@@ -43,22 +43,23 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 ---
 
-**Phase 5: Update Collection Logic (NEXT)**
+**Phase 5: Update Collection Logic (COMPLETE)**
 
 1.  **Refactor Collection:**
-    *   Move the resource collection logic (`requestCollectResource`) out of `Player.js` (which is too long) and into `InteractionManager.js`.
+    *   Moved resource collection logic (`requestCollectResource`) from `Player.js` to `InteractionManager.js`.
 2.  **Modify `InteractionManager.requestCollectResource`:**
-    *   When a player interacts with a resource:
-        *   Trigger local visual effect.
-        *   Send `updateRoomState({ resources: { [resource.id]: null } })`.
-        *   Update player's local resource count.
-        *   Send player `presence` update for inventory: `room.updatePresence({ resources: player.resources })`.
+    *   When 'E' is pressed near a resource (`handleOverworldInteraction`), call `requestCollectResource`.
+    *   `requestCollectResource` now:
+        *   Triggers local visual effect.
+        *   Sends `updateRoomState({ resources: { [resource.id]: null } })`.
+        *   Updates player's local resource count (which flags presence update).
+        *   Checks `world.isResourceActive` before attempting collection.
 
-*   *Files potentially modified:* `Player.js` (existing, long - logic removal), `InteractionManager.js` (existing - logic addition).
+*   *Files modified:* `Player.js` (existing, long - logic removed), `InteractionManager.js` (existing - logic added).
 
 ---
 
-**Phase 6: Update Rendering Logic**
+**Phase 6: Update Rendering Logic (NEXT)**
 
 1.  **Create `WorldObjectManager`:** New class `js/world/WorldObjectManager.js`.
     *   Holds generated features/resources.

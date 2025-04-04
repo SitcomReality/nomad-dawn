@@ -4,6 +4,7 @@ export default class InteractionManager {
         this.game = game;
         this.interactionCooldown = 500; // ms cooldown for 'E' key interactions
         this.lastInteractionTime = 0;
+        this.resourceCheckRadius = 40; // Radius to check for resources when pressing 'E'
     }
 
     handleInput(currentTime) {
@@ -16,7 +17,6 @@ export default class InteractionManager {
 
         const player = this.game.player;
         const playerState = player.playerState;
-        let transitionMade = false; // Flag to apply cooldown only if interaction happens
         let interactionMade = false; // Flag for general interaction
 
         this.game.debug.log(`[InteractionManager] Handling 'E' press. State: ${playerState}`);
@@ -50,6 +50,7 @@ export default class InteractionManager {
         if (interactionMade) {
             this.lastInteractionTime = currentTime;
             // Force immediate presence update if player state changed
+            // Note: Player._stateChanged should be set by the handler functions
             if (player._stateChanged) {
                  this.game.network.updatePresence(player.getNetworkState());
                  player.clearStateChanged();
@@ -58,17 +59,18 @@ export default class InteractionManager {
     }
 
     handleOverworldInteraction(player) {
-        const interactionDistance = 50;
+        const interactionDistance = 50; // For vehicles
         let nearbyVehicle = null;
-        let closestDistanceSq = interactionDistance * interactionDistance;
+        let closestVehicleDistSq = interactionDistance * interactionDistance;
 
+        // Check for nearby vehicles first
         for (const vehicle of this.game.entities.getByType('vehicle')) {
              if (!vehicle) continue;
             const dx = vehicle.x - player.x;
             const dy = vehicle.y - player.y;
             const distanceSq = dx * dx + dy * dy;
-            if (distanceSq < closestDistanceSq) {
-                closestDistanceSq = distanceSq;
+            if (distanceSq < closestVehicleDistSq) {
+                closestVehicleDistSq = distanceSq;
                 nearbyVehicle = vehicle;
             }
         }
@@ -77,14 +79,98 @@ export default class InteractionManager {
             this.game.debug.log(`[InteractionManager] Transitioning to Interior: Vehicle ${nearbyVehicle.id}`);
             player.playerState = 'Interior';
             player.currentVehicleId = nearbyVehicle.id;
-            player.gridX = nearbyVehicle.doorLocation?.x ?? Math.floor(nearbyVehicle.gridWidth / 2);
-            player.gridY = nearbyVehicle.doorLocation?.y ?? nearbyVehicle.gridHeight - 1;
+            // Safely access grid properties with defaults
+            const gridWidth = nearbyVehicle.gridWidth || 10;
+            const gridHeight = nearbyVehicle.gridHeight || 10;
+            player.gridX = nearbyVehicle.doorLocation?.x ?? Math.floor(gridWidth / 2);
+            player.gridY = nearbyVehicle.doorLocation?.y ?? gridHeight - 1;
             player.speed = 0;
             player._stateChanged = true;
-            return true; // Interaction occurred
+            return true; // Interaction occurred (entering vehicle)
         }
+
+        // If no vehicle found, check for nearby resources
+        let nearbyResource = null;
+        let closestResourceDistSq = this.resourceCheckRadius * this.resourceCheckRadius;
+
+        // Get resources from nearby chunks only
+        const chunks = this.game.world?.getChunksInRadius(player.x, player.y, this.resourceCheckRadius * 1.5) || [];
+        for (const chunk of chunks) {
+             if (chunk && chunk.resources) {
+                for (const resource of chunk.resources) {
+                    // --- NEW: Check if resource is active using World helper ---
+                    if (resource && this.game.world.isResourceActive(resource.id)) {
+                        const dx = resource.x - player.x;
+                        const dy = resource.y - player.y;
+                        const distanceSq = dx * dx + dy * dy;
+                        if (distanceSq < closestResourceDistSq) {
+                            closestResourceDistSq = distanceSq;
+                            nearbyResource = resource;
+                        }
+                    }
+                }
+             }
+        }
+
+
+        if (nearbyResource) {
+            this.game.debug.log(`[InteractionManager] Requesting collection of resource: ${nearbyResource.id}`);
+             // --- Call the new collection function ---
+             this.requestCollectResource(player, nearbyResource);
+             return true; // Interaction occurred (collecting resource)
+        }
+
         return false; // No interaction
     }
+
+    // --- NEW: requestCollectResource moved from Player.js ---
+     /**
+      * Handles the logic for collecting a resource. Updates player inventory,
+      * sends network updates for room state (resource removal) and player presence (inventory).
+      * @param {Player} player - The player entity collecting the resource.
+      * @param {Object} resource - The resource entity being collected.
+      */
+     requestCollectResource(player, resource) {
+         // Double check resource validity
+         if (!resource || !resource.id || !resource.resourceType || resource.amount <= 0) {
+             this.game.debug.warn(`[InteractionManager] Attempted to collect invalid resource:`, resource);
+             return;
+         }
+         // Double check it's actually active according to world state
+          if (!this.game.world.isResourceActive(resource.id)) {
+              this.game.debug.log(`[InteractionManager] Attempted to collect already collected resource: ${resource.id}`);
+              return;
+          }
+
+         // 1. Optimistically add the resource locally for immediate feedback
+         //    This will be overwritten/confirmed by the presence update anyway.
+         player.addResource(resource.resourceType, resource.amount);
+
+         // 2. Send request to update the *shared* room state, removing the resource
+         //    This is the crucial step for synchronization.
+         this.game.network.updateRoomState({
+             resources: {
+                 [resource.id]: null // Use null to signify deletion in room state
+             }
+         });
+
+         // 3. Send an update for *this player's* presence, reflecting the new resource count
+         //    This ensures other players see the updated inventory quickly.
+         //    Note: The player state change flag should already be set by addResource.
+         //    The presence update will happen automatically if the flag is set.
+         //    We might force it here anyway if needed: this.game.network.updatePresence({ resources: player.resources });
+
+         // 4. Trigger a local visual effect for immediate feedback
+         if (this.game.renderer) {
+             // Use resource color for the effect
+             this.game.renderer.createEffect('collect', resource.x, resource.y, { color: resource.color || '#ffff00' });
+         }
+
+         // 5. Local logging
+         this.game.debug.log(`Player ${player.id} collected ${resource.amount} ${resource.resourceType} from ${resource.id}`);
+         // player._stateChanged = true; // Ensure state is marked changed (already done by addResource)
+     }
+
 
     handleInteriorInteraction(player) {
          const vehicle = this.game.entities.get(player.currentVehicleId);
@@ -124,11 +210,14 @@ export default class InteractionManager {
          }
 
          // --- If NO object interaction, check for Door/Pilot Seat ---
-         const doorX = vehicle.doorLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
-         const doorY = vehicle.doorLocation?.y ?? vehicle.gridHeight - 1;
+          // Safely access grid properties with defaults
+         const gridWidth = vehicle.gridWidth || 10;
+         const gridHeight = vehicle.gridHeight || 10;
+         const doorX = vehicle.doorLocation?.x ?? Math.floor(gridWidth / 2);
+         const doorY = vehicle.doorLocation?.y ?? gridHeight - 1;
          const isNearDoor = Math.abs(player.gridX - doorX) < 0.6 && Math.abs(player.gridY - doorY) < 0.6;
 
-         const pilotX = vehicle.pilotSeatLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
+         const pilotX = vehicle.pilotSeatLocation?.x ?? Math.floor(gridWidth / 2);
          const pilotY = vehicle.pilotSeatLocation?.y ?? 1;
          const isNearPilotSeat = Math.abs(player.gridX - pilotX) < 0.6 && Math.abs(player.gridY - pilotY) < 0.6;
 
@@ -167,7 +256,9 @@ export default class InteractionManager {
          }
          this.game.debug.log(`[InteractionManager] Transitioning from Piloting to Interior in vehicle ${vehicle.id}`);
          player.playerState = 'Interior';
-         player.gridX = vehicle.pilotSeatLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
+         // Safely access grid properties with defaults
+         const gridWidth = vehicle.gridWidth || 10;
+         player.gridX = vehicle.pilotSeatLocation?.x ?? Math.floor(gridWidth / 2);
          player.gridY = vehicle.pilotSeatLocation?.y ?? 1;
          vehicle.removeDriver?.(); // Use method if exists
          if (!vehicle.removeDriver) vehicle.driver = null; // Fallback

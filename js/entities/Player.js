@@ -54,9 +54,9 @@ export default class Player {
         this._lastNetworkState = this.getNetworkState();
         this._stateChanged = false;
 
-        // Collection cooldown to prevent spamming requests
-        this.lastCollectionTime = 0;
-        this.collectionCooldown = 500; // milliseconds
+        // Collection cooldown to prevent spamming requests (Now used by InteractionManager)
+        // this.lastCollectionTime = 0; // REMOVED
+        // this.collectionCooldown = 500; // REMOVED
         
         // Add movement controller
         this.movementController = new MovementController();
@@ -255,12 +255,13 @@ export default class Player {
 
         switch(other.type) {
             case 'resource':
-                // Check cooldown before attempting collection
-                 const now = performance.now();
-                 if (now - this.lastCollectionTime > this.collectionCooldown) {
-                    this.requestCollectResource(other);
-                    this.lastCollectionTime = now; // Update last collection time
-                 }
+                 // --- REMOVED: Resource collection logic moved to InteractionManager ---
+                // // Check cooldown before attempting collection
+                //  const now = performance.now();
+                //  if (now - this.lastCollectionTime > this.collectionCooldown) {
+                //     this.requestCollectResource(other);
+                //     this.lastCollectionTime = now; // Update last collection time
+                //  }
                 break;
             case 'vehicle':
                 // Example: Enter vehicle on key press (implementation depends on input access)
@@ -274,54 +275,6 @@ export default class Player {
                 // Handle generic collision if needed
                 break;
         }
-    }
-
-    // Request collection of a resource node via network
-    requestCollectResource(resource) {
-        // Double check resource validity and if it's already marked locally (though network is source of truth)
-        if (!resource || !resource.id || !resource.resourceType || resource.amount <= 0) {
-             // console.warn(`Attempted to collect invalid resource:`, resource); // Debug
-             return;
-        }
-
-        // 1. Optimistically add the resource locally for immediate feedback
-        //    This will be overwritten/confirmed by the presence update anyway.
-        this.addResource(resource.resourceType, resource.amount);
-
-        // 2. Send request to update the *shared* room state, removing the resource
-        //    This is the crucial step for synchronization.
-        this.game.network.updateRoomState({
-            resources: {
-                [resource.id]: null // Use null to signify deletion in room state
-            }
-        });
-
-        // 3. Send an update for *this player's* presence, reflecting the new resource count
-        //    This ensures other players see the updated inventory quickly.
-        this.game.network.updatePresence({
-            resources: this.resources // Send the updated resources object
-        });
-        // Note: _stateChanged will be true because addResource was called,
-        // so the regular presence update might also send this shortly after, which is fine.
-
-        // 4. Trigger a local visual effect for immediate feedback
-        if (this.game.renderer) {
-             // Use resource color for the effect
-            this.game.renderer.createEffect('collect', resource.x, resource.y, { color: resource.color || '#ffff00' });
-        }
-
-        // Optional: Send a broadcast event for sound effects on all clients
-        // this.game.network.send({
-        //     type: 'play_sound',
-        //     soundId: 'collect_resource',
-        //     x: resource.x,
-        //     y: resource.y,
-        //     volume: 0.8
-        // });
-
-        // Local logging
-        this.game.debug.log(`Player ${this.id} collected ${resource.amount} ${resource.resourceType} from ${resource.id}`);
-        this._stateChanged = true; // Ensure state is marked changed after collection attempt
     }
 
     // Deprecate old enter/exit vehicle logic
