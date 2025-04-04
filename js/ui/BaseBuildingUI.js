@@ -20,6 +20,7 @@ export default class BaseBuildingUI {
             this.container = this.createBuildingContainer();
             document.getElementById('ui-overlay')?.appendChild(this.container);
         } else {
+             // Ensure HTML is injected if container exists but is empty
             if (!this.container.innerHTML.trim()) {
                 this.injectContainerHTML(this.container);
             }
@@ -42,19 +43,6 @@ export default class BaseBuildingUI {
         if (!this.container) return;
         this.elements = {
             closeButton: this.container.querySelector('#building-close'),
-            // Remove vehicle stat elements as they are replaced by grid
-            // vehicleType: this.container.querySelector('#vehicle-type'),
-            // vehicleHealth: this.container.querySelector('#vehicle-health'),
-            // vehicleSpeed: this.container.querySelector('#vehicle-speed'),
-            // vehicleStorage: this.container.querySelector('#vehicle-storage'),
-
-            // Remove module elements as they are replaced by grid tools
-            // modulesList: this.container.querySelector('#modules-list'),
-            // moduleDetails: this.container.querySelector('#module-details'),
-            // installButton: this.container.querySelector('#btn-install-module'),
-            // removeButton: this.container.querySelector('#btn-remove-module'),
-
-            // Keep enter button for now, might move later
             enterButton: this.container.querySelector('#btn-enter-vehicle'),
 
             // Reference the building canvas container
@@ -68,13 +56,15 @@ export default class BaseBuildingUI {
             toolRemoveButton: this.container.querySelector('#tool-remove'),
 
             // Tool Info/Selection Area
-            toolInfoArea: this.container.querySelector('#tool-info-area')
+            toolInfoArea: this.container.querySelector('#tool-info-area'),
+            objectSelectionContainer: this.container.querySelector('#object-selection-container') // NEW
         };
 
         // Check if any essential elements are missing after caching
         for (const key in this.elements) {
             // Allow buildingCanvas to be initially null as Renderer creates it
-            if (!this.elements[key] && key !== 'buildingCanvas') {
+            // Allow objectSelectionContainer to be initially null
+            if (!this.elements[key] && key !== 'buildingCanvas' && key !== 'objectSelectionContainer') {
                 console.warn(`[BaseBuildingUI] Element cache failed for: ${key}`);
             }
         }
@@ -96,8 +86,18 @@ export default class BaseBuildingUI {
             </div>
             <div class="building-content-grid">
                  <div id="tool-info-area">
-                     <p>Select a tool.</p>
-                     <!-- Add tile/object selection here later -->
+                     <!-- Tool-specific controls will go here -->
+                     <p id="tool-status-text">Select a tool.</p>
+                     <div id="object-selection-container" class="hidden">
+                         <h4>Placeable Objects:</h4>
+                         <div id="object-buttons">
+                            <!-- Buttons populated by JS -->
+                         </div>
+                     </div>
+                     <div id="tile-selection-container" class="hidden">
+                          <h4>Placeable Tiles:</h4>
+                          <p>(Tile selection not implemented yet)</p>
+                     </div>
                  </div>
                  <div id="vehicle-building-canvas-container">
                     <canvas id="vehicle-building-canvas" width="300" height="200"></canvas>
@@ -106,15 +106,15 @@ export default class BaseBuildingUI {
             </div>
             <div class="building-footer">
                 <div class="footer-info">
-                    <!-- Placeholder for stats or info -->
                     <span>Vehicle: <span id="footer-vehicle-name">None</span></span>
                 </div>
                 <div class="action-buttons">
-                    <!-- Removed module install/remove -->
                     <button id="btn-enter-vehicle">Enter Vehicle</button>
                 </div>
             </div>
         `;
+         // After injecting HTML, re-cache elements
+         this.cacheElements();
     }
 
     createBuildingContainer() {
@@ -154,12 +154,22 @@ export default class BaseBuildingUI {
             this.elements.toolRemoveButton.addEventListener('click', () => this.setActiveTool('remove'));
         }
 
+        // Event delegation for dynamically added object buttons
+        if (this.elements.objectSelectionContainer) {
+             this.elements.objectSelectionContainer.addEventListener('click', (event) => {
+                 if (event.target.classList.contains('object-select-button')) {
+                     const objectTypeId = event.target.dataset.objectTypeId;
+                     if (objectTypeId) {
+                         this.selectObjectType(objectTypeId);
+                     }
+                 }
+             });
+        }
+
+
         // Key listener for 'B' remains global (likely in UIManager now)
         document.addEventListener('keydown', (e) => {
             // Let UIManager handle B key toggle
-            // if (e.code === 'KeyB' && !this.game.ui?.isMajorUIActive()) {
-            //     this.toggle();
-            // }
             if (e.code === 'Escape' && this.isVisible) {
                 this.hide();
             }
@@ -174,19 +184,108 @@ export default class BaseBuildingUI {
          this.container.querySelectorAll('.tool-button').forEach(btn => {
              btn.classList.remove('active');
          });
-         const buttonElement = this.elements[`tool${toolName.charAt(0).toUpperCase() + toolName.slice(1)}Button`];
+         // Construct the expected key for the elements cache
+         const buttonElementKey = `tool${toolName.charAt(0).toUpperCase() + toolName.slice(1)}Button`;
+         const buttonElement = this.elements[buttonElementKey];
          if (buttonElement) {
              buttonElement.classList.add('active');
+         } else {
+             console.warn(`[BaseBuildingUI] Tool button element not found in cache for key: ${buttonElementKey}`);
          }
 
-         // Update tool info area (basic for now)
-         if (this.elements.toolInfoArea) {
-             let infoText = `Active Tool: ${toolName}`;
-             if (toolName === 'place_tile') infoText += ` (Type: ${this.buildingManager.selectedTileType})`;
-             if (toolName === 'place_object') infoText += ` (Type: ${this.buildingManager.selectedObjectType})`;
-             this.elements.toolInfoArea.innerHTML = `<p>${infoText}</p>`;
-         }
+         // Update tool info area visibility and content
+         const toolStatusText = this.container.querySelector('#tool-status-text');
+         const objectSelection = this.elements.objectSelectionContainer;
+         const tileSelection = this.container.querySelector('#tile-selection-container'); // Select within container
+
+         if (toolStatusText) toolStatusText.classList.toggle('hidden', toolName !== 'select' && toolName !== 'remove');
+         if (objectSelection) objectSelection.classList.toggle('hidden', toolName !== 'place_object');
+         if (tileSelection) tileSelection.classList.toggle('hidden', toolName !== 'place_tile');
+
+          if (toolStatusText) {
+               let status = "Select a tool.";
+               if (toolName === 'select') status = "Click on the grid to select a cell.";
+               if (toolName === 'remove') status = "Click on a tile or object to remove it.";
+               toolStatusText.textContent = status;
+          }
+
+          // Populate object buttons if place_object tool is selected
+          if (toolName === 'place_object') {
+              this.populateObjectSelection();
+              // Automatically select the first object type by default?
+              const firstObjectButton = objectSelection?.querySelector('.object-select-button');
+              if (firstObjectButton && firstObjectButton.dataset.objectTypeId) {
+                 this.selectObjectType(firstObjectButton.dataset.objectTypeId);
+              }
+          }
      }
+
+     // New method to populate the object selection area
+     populateObjectSelection() {
+         const objectButtonContainer = this.container.querySelector('#object-buttons');
+         if (!objectButtonContainer || !this.game.config?.INTERIOR_OBJECT_TYPES) {
+             console.error("[BaseBuildingUI] Cannot populate object selection: container or config missing.");
+             return;
+         }
+
+         objectButtonContainer.innerHTML = ''; // Clear previous buttons
+         const availableObjects = this.game.config.INTERIOR_OBJECT_TYPES;
+
+         availableObjects.forEach(objType => {
+             const button = document.createElement('button');
+             button.className = 'object-select-button';
+             button.dataset.objectTypeId = objType.id;
+             button.title = `${objType.name} - ${objType.description || ''}`;
+             // Basic representation: Icon + Name
+             button.innerHTML = `
+                 <span class="object-icon">${objType.icon || '❓'}</span>
+                 <span class="object-name">${objType.name}</span>
+                 ${this.formatResourceCost(objType.cost)}
+             `;
+             // Add check for craftability later based on player resources
+             objectButtonContainer.appendChild(button);
+         });
+     }
+
+    formatResourceCost(cost) {
+        if (!cost || Object.keys(cost).length === 0) {
+            return '<span class="cost-free">Free</span>';
+        }
+        let costHtml = '<div class="object-cost">';
+        for (const [resource, amount] of Object.entries(cost)) {
+            const playerAmount = this.game.player?.resources[resource] || 0;
+            const hasEnough = playerAmount >= amount;
+            const resConfig = this.game.config.RESOURCE_TYPES.find(r => r.id === resource);
+            const resName = resConfig?.name || resource;
+            const resColor = resConfig?.color || '#ccc';
+            costHtml += `<span class="${hasEnough ? 'cost-ok' : 'cost-missing'}" title="${resName}: Have ${playerAmount}">
+                            <span style="color:${resColor}; font-size: 0.7em;">${resName.substring(0,3)}</span> ${amount}
+                         </span>`;
+        }
+        costHtml += '</div>';
+        return costHtml;
+    }
+
+
+     // New method to handle selecting an object type
+     selectObjectType(objectTypeId) {
+         if (!this.buildingManager) return;
+         this.buildingManager.setSelectedObjectType(objectTypeId);
+
+         // Update visual selection state for buttons
+         const objectButtons = this.container.querySelectorAll('.object-select-button');
+         objectButtons.forEach(btn => {
+             btn.classList.toggle('active', btn.dataset.objectTypeId === objectTypeId);
+         });
+
+         // Optional: Update tool status text or detail area
+          const toolStatusText = this.container.querySelector('#tool-status-text');
+          if (toolStatusText && this.buildingManager.selectedTool === 'place_object') {
+               const selectedObj = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
+               toolStatusText.textContent = `Placing: ${selectedObj?.name || objectTypeId}. Click grid to place.`;
+          }
+     }
+
 
     toggle() {
         if (this.isVisible) {
@@ -296,10 +395,12 @@ export default class BaseBuildingUI {
             return;
         }
         // Only update if the entity reference actually changed
-        if (this.activeVehicle !== vehicleEntity) {
+        // Or if the grid itself has changed (need a way to detect this, maybe a version flag?)
+        if (this.activeVehicle !== vehicleEntity /* || vehicleEntity.gridVersion !== this.lastGridVersion */) {
             this.activeVehicle = vehicleEntity;
              this.buildingRenderer.setVehicle(this.activeVehicle); // Update renderer's vehicle ref
              this.buildingManager.setActiveVehicle(this.activeVehicle); // Update manager's vehicle ref
+             // this.lastGridVersion = vehicleEntity.gridVersion;
         }
 
 
@@ -317,9 +418,47 @@ export default class BaseBuildingUI {
             this.elements.enterButton.disabled = !(this.activeVehicle && this.activeVehicle.driver !== this.game.player?.id);
         }
 
+        // Update craftability status of object buttons (can be expensive, maybe optimize)
+        if (this.buildingManager.selectedTool === 'place_object') {
+            this.updateObjectButtonStates();
+        }
+
+
         // Call Building Manager update (currently does nothing, but good practice)
         this.buildingManager.update(this.game.deltaTime);
     }
+
+    // New method to update button disabled state based on resources
+    updateObjectButtonStates() {
+         const objectButtons = this.container.querySelectorAll('.object-select-button');
+         if (!this.game.player) return;
+
+         objectButtons.forEach(button => {
+             const objectTypeId = button.dataset.objectTypeId;
+             const objConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
+             if (!objConfig || !objConfig.cost) {
+                 button.disabled = false; // No cost, always enabled
+                 return;
+             }
+
+             let canAfford = true;
+             for (const [resource, amount] of Object.entries(objConfig.cost)) {
+                 if ((this.game.player.resources[resource] || 0) < amount) {
+                     canAfford = false;
+                     break;
+                 }
+             }
+             button.disabled = !canAfford;
+             button.classList.toggle('cannot-afford', !canAfford);
+
+             // Re-render cost info as resource amounts might have changed
+             const costElement = button.querySelector('.object-cost');
+             if (costElement) {
+                 costElement.innerHTML = this.formatResourceCost(objConfig.cost).replace('<div class="object-cost">', '').replace('</div>','');
+             }
+         });
+    }
+
 
     enterVehicle() {
          // This action should transition the player state to 'Interior'

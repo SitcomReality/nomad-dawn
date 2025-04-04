@@ -1,5 +1,3 @@
-// New file: js/rendering/VehicleBuildingRenderer.js
-
 /**
  * Renders the vehicle interior grid specifically for the building UI.
  * This will allow placing tiles, objects, and visualizing the layout.
@@ -28,7 +26,8 @@ export default class VehicleBuildingRenderer {
             door: '#f1faee',
             pilotSeat: '#e63946',
             defaultTile: '#444',
-            defaultObject: '#a8dadc',
+            defaultObject: '#a8dadc', // Fallback object color
+            text: '#f1faee'
         };
 
         this.hoveredCell = { x: -1, y: -1 };
@@ -56,7 +55,7 @@ export default class VehicleBuildingRenderer {
             const mouseX = event.clientX - rect.left;
             const mouseY = event.clientY - rect.top;
             this.updateSelectedCell(mouseX, mouseY);
-            // TODO: Trigger action in VehicleBuildingManager based on selected tool
+            // Trigger action in VehicleBuildingManager based on selected tool
              if (this.game.ui?.baseBuilding?.buildingManager) {
                  this.game.ui.baseBuilding.buildingManager.handleGridClick(this.selectedCell.x, this.selectedCell.y);
              }
@@ -97,7 +96,7 @@ export default class VehicleBuildingRenderer {
     setVehicle(vehicle) {
         this.vehicle = vehicle;
         this.resizeCanvasToFitGrid();
-        this.render(); // Initial render
+        // No initial render here, render() is called in BaseBuildingUI.update()
     }
 
     resizeCanvasToFitGrid() {
@@ -107,9 +106,11 @@ export default class VehicleBuildingRenderer {
         const requiredWidth = this.vehicle.gridWidth * this.cellPixelSize;
         const requiredHeight = this.vehicle.gridHeight * this.cellPixelSize;
 
-        // Adjust canvas dimensions
-        this.canvas.width = requiredWidth;
-        this.canvas.height = requiredHeight;
+        // Adjust canvas dimensions only if they changed significantly
+        if (this.canvas.width !== requiredWidth || this.canvas.height !== requiredHeight) {
+            this.canvas.width = requiredWidth;
+            this.canvas.height = requiredHeight;
+        }
 
         // Grid starts at 0,0 within this dedicated canvas
         this.gridOffsetX = 0;
@@ -117,17 +118,21 @@ export default class VehicleBuildingRenderer {
     }
 
     render() {
-        if (!this.ctx || !this.vehicle) {
-            // Optionally clear or show an error state if no vehicle/context
-            if(this.ctx) {
-                this.ctx.fillStyle = this.colors.background;
-                this.ctx.fillRect(0, 0, this.canvas?.width ?? 300, this.canvas?.height ?? 200);
-                this.ctx.fillStyle = 'grey';
-                this.ctx.textAlign = 'center';
-                this.ctx.fillText("No Vehicle Selected", (this.canvas?.width ?? 300) / 2, (this.canvas?.height ?? 200) / 2);
-            }
-            return;
-        }
+        if (!this.ctx) return; // Do nothing if no context
+
+         // Ensure vehicle data is present before rendering it
+         if (!this.vehicle) {
+             this.ctx.fillStyle = this.colors.background;
+             this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+             this.ctx.fillStyle = 'grey';
+             this.ctx.font = '14px monospace';
+             this.ctx.textAlign = 'center';
+             this.ctx.fillText("No Vehicle Data", this.canvas.width / 2, this.canvas.height / 2);
+             return;
+         }
+
+        // Re-check canvas size fits grid, resize if necessary
+        this.resizeCanvasToFitGrid();
 
         const ctx = this.ctx;
         const gridWidth = this.vehicle.gridWidth;
@@ -140,18 +145,44 @@ export default class VehicleBuildingRenderer {
         ctx.fillStyle = this.colors.background;
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height); // Use canvas dimensions
 
-        // --- Draw Grid Background & Border ---
+        // --- Draw Grid Background ---
+        // (Tiles will cover this later)
         ctx.fillStyle = this.colors.defaultTile;
         ctx.fillRect(this.gridOffsetX, this.gridOffsetY, gridPixelWidth, gridPixelHeight);
-        ctx.strokeStyle = this.colors.gridBorder;
-        ctx.lineWidth = 2;
-        ctx.strokeRect(this.gridOffsetX, this.gridOffsetY, gridPixelWidth, gridPixelHeight);
 
-        // --- Draw Grid Tiles & Objects (Phase 3/4) ---
-        // TODO: Iterate through this.vehicle.gridTiles and draw specific tile types
-        // TODO: Iterate through this.vehicle.gridObjects and draw them
+        // --- Draw Grid Tiles ---
+        if (this.vehicle.gridTiles) {
+             for (const cellKey in this.vehicle.gridTiles) {
+                 const tileTypeId = this.vehicle.gridTiles[cellKey];
+                 if (!tileTypeId) continue; // Skip null/empty tiles
 
-        // --- Draw Special Locations ---
+                 const [xStr, yStr] = cellKey.split(',');
+                 const x = parseInt(xStr, 10);
+                 const y = parseInt(yStr, 10);
+
+                 if (isNaN(x) || isNaN(y)) continue;
+
+                 this.drawTile(x, y, tileTypeId);
+             }
+        }
+
+        // --- Draw Grid Objects ---
+        if (this.vehicle.gridObjects) {
+            for (const cellKey in this.vehicle.gridObjects) {
+                 const objectTypeId = this.vehicle.gridObjects[cellKey];
+                 if (!objectTypeId) continue; // Skip null/empty objects
+
+                 const [xStr, yStr] = cellKey.split(',');
+                 const x = parseInt(xStr, 10);
+                 const y = parseInt(yStr, 10);
+
+                 if (isNaN(x) || isNaN(y)) continue;
+
+                 this.drawObject(x, y, objectTypeId);
+            }
+        }
+
+        // --- Draw Special Locations (Over Objects/Tiles) ---
         this.drawSpecialLocation(this.vehicle.doorLocation, this.colors.door, 'D');
         this.drawSpecialLocation(this.vehicle.pilotSeatLocation, this.colors.pilotSeat, 'P');
 
@@ -159,15 +190,15 @@ export default class VehicleBuildingRenderer {
         ctx.strokeStyle = this.colors.gridLines;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (let i = 1; i < gridWidth; i++) {
-            const x = this.gridOffsetX + i * cellPixelSize;
-            ctx.moveTo(x, this.gridOffsetY);
-            ctx.lineTo(x, this.gridOffsetY + gridPixelHeight);
+        for (let i = 0; i <= gridWidth; i++) { // Draw lines including borders
+            const xPos = this.gridOffsetX + i * cellPixelSize;
+            ctx.moveTo(xPos, this.gridOffsetY);
+            ctx.lineTo(xPos, this.gridOffsetY + gridPixelHeight);
         }
-        for (let j = 1; j < gridHeight; j++) {
-            const y = this.gridOffsetY + j * cellPixelSize;
-            ctx.moveTo(this.gridOffsetX, y);
-            ctx.lineTo(this.gridOffsetX + gridPixelWidth, y);
+        for (let j = 0; j <= gridHeight; j++) { // Draw lines including borders
+            const yPos = this.gridOffsetY + j * cellPixelSize;
+            ctx.moveTo(this.gridOffsetX, yPos);
+            ctx.lineTo(this.gridOffsetX + gridPixelWidth, yPos);
         }
         ctx.stroke();
 
@@ -202,7 +233,45 @@ export default class VehicleBuildingRenderer {
         }
     }
 
-     drawSpecialLocation(location, color, label) {
+    drawTile(x, y, tileTypeId) {
+         const ctx = this.ctx;
+         const cellPixelSize = this.cellPixelSize;
+         const screenX = this.gridOffsetX + x * cellPixelSize;
+         const screenY = this.gridOffsetY + y * cellPixelSize;
+
+         // TODO: Look up tile config (color, sprite, etc.)
+         const tileColor = this.colors.defaultTile; // Placeholder
+
+         ctx.fillStyle = tileColor;
+         ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
+         // Later: Draw tile sprite
+    }
+
+    drawObject(x, y, objectTypeId) {
+         const ctx = this.ctx;
+         const cellPixelSize = this.cellPixelSize;
+         const screenX = this.gridOffsetX + x * cellPixelSize;
+         const screenY = this.gridOffsetY + y * cellPixelSize;
+
+         const objectConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
+         const objectColor = objectConfig?.color || this.colors.defaultObject;
+         const objectIcon = objectConfig?.icon || '?';
+
+         // Simple colored square for now
+         ctx.fillStyle = objectColor;
+         ctx.fillRect(screenX + 2, screenY + 2, cellPixelSize - 4, cellPixelSize - 4); // Inset slightly
+
+         // Draw Icon/Symbol
+         ctx.fillStyle = this.colors.text;
+         ctx.font = `bold ${cellPixelSize * 0.6}px monospace`;
+         ctx.textAlign = 'center';
+         ctx.textBaseline = 'middle';
+         ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1); // Adjust baseline slightly
+
+         // Later: Draw object sprite if available
+    }
+
+    drawSpecialLocation(location, color, label) {
         if (!location || typeof location.x !== 'number' || typeof location.y !== 'number') return;
 
         const locX = this.gridOffsetX + location.x * this.cellPixelSize;

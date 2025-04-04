@@ -1,5 +1,3 @@
-// New file: js/entities/VehicleBuildingManager.js
-
 /**
  * Manages the logic for modifying the vehicle interior grid.
  * Handles tool selection, grid clicks, and network updates for building actions.
@@ -11,7 +9,7 @@ export default class VehicleBuildingManager {
         this.activeVehicle = null;
         this.selectedTool = 'select'; // 'select', 'place_tile', 'place_object', 'remove'
         this.selectedTileType = 'floor_metal'; // Default tile type to place
-        this.selectedObjectType = 'wall_metal'; // Default object type to place
+        this.selectedObjectType = null; // Default object type to place - Now starts null
 
         // Debounce network updates for rapid actions (like dragging to place multiple tiles)
         this.networkUpdateQueue = {};
@@ -24,60 +22,144 @@ export default class VehicleBuildingManager {
         this.game.debug.log(`[BuildingManager] Set active vehicle: ${vehicle?.id}`);
         // Reset selection/tool when vehicle changes
         this.selectedTool = 'select';
+        this.selectedObjectType = null; // Reset selected object type too
         // TODO: Update UI to reflect the current tool/selection for the new vehicle
+        // This is handled by BaseBuildingUI.setActiveTool called from BaseBuildingUI.show()
     }
 
     setSelectedTool(tool) {
-        this.selectedTool = tool;
-        this.game.debug.log(`[BuildingManager] Selected tool: ${tool}`);
-        // TODO: Update UI to highlight the selected tool button
+        if (this.selectedTool !== tool) {
+            this.selectedTool = tool;
+            this.game.debug.log(`[BuildingManager] Selected tool: ${tool}`);
+             // If switching away from place_object, clear the selected object type? Optional.
+             if (tool !== 'place_object') {
+                 this.selectedObjectType = null;
+             }
+            // UI Update is handled by BaseBuildingUI.setActiveTool
+        }
     }
 
     setSelectedTileType(tileType) {
         this.selectedTileType = tileType;
-        this.selectedTool = 'place_tile'; // Switch tool automatically
-        this.game.debug.log(`[BuildingManager] Selected tile type: ${tileType}, Tool: ${this.selectedTool}`);
-        // TODO: Update UI
+        // Do NOT automatically switch tool anymore - BaseBuildingUI handles tool setting
+        // this.selectedTool = 'place_tile';
+        this.game.debug.log(`[BuildingManager] Selected tile type: ${tileType}`);
+        // UI update handled by BaseBuildingUI
     }
 
-     setSelectedObjectType(objectType) {
-        this.selectedObjectType = objectType;
-        this.selectedTool = 'place_object'; // Switch tool automatically
-        this.game.debug.log(`[BuildingManager] Selected object type: ${objectType}, Tool: ${this.selectedTool}`);
-        // TODO: Update UI
+     setSelectedObjectType(objectTypeId) {
+        if (this.selectedObjectType !== objectTypeId) {
+             this.selectedObjectType = objectTypeId;
+             // Do NOT automatically switch tool
+             // this.selectedTool = 'place_object';
+             this.game.debug.log(`[BuildingManager] Selected object type: ${objectTypeId}`);
+             // UI update handled by BaseBuildingUI
+        }
     }
 
     handleGridClick(gridX, gridY) {
-        if (!this.activeVehicle || gridX < 0 || gridY < 0) {
-             this.game.debug.warn(`[BuildingManager] Grid click ignored: No active vehicle or invalid coords (${gridX}, ${gridY})`);
+        if (!this.activeVehicle || gridX < 0 || gridY < 0 || !this.game.player) {
+             this.game.debug.warn(`[BuildingManager] Grid click ignored: No active vehicle, invalid coords (${gridX}, ${gridY}), or no player.`);
              return;
         }
 
-        this.game.debug.log(`[BuildingManager] Grid clicked at (${gridX}, ${gridY}) with tool: ${this.selectedTool}`);
+        this.game.debug.log(`[BuildingManager] Grid clicked at (${gridX}, ${gridY}) with tool: ${this.selectedTool}, object: ${this.selectedObjectType}`);
         const cellKey = `${gridX},${gridY}`;
 
         switch (this.selectedTool) {
             case 'select':
                 // TODO: Display info about the selected cell (tile, object) in the UI
-                console.log(`Selected cell ${cellKey}. Tile: ${this.activeVehicle.gridTiles?.[cellKey]}, Object: ${this.activeVehicle.gridObjects?.[cellKey]}`);
+                const tile = this.activeVehicle.gridTiles?.[cellKey];
+                const object = this.activeVehicle.gridObjects?.[cellKey];
+                console.log(`Selected cell ${cellKey}. Tile: ${tile}, Object: ${object}`);
+                this.uiManager?.showNotification(`Cell (${gridX},${gridY}): Tile=${tile || 'None'}, Object=${object || 'None'}`, 'info', 2000);
                 break;
 
             case 'place_tile':
+                // Check resource cost for tile (if implemented)
                 this.queueNetworkUpdate('gridTiles', cellKey, this.selectedTileType);
                 break;
 
             case 'place_object':
-                // Check for collisions or existing objects?
-                // For now, just place it.
+                 if (!this.selectedObjectType) {
+                     this.game.debug.warn(`[BuildingManager] Place object tool used, but no object type selected.`);
+                     this.uiManager?.showNotification(`Select an object type to place first!`, 'warn');
+                     return;
+                 }
+                // Check for collisions or existing objects? Server might handle this better.
+                 // Check resource cost
+                 const objectConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === this.selectedObjectType);
+                 if (!objectConfig) {
+                     this.game.debug.error(`[BuildingManager] Config not found for selected object type: ${this.selectedObjectType}`);
+                     return;
+                 }
+
+                 if (objectConfig.cost) {
+                     let canAfford = true;
+                     let missingResources = [];
+                     for (const [resource, amount] of Object.entries(objectConfig.cost)) {
+                         if ((this.game.player.resources[resource] || 0) < amount) {
+                             canAfford = false;
+                             missingResources.push(`${amount} ${resource}`);
+                         }
+                     }
+                     if (!canAfford) {
+                         this.game.debug.log(`[BuildingManager] Cannot afford ${objectConfig.name}. Missing: ${missingResources.join(', ')}`);
+                         this.uiManager?.showNotification(`Cannot afford ${objectConfig.name}. Need: ${missingResources.join(', ')}`, 'error');
+                         return;
+                     }
+                 }
+
+                 // Deduct resources locally (optimistic update) - network is source of truth eventually
+                 if (objectConfig.cost) {
+                    for (const [resource, amount] of Object.entries(objectConfig.cost)) {
+                        this.game.player.addResource(resource, -amount); // Subtract cost
+                    }
+                    // Trigger presence update for resources
+                     this.game.player._stateChanged = true;
+                     this.game.network.updatePresence({ resources: this.game.player.resources });
+                 }
+
+
                  this.queueNetworkUpdate('gridObjects', cellKey, this.selectedObjectType);
                 break;
 
             case 'remove':
-                 // Remove object first, then tile if no object was present
+                 // Add cost refund logic here? (Optional)
+                 let removedItemType = null;
+                 let refundCost = null;
+
+                 // Remove object first
                  if (this.activeVehicle.gridObjects && this.activeVehicle.gridObjects[cellKey]) {
+                     removedItemType = this.activeVehicle.gridObjects[cellKey];
+                     const removedObjConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === removedItemType);
+                     refundCost = removedObjConfig?.cost; // Get cost for potential refund
                      this.queueNetworkUpdate('gridObjects', cellKey, null); // Use null to signify removal
-                 } else if (this.activeVehicle.gridTiles && this.activeVehicle.gridTiles[cellKey]) {
+                 }
+                 // Then remove tile if no object was present
+                 else if (this.activeVehicle.gridTiles && this.activeVehicle.gridTiles[cellKey]) {
+                      removedItemType = this.activeVehicle.gridTiles[cellKey];
+                      // Add tile cost/refund logic if tiles have costs
                       this.queueNetworkUpdate('gridTiles', cellKey, null); // Use null to signify removal
+                 }
+
+                 // Refund resources if an item was removed and had a cost
+                 if (removedItemType && refundCost) {
+                      const refundFactor = 0.75; // Refund 75%?
+                      let refundedResources = [];
+                      for (const [resource, amount] of Object.entries(refundCost)) {
+                           const amountToRefund = Math.floor(amount * refundFactor);
+                           if (amountToRefund > 0) {
+                               this.game.player.addResource(resource, amountToRefund);
+                               refundedResources.push(`${amountToRefund} ${resource}`);
+                           }
+                      }
+                      if (refundedResources.length > 0) {
+                           // Trigger presence update for resources
+                           this.game.player._stateChanged = true;
+                           this.game.network.updatePresence({ resources: this.game.player.resources });
+                           this.uiManager?.showNotification(`Refunded: ${refundedResources.join(', ')}`, 'info');
+                      }
                  }
                 break;
 
@@ -90,10 +172,13 @@ export default class VehicleBuildingManager {
     queueNetworkUpdate(gridType, cellKey, value) {
          if (!this.activeVehicle || !this.activeVehicle.id) return;
 
-        if (!this.networkUpdateQueue[gridType]) {
-            this.networkUpdateQueue[gridType] = {};
+        if (!this.networkUpdateQueue[this.activeVehicle.id]) {
+            this.networkUpdateQueue[this.activeVehicle.id] = {};
         }
-        this.networkUpdateQueue[gridType][cellKey] = value;
+        if (!this.networkUpdateQueue[this.activeVehicle.id][gridType]) {
+             this.networkUpdateQueue[this.activeVehicle.id][gridType] = {};
+        }
+        this.networkUpdateQueue[this.activeVehicle.id][gridType][cellKey] = value;
 
         // Clear existing timeout and set a new one
         if (this.networkUpdateTimeout) {
@@ -106,43 +191,49 @@ export default class VehicleBuildingManager {
 
     // Send the queued updates
     sendNetworkUpdates() {
-         if (!this.activeVehicle || !this.activeVehicle.id || Object.keys(this.networkUpdateQueue).length === 0) {
+        const updatesToSend = {};
+        let hasUpdates = false;
+
+        // Iterate through queued updates for all vehicles (though usually just one)
+        for (const vehicleId in this.networkUpdateQueue) {
+             if (!this.networkUpdateQueue[vehicleId]) continue;
+
+             const vehicleUpdates = {};
+             if (this.networkUpdateQueue[vehicleId].gridTiles && Object.keys(this.networkUpdateQueue[vehicleId].gridTiles).length > 0) {
+                 vehicleUpdates.gridTiles = this.networkUpdateQueue[vehicleId].gridTiles;
+                 hasUpdates = true;
+             }
+             if (this.networkUpdateQueue[vehicleId].gridObjects && Object.keys(this.networkUpdateQueue[vehicleId].gridObjects).length > 0) {
+                 vehicleUpdates.gridObjects = this.networkUpdateQueue[vehicleId].gridObjects;
+                 hasUpdates = true;
+             }
+
+             if (Object.keys(vehicleUpdates).length > 0) {
+                 updatesToSend[vehicleId] = vehicleUpdates;
+             }
+        }
+
+
+         if (!hasUpdates) {
              this.networkUpdateQueue = {}; // Clear queue even if nothing sent
+             this.networkUpdateTimeout = null;
              return;
          }
 
-         const updatePayload = {};
-         if (this.networkUpdateQueue.gridTiles) {
-             updatePayload.gridTiles = this.networkUpdateQueue.gridTiles;
-         }
-         if (this.networkUpdateQueue.gridObjects) {
-             updatePayload.gridObjects = this.networkUpdateQueue.gridObjects;
-         }
-
-         this.game.debug.log(`[BuildingManager] Sending network update for vehicle ${this.activeVehicle.id}:`, JSON.parse(JSON.stringify(updatePayload)));
+         this.game.debug.log(`[BuildingManager] Sending network update for vehicles:`, JSON.parse(JSON.stringify(updatesToSend)));
 
         this.game.network.updateRoomState({
-            vehicles: {
-                [this.activeVehicle.id]: updatePayload
-            }
+            vehicles: updatesToSend
         });
 
         // Clear the queue and timeout
         this.networkUpdateQueue = {};
         this.networkUpdateTimeout = null;
 
-        // Optional: Immediately update local vehicle state for responsiveness?
-        // Be careful as this might diverge slightly from network state until confirmation.
-        // if (updatePayload.gridTiles) {
-        //     this.activeVehicle.gridTiles = { ...this.activeVehicle.gridTiles, ...updatePayload.gridTiles };
-        // }
-        // if (updatePayload.gridObjects) {
-        //     this.activeVehicle.gridObjects = { ...this.activeVehicle.gridObjects, ...updatePayload.gridObjects };
-        // }
-        // Need to handle null values for deletion correctly if updating locally.
-
         // Trigger a UI refresh in BaseBuildingUI to show potential local changes faster
-        this.uiManager?.baseBuilding?.update();
+        // BaseBuildingUI.update() handles rendering the grid, which reads directly from entity data updated by network sync.
+        // For optimistic updates (making it appear instantly), we would need to modify the local vehicle entity here.
+        // Let's rely on network sync for now.
     }
 
     // Called when the building UI is active

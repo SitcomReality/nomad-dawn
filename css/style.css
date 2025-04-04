@@ -356,13 +356,86 @@ body {
     padding: 10px;
     border-radius: 4px;
     overflow-y: auto; /* Allow scrolling if content exceeds height */
+    display: flex; /* Use flexbox for vertical layout */
+    flex-direction: column;
+    gap: 10px; /* Space between sections */
 }
-#tool-info-area h3 {
+#tool-info-area h4 {
     font-size: 1.1rem;
-    margin-bottom: 10px;
+    margin: 0 0 5px 0; /* Adjust margin */
     border-bottom: 1px solid var(--ui-border);
     padding-bottom: 5px;
 }
+
+#tool-status-text {
+    font-style: italic;
+    color: var(--ui-text-dim);
+}
+
+#object-selection-container {
+    /* Style for the container itself if needed */
+}
+
+#object-buttons {
+    display: grid; /* Use grid for better alignment */
+    grid-template-columns: 1fr; /* Single column layout */
+    gap: 5px;
+}
+
+.object-select-button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px;
+    background-color: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--ui-border);
+    border-radius: 4px;
+    color: var(--ui-text);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 0.2s, border-color 0.2s;
+    font-family: var(--font-main);
+    font-size: 0.9rem;
+    width: 100%; /* Take full width of container */
+}
+
+.object-select-button:hover:not(:disabled) {
+    background-color: rgba(168, 218, 220, 0.2);
+    border-color: var(--ui-highlight);
+}
+.object-select-button.active {
+    background-color: var(--ui-highlight);
+    border-color: var(--ui-highlight);
+    color: var(--color-dark);
+}
+.object-select-button:disabled,
+.object-select-button.cannot-afford {
+    background-color: rgba(80, 80, 80, 0.5);
+    color: var(--ui-text-dim);
+    border-color: var(--ui-disabled);
+    cursor: not-allowed;
+}
+.object-select-button.cannot-afford .object-cost {
+    opacity: 0.7;
+}
+
+.object-icon {
+    font-size: 1.2em;
+    width: 20px;
+    text-align: center;
+}
+.object-name {
+    flex-grow: 1; /* Allow name to take available space */
+}
+.object-cost {
+    font-size: 0.8em;
+    margin-left: auto; /* Push cost to the right */
+    display: flex;
+    gap: 5px;
+}
+.cost-ok { color: var(--ui-success); }
+.cost-missing { color: var(--ui-accent); }
+.cost-free { color: var(--ui-text-dim); font-style: italic;}
 
 #vehicle-building-canvas-container {
     flex-grow: 1; /* Allow canvas container to take remaining space */
@@ -399,22 +472,22 @@ body {
 }
 
 .module-details { 
-     font-size: 0.9rem;
+    font-size: 0.9rem;
 }
 .module-details h3 { 
-     font-size: 1.1rem;
-     margin-bottom: 10px;
+    font-size: 1.1rem;
+    margin-bottom: 10px;
 }
 .module-details p {
-     margin-bottom: 8px;
+    margin-bottom: 8px;
 }
 .module-details ul {
-     list-style: none;
-     padding-left: 0;
-     margin-left: 10px;
+    list-style: none;
+    padding-left: 0;
+    margin-left: 10px;
 }
 .module-details li {
-     margin-bottom: 4px;
+    margin-bottom: 4px;
 }
 
 .action-buttons {

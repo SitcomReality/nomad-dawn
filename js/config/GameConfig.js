@@ -89,7 +89,12 @@ export const Config = {
             speed: 300,
             health: 150,
             storage: 100,
-            cost: { metal: 50, energy: 30 }
+            cost: { metal: 50, energy: 30 },
+            // Interior Defaults
+            gridWidth: 8,
+            gridHeight: 6,
+            doorLocation: { x: 4, y: 5 },
+            pilotSeatLocation: { x: 4, y: 1 }
         },
         {
             id: 'hauler',
@@ -98,7 +103,12 @@ export const Config = {
             speed: 200,
             health: 250,
             storage: 300,
-            cost: { metal: 100, energy: 50 }
+            cost: { metal: 100, energy: 50 },
+            // Interior Defaults
+            gridWidth: 12,
+            gridHeight: 10,
+            doorLocation: { x: 6, y: 9 },
+            pilotSeatLocation: { x: 6, y: 1 }
         },
         {
             id: 'base',
@@ -107,7 +117,12 @@ export const Config = {
             speed: 100,
             health: 500,
             storage: 500,
-            cost: { metal: 200, energy: 100, food: 50 }
+            cost: { metal: 200, energy: 100, food: 50 },
+            // Interior Defaults
+            gridWidth: 16,
+            gridHeight: 12,
+            doorLocation: { x: 8, y: 11 },
+            pilotSeatLocation: { x: 8, y: 1 }
         }
     ],
     
@@ -150,6 +165,52 @@ export const Config = {
             size: 7
         }
     ],
+    
+    // --- NEW: Interior Object Types ---
+    INTERIOR_OBJECT_TYPES: [
+        {
+            id: 'wall_metal',
+            name: 'Metal Wall',
+            description: 'Basic structural element.',
+            collides: true, // Players cannot walk through
+            cost: { metal: 5 },
+            color: '#6c757d', // Grey
+            icon: '🧱'
+        },
+        {
+            id: 'storage_small',
+            name: 'Small Storage Crate',
+            description: 'Provides a small amount of storage space.',
+            collides: true, // Occupies a cell
+            interactable: true, // Can be interacted with (later)
+            effect: { storage: 50 }, // Example effect
+            cost: { metal: 15 },
+            color: '#8b4513', // Brown
+            icon: '📦'
+        },
+        {
+            id: 'console_basic',
+            name: 'Basic Console',
+            description: 'Interface for vehicle systems.',
+            collides: true,
+            interactable: true,
+            cost: { metal: 10, energy: 5 },
+            color: '#457b9d', // Blue
+            icon: '💻'
+        },
+        {
+            id: 'bed_simple',
+            name: 'Simple Cot',
+            description: 'A place to rest.',
+            collides: true,
+            interactable: true, // Could be used for healing/saving later
+            cost: { metal: 10, food: 5 }, // Maybe fabric later?
+            color: '#7d9951', // Greenish
+            icon: '🛏️'
+        }
+        // Add more objects like lights, power conduits, specific workstations etc.
+    ],
+    // --- END NEW ---
     
     // Equipment configuration
     EQUIPMENT_TYPES: [
