@@ -190,7 +190,6 @@ export default class NetworkManager {
          this.game.debug.log("Finished syncVehiclesFromNetwork."); // DEBUG
     }
 
-
      // Moved from Game.js: Handle Presence Update Requests
      handlePresenceUpdateRequest(updateRequest, fromClientId) {
          // Guest mode check: Guests cannot respond to requests.
