@@ -107,118 +107,83 @@ export default class NetworkManager {
          // this.game.debug.log("[SyncVehicles] Starting sync. Received data:", JSON.parse(JSON.stringify(networkVehicles))); // Log received data
          // --- DEBUG END ---
 
-         // Lazily import Vehicle to avoid circular dependency issues if NetworkManager is imported elsewhere
-         // Or ensure Vehicle class is loaded before this is called. For simplicity, assuming Vehicle is available.
-         const Vehicle = window.Vehicle; // Assuming Vehicle is globally accessible or loaded appropriately
+         const Vehicle = window.Vehicle;
          if (!Vehicle) {
              this.game.debug.error("[SyncVehicles] Vehicle class not found!");
              return;
          }
 
-         // Ensure networkVehicles is an object
          if (!networkVehicles || typeof networkVehicles !== 'object') {
              this.game.debug.warn("[SyncVehicles] Received invalid networkVehicles data (not an object):", networkVehicles);
-             return; // Don't proceed if data is invalid
+             return;
          }
 
         const presentVehicleIds = new Set(Object.keys(networkVehicles));
-        // --- DEBUG ---
-        // this.game.debug.log(`[SyncVehicles] IDs present in network state: ${Array.from(presentVehicleIds).join(', ')}`);
-        // --- DEBUG END ---
 
-        // Update or create vehicles
         for (const vehicleId in networkVehicles) {
-             // --- DEBUG ---
-             // this.game.debug.log(`[SyncVehicles] Processing vehicle ID: ${vehicleId}`);
-             // --- DEBUG END ---
             const data = networkVehicles[vehicleId];
             let vehicle = this.game.entities.get(vehicleId);
-            // --- DEBUG ---
-            // this.game.debug.log(`[SyncVehicles] Existing entity for ${vehicleId}:`, vehicle ? vehicle.id : 'None');
-            // --- DEBUG END ---
 
             if (data === null) { // Vehicle removed
                  if (vehicle) {
                      this.game.debug.log(`[SyncVehicles] Removing vehicle ${vehicleId} due to null in network state.`);
                      this.game.entities.remove(vehicleId);
-                 } else {
-                      // --- DEBUG ---
-                      // this.game.debug.log(`[SyncVehicles] Received null for non-existent vehicle ${vehicleId}. Ignoring.`);
-                      // --- DEBUG END ---
                  }
                  continue;
             }
 
-            // Check for minimum required data to create/update a vehicle
              if (!data || typeof data !== 'object' || !data.vehicleType || typeof data.x !== 'number' || typeof data.y !== 'number') {
                  this.game.debug.warn(`[SyncVehicles] Received incomplete or invalid vehicle data for ID ${vehicleId}, skipping sync. Data:`, data);
-                 presentVehicleIds.delete(vehicleId); // Remove invalid ID from tracking
+                 presentVehicleIds.delete(vehicleId);
                  continue;
              }
 
             if (!vehicle) {
-                 // --- DEBUG ---
-                 // this.game.debug.log(`[SyncVehicles] Vehicle ${vehicleId} not found locally. Attempting creation...`);
-                 // --- DEBUG END ---
-                 // Create new vehicle entity if it doesn't exist
                  const vehicleConfig = this.game.config.VEHICLE_TYPES.find(v => v.id === data.vehicleType);
                  if (!vehicleConfig) {
                      this.game.debug.warn(`[SyncVehicles] Received data for unknown vehicle type: ${data.vehicleType}. Cannot create ${vehicleId}.`);
                      continue;
                  }
-                 // --- DEBUG ---
-                 // this.game.debug.log(`[SyncVehicles] Found config for type ${data.vehicleType}.`);
-                 // --- DEBUG END ---
 
                  try {
-                     // Pass config object (not just type string) and owner ID
                      vehicle = new Vehicle(vehicleId, vehicleConfig, data.owner);
-                     // --- DEBUG ---
-                     // this.game.debug.log(`[SyncVehicles] Successfully created new Vehicle instance for ${vehicleId}.`);
-                     // --- DEBUG END ---
                  } catch(e) {
                      this.game.debug.error(`[SyncVehicles] Error creating Vehicle instance for ${vehicleId}:`, e);
-                     continue; // Skip adding if constructor fails
+                     continue;
                  }
 
                  // Update state from network data *after* creation with defaults
                  vehicle.x = data.x;
                  vehicle.y = data.y;
-                 vehicle.angle = data.angle ?? vehicle.angle; // Use default if not provided
+                 vehicle.angle = data.angle ?? vehicle.angle;
                  vehicle.health = data.health ?? vehicle.health;
-                 vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth; // Make sure maxHealth is synced too
+                 vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth;
                  vehicle.driver = data.driver ?? null;
-                 vehicle.passengers = data.passengers ?? []; // Use default [] if not provided
-                 vehicle.modules = data.modules ?? []; // Use default [] if not provided
+                 vehicle.passengers = data.passengers ?? [];
+                 vehicle.modules = data.modules ?? [];
+                 // --- Sync Grid Properties ---
+                 vehicle.gridWidth = data.gridWidth ?? vehicle.gridWidth;
+                 vehicle.gridHeight = data.gridHeight ?? vehicle.gridHeight;
+                 vehicle.gridTiles = data.gridTiles ?? {}; // Default to empty if missing
+                 vehicle.gridObjects = data.gridObjects ?? {}; // Default to empty
+                 vehicle.doorLocation = data.doorLocation ?? { x: 0, y: 0 };
+                 vehicle.pilotSeatLocation = data.pilotSeatLocation ?? { x: 1, y: 0 };
+                 // --- End Sync Grid Properties ---
 
-                // Recalculate stats based on initial modules received
+
                 if (vehicle.recalculateStatsFromModules) {
                     vehicle.recalculateStatsFromModules();
-                     // --- DEBUG ---
-                    // this.game.debug.log(`[SyncVehicles] Recalculated stats for new vehicle ${vehicleId} after applying modules. Max Health: ${vehicle.maxHealth}`);
-                    // --- DEBUG END ---
                 }
 
-                 // Add should log internally now, but let's add one here too
-                 // --- DEBUG ---
-                 // this.game.debug.log(`[SyncVehicles] Attempting to add ${vehicleId} to EntityManager...`);
-                 // --- DEBUG END ---
-                 const addedEntity = this.game.entities.add(vehicle); // Add should also log
-                 if(addedEntity) {
-                     // --- DEBUG ---
-                     // this.game.debug.log(`[SyncVehicles] Successfully added ${vehicleId} to EntityManager.`);
-                     // --- DEBUG END ---
-                 } else {
+                 const addedEntity = this.game.entities.add(vehicle);
+                 if(!addedEntity) {
                      this.game.debug.error(`[SyncVehicles] Failed to add ${vehicleId} to EntityManager (add returned null/undefined).`);
                  }
 
             } else {
-                 // --- DEBUG ---
-                 // this.game.debug.log(`[SyncVehicles] Updating existing vehicle ${vehicleId}.`);
-                 // --- DEBUG END ---
-
-                 // Check if modules have changed before recalculating stats
                  const modulesChanged = JSON.stringify(vehicle.modules) !== JSON.stringify(data.modules ?? []);
+                 const gridTilesChanged = JSON.stringify(vehicle.gridTiles) !== JSON.stringify(data.gridTiles ?? {});
+                 const gridObjectsChanged = JSON.stringify(vehicle.gridObjects) !== JSON.stringify(data.gridObjects ?? {});
 
                  // Update vehicle state
                  vehicle.x = data.x ?? vehicle.x;
@@ -227,51 +192,40 @@ export default class NetworkManager {
                  vehicle.health = data.health ?? vehicle.health;
                  vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth;
                  vehicle.driver = data.driver ?? null;
-                 vehicle.passengers = data.passengers ?? []; // Update passengers
-                 vehicle.modules = data.modules ?? []; // Update modules
+                 vehicle.passengers = data.passengers ?? [];
+                 vehicle.modules = data.modules ?? [];
+                 // --- Sync Grid Properties ---
+                 vehicle.gridWidth = data.gridWidth ?? vehicle.gridWidth;
+                 vehicle.gridHeight = data.gridHeight ?? vehicle.gridHeight;
+                 vehicle.gridTiles = data.gridTiles ?? vehicle.gridTiles;
+                 vehicle.gridObjects = data.gridObjects ?? vehicle.gridObjects;
+                 vehicle.doorLocation = data.doorLocation ?? vehicle.doorLocation;
+                 vehicle.pilotSeatLocation = data.pilotSeatLocation ?? vehicle.pilotSeatLocation;
+                 // --- End Sync Grid Properties ---
 
-                 // Recalculate stats ONLY if modules changed or if maxHealth isn't matching
                  if (modulesChanged || vehicle.maxHealth !== (data.maxHealth ?? vehicleConfig?.health ?? 200)) {
                      if (vehicle.recalculateStatsFromModules) {
                          vehicle.recalculateStatsFromModules();
-                          // --- DEBUG ---
-                         // this.game.debug.log(`[SyncVehicles] Recalculated stats for existing vehicle ${vehicleId} due to module/maxHealth change. New Max Health: ${vehicle.maxHealth}`);
-                          // --- DEBUG END ---
                      } else {
                          this.game.debug.warn(`[SyncVehicles] Vehicle ${vehicleId} missing recalculateStatsFromModules method.`);
                      }
-                 } else {
-                     // --- DEBUG ---
-                     // this.game.debug.log(`[SyncVehicles] Modules unchanged for vehicle ${vehicleId}. Skipping recalculation.`);
-                     // --- DEBUG END ---
                  }
-                 
-                 // Ensure health is capped by the potentially recalculated maxHealth
+
                  vehicle.health = Math.min(vehicle.health, vehicle.maxHealth);
 
-                 // Update interpolation target if exists (TODO: Implement interpolation)
-                 // if (vehicle.updateTargetState) {
-                 //    vehicle.updateTargetState(data);
-                 // }
+                 // TODO: Handle grid updates if they trigger visual changes or logic
+                 // if (gridTilesChanged || gridObjectsChanged) { ... }
             }
         }
 
-         // Remove local vehicle entities that are no longer in the room state
          const currentVehicles = this.game.entities.getByType('vehicle');
-         // --- DEBUG ---
-         // this.game.debug.log(`[SyncVehicles] Checking for vehicles to remove. Current local vehicles: ${currentVehicles.map(v=>v.id).join(', ')}`);
-         // --- DEBUG END ---
          for (const localVehicle of currentVehicles) {
-             if (!localVehicle || !localVehicle.id) continue; // Safety check
-
+             if (!localVehicle || !localVehicle.id) continue;
              if (!presentVehicleIds.has(localVehicle.id)) {
                  this.game.debug.log(`[SyncVehicles] Removing local vehicle ${localVehicle.id} (no longer in network state)`);
                  this.game.entities.remove(localVehicle.id);
              }
          }
-         // --- DEBUG ---
-         // this.game.debug.log(`[SyncVehicles] Finished sync. EntityManager now has ${this.game.entities.getByType('vehicle').length} vehicles.`);
-         // --- DEBUG END ---
     }
 
     // Moved from Game.js: Handle Presence Update Requests

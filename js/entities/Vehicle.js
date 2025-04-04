@@ -1,16 +1,16 @@
 export default class Vehicle {
-    constructor(id, config, owner) { 
+    constructor(id, config, owner) {
         if (!config || typeof config !== 'object') {
              const logger = window.game?.debug || console;
              logger.error(`[Vehicle] Invalid config passed to constructor for ID ${id}:`, config);
-             config = { 
-                 id: 'unknown', 
-                 name: 'Unknown Vehicle', 
-                 speed: 100, 
-                 health: 100, 
-                 storage: 50, 
+             config = {
+                 id: 'unknown',
+                 name: 'Unknown Vehicle',
+                 speed: 100,
+                 health: 100,
+                 storage: 50,
                  maxPassengers: 0,
-                 baseMaxHealth: 100, // Add base stats
+                 baseMaxHealth: 100, 
                  baseMaxSpeed: 100,
                  baseStorage: 50
              };
@@ -25,95 +25,100 @@ export default class Vehicle {
         this.y = 0;
         this.angle = 0;
         this.speed = 0;
-        
+
         // Store base stats from config
         this.baseMaxHealth = config.health || 100;
         this.baseMaxSpeed = config.speed || 150;
         this.baseStorage = config.storage || 100;
-        this.baseScanRadius = config.scanRadius || 0; // Add base scan radius if vehicles have it
+        this.baseScanRadius = config.scanRadius || 0; 
 
         // Current stats (potentially modified by modules)
         this.maxSpeed = this.baseMaxSpeed; 
         this.maxHealth = this.baseMaxHealth;
         this.storage = this.baseStorage;
-        this.scanRadius = this.baseScanRadius; // Initialize current scan radius
+        this.scanRadius = this.baseScanRadius; 
 
-        this.health = this.maxHealth; // Start at full health based on initial maxHealth
-        
+        this.health = this.maxHealth; 
+
         // Common properties
         this.acceleration = 150;
         this.deceleration = 200;
         this.rotationSpeed = 2;
-        this.size = 30; // Consider making this configurable too
-        this.color = config.color || '#fa5'; // Use config color or default
-        this.modules = []; // Initialize as empty array
-        
+        this.size = 30; 
+        this.color = config.color || '#fa5'; 
+        this.modules = []; 
+
         // Interaction properties
         this.driver = null;
         this.passengers = [];
         this.maxPassengers = config.maxPassengers || 1;
-        
+
+        // Vehicle Grid Properties
+        this.gridWidth = config.gridWidth || 5; 
+        this.gridHeight = config.gridHeight || 5; 
+        this.gridTiles = {}; 
+        this.gridObjects = {}; 
+        this.doorLocation = { x: 0, y: 0 };
+        this.pilotSeatLocation = { x: 1, y: 0 };
+        this.initializeGrid();
+
         // Collision properties
         this.radius = this.size / 2;
-        this.mass = 20; // Consider making this configurable
-        
+        this.mass = 20; 
+
         // Network state tracking
-        this._lastNetworkState = this.getNetworkState(); // Store initial minimal state
+        this._lastNetworkState = this.getNetworkState(); 
         this._stateChanged = false;
     }
-    
+
+    initializeGrid() {
+        for (let y = 0; y < this.gridHeight; y++) {
+            for (let x = 0; x < this.gridWidth; x++) {
+                this.gridTiles[`${x},${y}`] = 'Floor'; 
+            }
+        }
+    }
+
     update(deltaTime, input) {
-        // Only allow updates if driven or if it's an AI vehicle (future)
-        // For now, only update if driven AND input is provided
         if (!this.driver || !input) {
-            this.speed = 0; // Stop if not driven
-             // Check if state changed due to stopping
+            this.speed = 0; 
             if (this._lastNetworkState.speed > 0) {
                 this._stateChanged = true;
             }
             return;
         }
         
-        // Store previous state to detect changes
         const prevState = { x: this.x, y: this.y, angle: this.angle, speed: this.speed };
         
-        // Apply movement based on directional input
         const direction = input.getMovementDirection();
         
         if (direction.x !== 0 || direction.y !== 0) {
-            // Calculate target angle based on direction
             const targetAngle = Math.atan2(direction.y, direction.x);
             
-            // Smoothly rotate towards target angle
             const angleDiff = this.normalizeAngle(targetAngle - this.angle);
             this.angle += Math.sign(angleDiff) * Math.min(Math.abs(angleDiff), this.rotationSpeed * deltaTime);
             
-            // Accelerate
             this.speed = Math.min(this.speed + this.acceleration * deltaTime, this.maxSpeed);
         } else {
-            // Decelerate when no input
             this.speed = Math.max(0, this.speed - this.deceleration * deltaTime);
         }
         
-        // Apply movement
         if (this.speed > 0) {
             this.x += Math.cos(this.angle) * this.speed * deltaTime;
             this.y += Math.sin(this.angle) * this.speed * deltaTime;
         }
         
-        // Check for state changes
         if (
             this.x !== prevState.x ||
             this.y !== prevState.y ||
             this.angle !== prevState.angle ||
-            this.speed !== prevState.speed // Check speed change too
+            this.speed !== prevState.speed 
         ) {
             this._stateChanged = true;
         }
     }
     
     normalizeAngle(angle) {
-        // Normalize angle to be between -PI and PI
         while (angle > Math.PI) angle -= 2 * Math.PI;
         while (angle < -Math.PI) angle += 2 * Math.PI;
         return angle;
@@ -164,16 +169,15 @@ export default class Vehicle {
     repair(amount) {
         const previousHealth = this.health;
         this.health = Math.min(this.maxHealth, this.health + amount);
-         if (this.health !== previousHealth) {
+        if (this.health !== previousHealth) {
             this._stateChanged = true;
         }
         return this.health;
     }
     
     addModule(module) {
-        // Avoid adding duplicates? For now, allow multiple of same type
         this.modules.push(module);
-        this.recalculateStatsFromModules(); // Recalculate after adding
+        this.recalculateStatsFromModules(); 
         this._stateChanged = true;
     }
     
@@ -181,25 +185,22 @@ export default class Vehicle {
         const initialLength = this.modules.length;
         this.modules = this.modules.filter(m => m.id !== moduleId);
         if (this.modules.length !== initialLength) {
-             this.recalculateStatsFromModules(); // Recalculate after removing
-             this._stateChanged = true;
+            this.recalculateStatsFromModules(); 
+            this._stateChanged = true;
         }
     }
 
-    // New method to recalculate stats based on current modules
     recalculateStatsFromModules() {
-        // Reset stats to base values
         this.maxHealth = this.baseMaxHealth;
         this.maxSpeed = this.baseMaxSpeed;
         this.storage = this.baseStorage;
         this.scanRadius = this.baseScanRadius;
 
-        // Apply effects from all currently installed modules
         if (this.modules && Array.isArray(this.modules)) {
             this.modules.forEach(module => {
                 if (module && module.effect) {
                     for (const [stat, value] of Object.entries(module.effect)) {
-                        if (typeof value !== 'number') continue; // Skip non-numeric values
+                        if (typeof value !== 'number') continue; 
 
                         switch (stat) {
                             case 'maxHealth':
@@ -214,34 +215,25 @@ export default class Vehicle {
                             case 'scanRadius':
                                 this.scanRadius += value;
                                 break;
-                            // Add cases for other potential stats (e.g., acceleration, armor)
                         }
                     }
                 }
             });
         } else {
-             // Log warning if modules isn't an array
-             const logger = window.game?.debug || console;
-             logger.warn(`[Vehicle ${this.id}] Attempted to recalculate stats but this.modules is not an array:`, this.modules);
-             this.modules = []; // Reset to empty array if invalid
+            const logger = window.game?.debug || console;
+            logger.warn(`[Vehicle ${this.id}] Attempted to recalculate stats but this.modules is not an array:`, this.modules);
+            this.modules = []; 
         }
 
-        // Ensure stats don't go below reasonable minimums (e.g., 1 health, 0 speed/storage)
         this.maxHealth = Math.max(1, this.maxHealth);
         this.maxSpeed = Math.max(0, this.maxSpeed);
         this.storage = Math.max(0, this.storage);
         this.scanRadius = Math.max(0, this.scanRadius);
 
-        // Ensure current health doesn't exceed the new max health
         this.health = Math.min(this.health, this.maxHealth);
-
-        // Mark state changed if recalculation resulted in changes (optional, depends on what triggers sync)
-        // This might cause unnecessary syncs if called frequently, rely on module add/remove triggering sync.
-        // this._stateChanged = true; 
     }
     
     collidesWith(other) {
-        // Basic circle collision detection
         const radiusA = this.radius;
         const radiusB = (other.radius || other.size / 2 || 0);
         if (radiusB === 0) return false;
@@ -255,20 +247,15 @@ export default class Vehicle {
     
     onCollision(other) {
         // Vehicle specific collision response
-        // Example: Take damage from projectiles or hazards
-        // Example: Push lighter objects (requires physics)
     }
     
     render(ctx, x, y, size) {
-        // Custom rendering for vehicle
         ctx.fillStyle = this.color;
         
-        // Draw vehicle body
         ctx.beginPath();
         ctx.arc(x, y, size / 2, 0, Math.PI * 2);
         ctx.fill();
         
-        // Draw direction indicator
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
         ctx.beginPath();
@@ -307,7 +294,13 @@ export default class Vehicle {
             maxHealth: this.maxHealth,
             driver: this.driver,
             passengers: [...this.passengers],
-            modules: this.modules.map(m => ({ ...m })), 
+            modules: this.modules.map(m => ({ ...m })),
+            gridWidth: this.gridWidth,
+            gridHeight: this.gridHeight,
+            gridTiles: { ...this.gridTiles }, 
+            gridObjects: { ...this.gridObjects }, 
+            doorLocation: { ...this.doorLocation },
+            pilotSeatLocation: { ...this.pilotSeatLocation },
         };
     }
     
@@ -328,11 +321,11 @@ export default class Vehicle {
         const speedThreshold = 1;
         const speedChanged = Math.abs(currentState.speed - lastState.speed) > speedThreshold;
 
-        return positionChanged || angleChanged || speedChanged;
+        return positionChanged || angleChanged || speedChanged; 
     }
     
     clearStateChanged() {
-        this._lastNetworkState = this.getNetworkState();
+        this._lastNetworkState = this.getNetworkState(); 
         this._stateChanged = false;
     }
 }
