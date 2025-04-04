@@ -13,6 +13,13 @@ export default class Renderer {
         this.canvas = canvas;
         this.ctx = canvas.getContext('2d');
         this.game = game; // Store game reference
+
+        // --- NEW: Shadow Mask Canvas ---
+        this.shadowMaskCanvas = null;
+        this.shadowMaskCtx = null;
+        this.initShadowMask();
+        // --- END NEW ---
+
         this.resizeCanvas();
         this.setupResizeListener();
 
@@ -40,9 +47,38 @@ export default class Renderer {
         this.lastFrameTime = performance.now();
     }
 
+    // --- NEW: Initialize Shadow Mask ---
+    initShadowMask() {
+        // Use OffscreenCanvas if available for potential performance benefits
+        try {
+             this.shadowMaskCanvas = new OffscreenCanvas(this.canvas.width, this.canvas.height);
+        } catch (e) {
+             console.log("OffscreenCanvas not supported, falling back to regular canvas for shadow mask.");
+             this.shadowMaskCanvas = document.createElement('canvas');
+        }
+        this.shadowMaskCanvas.width = this.canvas.width;
+        this.shadowMaskCanvas.height = this.canvas.height;
+        this.shadowMaskCtx = this.shadowMaskCanvas.getContext('2d');
+    }
+    // --- END NEW ---
+
     resizeCanvas() {
         this.canvas.width = window.innerWidth;
         this.canvas.height = window.innerHeight;
+
+        // --- NEW: Resize Shadow Mask ---
+        if (this.shadowMaskCanvas) {
+            this.shadowMaskCanvas.width = this.canvas.width;
+            this.shadowMaskCanvas.height = this.canvas.height;
+             // Re-get context if it's a regular canvas, as resizing might clear it
+             if (!(this.shadowMaskCanvas instanceof OffscreenCanvas)) {
+                 this.shadowMaskCtx = this.shadowMaskCanvas.getContext('2d');
+             }
+        } else {
+             this.initShadowMask(); // Initialize if it wasn't created before
+        }
+        // --- END NEW ---
+
         // Notify all sub-renderers of resize if needed
         if (this.uiRenderer && this.uiRenderer.onResize) {
             this.uiRenderer.onResize();
@@ -125,43 +161,50 @@ export default class Renderer {
     }
 
     renderShadows() {
-        if (!this.game.shadowManager) return;
+        // --- UPDATED: Render shadows to the offscreen mask ---
+        if (!this.game.shadowManager || !this.shadowMaskCtx || !this.shadowMaskCanvas) return;
 
         const shadowPolygons = this.game.shadowManager.getShadowPolygons();
-        if (shadowPolygons.length === 0) return;
+        const smCtx = this.shadowMaskCtx;
 
-        this.ctx.save();
-        // Simple rendering: draw semi-transparent black polygons
-        this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Shadow color and opacity
+        // 1. Clear the mask (fill with white for multiply blend mode)
+        smCtx.fillStyle = 'white'; // Fully lit
+        smCtx.fillRect(0, 0, this.shadowMaskCanvas.width, this.shadowMaskCanvas.height);
 
-        for (const polygon of shadowPolygons) {
-            if (!polygon || polygon.length < 3) continue; // Need at least 3 vertices
+        // 2. Draw shadow polygons onto the mask
+        if (shadowPolygons.length > 0) {
+             smCtx.fillStyle = 'rgba(0, 0, 0, 1)'; // Draw shadows as solid black
+             // Optional: Could use a grey value for softer shadows, e.g., 'rgba(50, 50, 50, 1)'
 
-            const screenPolygon = polygon.map(p => this.worldToScreen(p.x, p.y));
+            for (const polygon of shadowPolygons) {
+                if (!polygon || polygon.length < 3) continue;
 
-            this.ctx.beginPath();
-            this.ctx.moveTo(screenPolygon[0].x, screenPolygon[0].y);
-            for (let i = 1; i < screenPolygon.length; i++) {
-                this.ctx.lineTo(screenPolygon[i].x, screenPolygon[i].y);
-            }
-            this.ctx.closePath();
-            this.ctx.fill();
+                const screenPolygon = polygon.map(p => this.worldToScreen(p.x, p.y));
 
-            // Optional: Debug rendering for shadow polygons
-            if (this.game.shadowManager.debug) {
-                 this.ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)'; // Magenta border for debug
-                 this.ctx.lineWidth = 1;
-                 this.ctx.stroke();
+                smCtx.beginPath();
+                smCtx.moveTo(screenPolygon[0].x, screenPolygon[0].y);
+                for (let i = 1; i < screenPolygon.length; i++) {
+                    smCtx.lineTo(screenPolygon[i].x, screenPolygon[i].y);
+                }
+                smCtx.closePath();
+                smCtx.fill();
+
+                 // Debug rendering on the mask (optional)
+                 if (this.game.shadowManager.debug) {
+                     smCtx.strokeStyle = 'rgba(255, 0, 255, 1)'; // Magenta border
+                     smCtx.lineWidth = 1;
+                     smCtx.stroke();
+                 }
             }
         }
-        this.ctx.restore();
 
-        // --- Future: Implement shadow mask rendering ---
-        // 1. Create offscreen canvas (shadowMaskCanvas)
-        // 2. Clear shadowMaskCanvas with transparent or fully lit color
-        // 3. Draw shadow polygons onto shadowMaskCanvas with solid black/grey
-        // 4. Draw shadowMaskCanvas onto the main canvas using appropriate composite operation
-        //    (e.g., 'multiply' or 'destination-in' depending on approach)
+        // 3. Apply the shadow mask to the main canvas
+        // This happens *after* world and entities are drawn, before effects/UI
+        this.ctx.save();
+        this.ctx.globalCompositeOperation = 'multiply'; // Use multiply to darken areas
+        this.ctx.drawImage(this.shadowMaskCanvas, 0, 0);
+        this.ctx.restore(); // Restore default composite operation ('source-over')
+        // --- END UPDATED ---
     }
 
     renderEffects() {
