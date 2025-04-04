@@ -36,17 +36,14 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 *   Implement shadow calculation in `ShadowManager.js` (`calculateShadowPolygonRaycast`). (**COMPLETE**)
 *   Refine polygon generation (`getCasterGeometry`, silhouette edge detection, vertex ordering). (**COMPLETE**)
 *   Implement shadow rendering using an offscreen shadow mask buffer in `Renderer.js`. (**COMPLETE**)
-    *   Added `shadowMaskCanvas` and `shadowMaskCtx` to `Renderer`.
-    *   Modified `Renderer.renderShadows` to draw polygons onto the mask.
-    *   Modified `Renderer.renderShadows` to apply the mask to the main canvas using `'multiply'` blend mode after world/entities are drawn.
 
 ---
 
 **Phase 5 - NEXT STEPS:**
 
 1.  **Optimize Shadow Calculation:**
-    *   Cache caster geometry in `ShadowManager` (e.g., using `casterCache`).
-    *   Optimize caster finding (use viewport culling more effectively).
+    *   Cache caster geometry in `ShadowManager` (e.g., using `casterCache`). (**COMPLETE**)
+    *   Optimize caster finding (e.g., use viewport culling more effectively in `ShadowManager.calculateShadows`). (**NEXT**)
     *   Potentially skip calculations for lights/casters far off-screen or lights with very low intensity.
 2.  **Handle Complex Shapes:** Extend `getCasterGeometry` and silhouette finding to handle non-rectangular or rotated shapes if necessary.
 3.  **Improve Edge Cases:** Refine silhouette detection for edge cases (light very close to caster, light on an edge/vertex).
@@ -55,4 +52,6 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
     *   Adjust shadow color/opacity (`rgba(0, 0, 0, 0.3)` in `Renderer.renderShadows` is currently used).
 
 ---
+
+
 
