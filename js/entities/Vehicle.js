@@ -34,9 +34,6 @@ export default class Vehicle {
         // Network state tracking
         this._lastNetworkState = this.getNetworkState();
         this._stateChanged = false;
-
-        // Debug only
-        console.log(`Vehicle constructor called: id=${id}, type=${JSON.stringify(type)}, owner=${owner}`);
     }
     
     update(deltaTime, input) {
@@ -165,14 +162,6 @@ export default class Vehicle {
         ctx.moveTo(x, y);
         ctx.lineTo(x + size / 2, y);
         ctx.stroke();
-
-        // Debug indicator - draw a clear indication this is a vehicle
-        ctx.save();
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(x, y, size / 4, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
     }
     
     setPosition(x, y) {

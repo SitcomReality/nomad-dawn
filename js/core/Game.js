@@ -146,7 +146,7 @@ export default class Game {
                      [testVehicleId]: testVehicleState
                  }
              });
-             this.debug.log(`Initial test vehicle add request sent.`);
+             this.debug.log(`Initial test vehicle added request sent.`);
         } else {
             this.debug.log(`Initial test vehicle (${testVehicleId}) already exists in room state or other vehicles present.`);
         }

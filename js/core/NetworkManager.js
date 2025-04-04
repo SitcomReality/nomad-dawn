@@ -103,95 +103,122 @@ export default class NetworkManager {
 
     // Moved from Game.js: Sync Vehicles
     syncVehiclesFromNetwork(networkVehicles) {
-         this.game.debug.log("Starting syncVehiclesFromNetwork..."); // DEBUG
+         this.game.debug.log("[SyncVehicles] Starting sync. Received data:", JSON.parse(JSON.stringify(networkVehicles))); // Log received data
+
          // Lazily import Vehicle to avoid circular dependency issues if NetworkManager is imported elsewhere
          // Or ensure Vehicle class is loaded before this is called. For simplicity, assuming Vehicle is available.
          const Vehicle = window.Vehicle; // Assuming Vehicle is globally accessible or loaded appropriately
          if (!Vehicle) {
-             this.game.debug.error("Vehicle class not found for syncVehiclesFromNetwork");
+             this.game.debug.error("[SyncVehicles] Vehicle class not found!");
              return;
          }
 
+         // Ensure networkVehicles is an object
+         if (!networkVehicles || typeof networkVehicles !== 'object') {
+             this.game.debug.warn("[SyncVehicles] Received invalid networkVehicles data (not an object):", networkVehicles);
+             return; // Don't proceed if data is invalid
+         }
+
         const presentVehicleIds = new Set(Object.keys(networkVehicles));
+        this.game.debug.log(`[SyncVehicles] IDs present in network state: ${Array.from(presentVehicleIds).join(', ')}`);
 
         // Update or create vehicles
         for (const vehicleId in networkVehicles) {
+             this.game.debug.log(`[SyncVehicles] Processing vehicle ID: ${vehicleId}`);
             const data = networkVehicles[vehicleId];
             let vehicle = this.game.entities.get(vehicleId);
+            this.game.debug.log(`[SyncVehicles] Existing entity for ${vehicleId}:`, vehicle ? vehicle.id : 'None');
 
             if (data === null) { // Vehicle removed
                  if (vehicle) {
-                     this.game.debug.log(`Removing vehicle ${vehicleId} due to null in network state.`); // DEBUG
+                     this.game.debug.log(`[SyncVehicles] Removing vehicle ${vehicleId} due to null in network state.`);
                      this.game.entities.remove(vehicleId);
+                 } else {
+                      this.game.debug.log(`[SyncVehicles] Received null for non-existent vehicle ${vehicleId}. Ignoring.`);
                  }
                  continue;
             }
 
             // Check for minimum required data to create/update a vehicle
              if (!data || typeof data !== 'object' || !data.vehicleType || typeof data.x !== 'number' || typeof data.y !== 'number') {
-                 this.game.debug.warn(`Received incomplete or invalid vehicle data for ID ${vehicleId}, skipping sync. Data:`, data);
+                 this.game.debug.warn(`[SyncVehicles] Received incomplete or invalid vehicle data for ID ${vehicleId}, skipping sync. Data:`, data);
                  presentVehicleIds.delete(vehicleId); // Remove invalid ID from tracking
                  continue;
              }
 
             if (!vehicle) {
+                 this.game.debug.log(`[SyncVehicles] Vehicle ${vehicleId} not found locally. Attempting creation...`);
                  // Create new vehicle entity if it doesn't exist
                  const vehicleConfig = this.game.config.VEHICLE_TYPES.find(v => v.id === data.vehicleType);
                  if (!vehicleConfig) {
-                     console.warn(`Received data for unknown vehicle type: ${data.vehicleType}`);
+                     this.game.debug.warn(`[SyncVehicles] Received data for unknown vehicle type: ${data.vehicleType}. Cannot create ${vehicleId}.`);
                      continue;
                  }
-                 // Pass config and owner ID
-                 vehicle = new Vehicle(vehicleId, vehicleConfig, data.owner);
-                 this.game.debug.log(`Created network vehicle ${vehicleId} of type ${data.vehicleType} at (${data.x}, ${data.y})`); // DEBUG
-                 this.game.entities.add(vehicle); // Add should also log
+                 this.game.debug.log(`[SyncVehicles] Found config for type ${data.vehicleType}.`);
+
+                 try {
+                     // Pass config object (not just type string) and owner ID
+                     vehicle = new Vehicle(vehicleId, vehicleConfig, data.owner);
+                     this.game.debug.log(`[SyncVehicles] Successfully created new Vehicle instance for ${vehicleId}.`);
+                 } catch(e) {
+                     this.game.debug.error(`[SyncVehicles] Error creating Vehicle instance for ${vehicleId}:`, e);
+                     continue; // Skip adding if constructor fails
+                 }
+
+                 // Add should log internally now, but let's add one here too
+                 this.game.debug.log(`[SyncVehicles] Attempting to add ${vehicleId} to EntityManager...`);
+                 const addedEntity = this.game.entities.add(vehicle); // Add should also log
+                 if(addedEntity) {
+                     this.game.debug.log(`[SyncVehicles] Successfully added ${vehicleId} to EntityManager.`);
+                 } else {
+                     this.game.debug.error(`[SyncVehicles] Failed to add ${vehicleId} to EntityManager (add returned null/undefined).`);
+                 }
+
+            } else {
+                 this.game.debug.log(`[SyncVehicles] Updating existing vehicle ${vehicleId}.`);
+                 // Update vehicle state
+                 vehicle.x = data.x ?? vehicle.x;
+                 vehicle.y = data.y ?? vehicle.y;
+                 vehicle.angle = data.angle ?? vehicle.angle;
+                 vehicle.health = data.health ?? vehicle.health;
+                 vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth; // Make sure maxHealth is synced too
+                 vehicle.driver = data.driver ?? null;
+                 vehicle.passengers = data.passengers ?? [];
+                 vehicle.modules = data.modules ?? [];
+
+                 // Ensure derived properties based on modules are potentially recalculated if needed
+                 // This might require a method on the Vehicle class like `recalculateStatsFromModules()`
+                 // if (!vehicle.recalculateStatsFromModules) {
+                 //    console.warn(`Vehicle ${vehicleId} missing recalculateStatsFromModules method.`);
+                 // } else {
+                 //    vehicle.recalculateStatsFromModules();
+                 // }
+                 // NOTE: For now, BaseBuildingUI applies/removes effects directly, which might suffice.
+
+
+                 // Update interpolation target if exists
+                 // if (vehicle.updateTargetState) {
+                 //    vehicle.updateTargetState(data);
+                 // }
             }
-
-             // --- DEBUG: Log state before update ---
-             // const oldState = JSON.parse(JSON.stringify(vehicle)); // Deep copy
-
-             // Update vehicle state
-             vehicle.x = data.x ?? vehicle.x;
-             vehicle.y = data.y ?? vehicle.y;
-             vehicle.angle = data.angle ?? vehicle.angle;
-             vehicle.health = data.health ?? vehicle.health;
-             vehicle.maxHealth = data.maxHealth ?? vehicle.maxHealth; // Make sure maxHealth is synced too
-             vehicle.driver = data.driver ?? null;
-             vehicle.passengers = data.passengers ?? [];
-             vehicle.modules = data.modules ?? [];
-
-              // --- DEBUG: Log state after update and compare ---
-              // const newState = JSON.parse(JSON.stringify(vehicle));
-              // if (JSON.stringify(oldState) !== JSON.stringify(newState)) {
-              //      this.game.debug.log(`Updated vehicle ${vehicleId}. Old:`, oldState, 'New:', newState);
-              // } else {
-              //      // Only log if nothing changed and we expected it to
-              //      // this.game.debug.log(`Vehicle ${vehicleId} state unchanged.`);
-              // }
-
-
-             // If vehicle has an interpolation target, update it here
-             // if (vehicle.updateTargetState) {
-             //    vehicle.updateTargetState(data);
-             // }
-             
-             // Ensure state change flag is managed if needed for network optimization
-             // vehicle._stateChanged = true; // Force update or let Vehicle class handle this?
         }
 
          // Remove local vehicle entities that are no longer in the room state
          const currentVehicles = this.game.entities.getByType('vehicle');
+         this.game.debug.log(`[SyncVehicles] Checking for vehicles to remove. Current local vehicles: ${currentVehicles.map(v=>v.id).join(', ')}`);
          for (const localVehicle of currentVehicles) {
+             if (!localVehicle || !localVehicle.id) continue; // Safety check
+
              if (!presentVehicleIds.has(localVehicle.id)) {
-                 this.game.debug.log(`Removing vehicle ${localVehicle.id} (no longer in network state)`);
+                 this.game.debug.log(`[SyncVehicles] Removing local vehicle ${localVehicle.id} (no longer in network state)`);
                  this.game.entities.remove(localVehicle.id);
              }
          }
-         this.game.debug.log("Finished syncVehiclesFromNetwork."); // DEBUG
+         this.game.debug.log(`[SyncVehicles] Finished sync. EntityManager now has ${this.game.entities.getByType('vehicle').length} vehicles.`);
     }
 
-     // Moved from Game.js: Handle Presence Update Requests
-     handlePresenceUpdateRequest(updateRequest, fromClientId) {
+    // Moved from Game.js: Handle Presence Update Requests
+    handlePresenceUpdateRequest(updateRequest, fromClientId) {
          // Guest mode check: Guests cannot respond to requests.
          // Also need the player object to exist.
          if (this.game.isGuestMode || !this.game.player) return;
@@ -234,10 +261,10 @@ export default class NetworkManager {
                  this.game.debug.log(`Received unknown presence update request type: ${updateRequest.type} from ${fromClientId}`);
                  break;
          }
-     }
+    }
 
     // Moved from Game.js: Handle Network Events
-     handleNetworkEvent(eventData) {
+    handleNetworkEvent(eventData) {
          if (!eventData || !eventData.type) return;
 
          switch (eventData.type) {
@@ -280,7 +307,7 @@ export default class NetworkManager {
                  // this.game.debug.log('Received event:', eventData);
                  break;
          }
-     }
+    }
     
     // --- Existing methods ---
     

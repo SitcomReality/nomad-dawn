@@ -3,61 +3,68 @@ export default class EntityManager {
         this.entities = {};
         this.playerEntities = {}; // Maps clientId to player entity
     }
-    
+
     add(entity) {
         if (!entity || !entity.id) {
-             console.error("Attempted to add invalid entity:", entity);
+             // Use game debug if available, otherwise console
+             const logger = window.game?.debug || console;
+             logger.error("[EntityManager] Attempted to add invalid entity:", entity);
              return null;
         }
         if (this.entities[entity.id]) {
-            // console.warn(`Entity with ID ${entity.id} already exists. Overwriting.`);
+            // Use game debug if available, otherwise console
+            const logger = window.game?.debug || console;
+             // This is common during sync, make it a log instead of warn
+             logger.log(`[EntityManager] Entity with ID ${entity.id} already exists. Overwriting.`);
         }
         this.entities[entity.id] = entity;
-        
-        // --- DEBUG: Log adding vehicles ---
+
+        // Log adding vehicles specifically
         if (entity.type === 'vehicle') {
-            console.log(`[EntityManager] Added vehicle entity: ${entity.id}`, entity); // Use console.log to ensure it appears even if debug off
+             // Use game debug if available, otherwise console
+             const logger = window.game?.debug || console;
+             logger.log(`[EntityManager] Added vehicle entity: ${entity.id}`, entity);
         }
-        // --- END DEBUG ---
 
         // Track player entities separately for quick access using clientId
         if (entity.type === 'player') {
             this.playerEntities[entity.id] = entity;
         }
-        
-        return entity;
+
+        return entity; // Return the added entity
     }
-    
+
     remove(entityId) {
         const entity = this.entities[entityId];
         if (entity) {
-             // --- DEBUG: Log removing vehicles ---
+            // Log removing vehicles specifically
              if (entity.type === 'vehicle') {
-                 console.log(`[EntityManager] Removing vehicle entity: ${entityId}`); // Use console.log
+                 // Use game debug if available, otherwise console
+                 const logger = window.game?.debug || console;
+                 logger.log(`[EntityManager] Removing vehicle entity: ${entityId}`);
              }
-             // --- END DEBUG ---
             if (entity.type === 'player') {
                 delete this.playerEntities[entityId];
             }
             delete this.entities[entityId];
-            // console.log(`Removed entity: ${entityId}`); // Debugging removal
+             // logger.log(`Removed entity: ${entityId}`); // Debugging removal
             return true;
         }
         return false;
     }
-    
+
     get(entityId) {
         return this.entities[entityId] || null;
     }
-    
+
     getAll() {
         return Object.values(this.entities);
     }
-    
+
     getByType(type) {
         return Object.values(this.entities).filter(entity => entity && entity.type === type); // Add check for entity validity
     }
-    
+
     getPlayersInRadius(x, y, radius) {
         const radiusSq = radius * radius; // Use squared distance for efficiency
         return Object.values(this.playerEntities).filter(player => {
@@ -66,7 +73,7 @@ export default class EntityManager {
             return (dx * dx + dy * dy) <= radiusSq;
         });
     }
-    
+
     update(deltaTime) {
         for (const entityId in this.entities) {
             const entity = this.entities[entityId];
@@ -79,16 +86,16 @@ export default class EntityManager {
             }
         }
     }
-    
+
     count() {
         return Object.keys(this.entities).length;
     }
-    
+
     clear() {
         this.entities = {};
         this.playerEntities = {};
     }
-    
+
     // Added localPlayerId to prevent self-update/creation loop
     syncFromNetworkPresence(presenceData, localPlayerId) {
         const presentIds = new Set(Object.keys(presenceData));
