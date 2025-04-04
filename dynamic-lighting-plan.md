@@ -8,42 +8,30 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 
 **Phase 1: Basic Light Source Data (COMPLETE)**
 
-1.  **`LightSource.js`:** Define the `LightSource` class with properties like `id`, `x`, `y`, `color`, `intensity`, `range`, `type`, `ownerId`. **(COMPLETE)**
-2.  **`EntityManager.js`:** Update to track `lightSources` separately. Add `getLightsInRadius(x, y, radius)` method. **(COMPLETE)**
-3.  **`Player.js` / `Vehicle.js`:** Add properties to track attached light source IDs (e.g., `player.lightSourceId`, `vehicle.headlightSourceIds`). **(COMPLETE)**
+1.  **`LightSource.js`:** Define the `LightSource` class. **(COMPLETE)**
+2.  **`EntityManager.js`:** Update to track `lightSources`. Add `getLightsInRadius`. **(COMPLETE)**
+3.  **`Player.js` / `Vehicle.js`:** Add properties to track light source IDs. **(COMPLETE)**
 
 ---
 
 **Phase 2: Light Calculation (COMPLETE)**
 
-4.  **`Game.js`:** Instantiate a new `LightManager` class. **(COMPLETE)**
-5.  **`LightManager.js`:** Create the `LightManager` class. Implement `calculateLightAt(x, y)` method that finds nearby lights via `EntityManager` and calculates the combined light color/intensity at that point (considering range and falloff). Include a concept of global ambient light. **(COMPLETE)**
+4.  **`Game.js`:** Instantiate `LightManager`. **(COMPLETE)**
+5.  **`LightManager.js`:** Create `LightManager` class. Implement `calculateLightAt`, `setGlobalAmbientLight`. **(COMPLETE)**
 
 ---
 
-**Phase 3: Applying Light to Rendering (NEXT)**
+**Phase 3: Applying Light to Rendering (COMPLETE)**
 
-6.  **`Renderer.js`:**
-    *   Remove the old `lightingSystem` properties and methods (`setTimeOfDay`, `updateLightingSystem`).
-    *   Potentially keep a reference to `game.lightManager` if needed directly, but ideally, sub-renderers get it from `game`.
-7.  **`WorldRenderer.js`:**
-    *   Modify `renderChunkTerrain` to use `game.lightManager.calculateLightAt(chunk.x, chunk.y)` (or a representative point) to determine the light affecting the terrain color.
-    *   Remove direct usage of the old `renderer.lightingSystem`.
-    *   Modify `adjustColorForLighting` to take the calculated light color/intensity instead of the old properties.
-8.  **`WorldObjectRenderer.js`:**
-    *   Modify `render` to get light color/intensity using `game.lightManager.calculateLightAt(obj.x, obj.y)`.
-    *   Pass the calculated light color/intensity to `adjustColorForLighting`.
-    *   Remove direct usage of the old `renderer.lightingSystem` for tinting/shadows. (Shadows will be removed/reworked later).
-9.  **`EntityRenderer.js`:**
-    *   Modify `renderEntity` to get light color/intensity using `game.lightManager.calculateLightAt(entity.x, entity.y)`.
-    *   Modify `renderEntityOverlays` (if necessary, e.g., for health bars) or base entity rendering to use the calculated light.
-    *   Remove direct usage of the old `renderer.lightingSystem`. (Shadows will be removed/reworked later).
-10. **`SpriteManager.js`:**
-    *   Update `getTintedSprite` method signature to accept the calculated light color object `{r, g, b}` and potentially an intensity value (instead of `ambientLight`). Adjust the tinting logic and cache key accordingly.
+6.  **`Renderer.js`:** Remove old `lightingSystem`. **(COMPLETE)**
+7.  **`WorldRenderer.js`:** Modify `renderChunkTerrain` and `adjustColorForLighting` to use `LightManager`. **(COMPLETE)**
+8.  **`WorldObjectRenderer.js`:** Modify `render` and `drawFallbackObject`. Remove old shadow logic. Update `adjustColorForLighting`. **(COMPLETE)**
+9.  **`EntityRenderer.js`:** Modify `renderEntity` and `renderEntityOverlays`. Remove old shadow logic. **(COMPLETE)**
+10. **`SpriteManager.js`:** Update `getTintedSprite` signature, logic, and cache key. **(COMPLETE)**
 
 ---
 
-**Phase 4: Adding Light Sources**
+**Phase 4: Adding Light Sources (NEXT)**
 
 11. Modify relevant systems (e.g., `Player` for torches, `Vehicle` for headlights, `VehicleBuildingManager` for placeable lights) to create/destroy `LightSource` entities and add/remove them via `EntityManager`.
 12. Ensure `LightSource` positions are updated correctly if attached to moving entities (e.g., in `LightSource.update` or `EntityManager.update`).

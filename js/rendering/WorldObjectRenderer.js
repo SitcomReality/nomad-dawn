@@ -21,16 +21,13 @@ export default class WorldObjectRenderer {
         const baseScreenSize = (obj.size || 10) * this.renderer.camera.zoom; // Base size based on obj.size and zoom
 
         // --- Dynamic Sprite Scaling ---
-        // Define a base world size where the sprite is drawn at 1x scale
-        const baseWorldSizeFor1xScale = 16; // e.g., an object with size 16 uses the sprite at its native resolution conceptually
+        const baseWorldSizeFor1xScale = 16;
         const scaleRelativeToBase = (obj.size || 10) / baseWorldSizeFor1xScale;
-        // Define a pixel size multiplier for the drawn sprite
-        const spritePixelMultiplier = 3 * this.renderer.camera.zoom; // Adjust this factor as needed for visual style
+        const spritePixelMultiplier = 3 * this.renderer.camera.zoom;
         const finalDrawSize = baseWorldSizeFor1xScale * scaleRelativeToBase * spritePixelMultiplier;
-        // --- End Dynamic Sprite Scaling ---
 
-        // More aggressive culling: check based on the final draw size
-        const cullMargin = finalDrawSize / 2; // Use half of the draw size
+        // --- Culling Check (using finalDrawSize) ---
+        const cullMargin = finalDrawSize / 2;
         if (
             screenPos.x + cullMargin < 0 ||
             screenPos.y + cullMargin < 0 ||
@@ -43,49 +40,19 @@ export default class WorldObjectRenderer {
         // Save context state before drawing object AND overlays
         this.ctx.save();
 
-        // --- Shadow Rendering (using new logic) ---
-        const shadowAlpha = 0.3 * this.renderer.lightingSystem.shadowVisibility; // Fade shadow with visibility
-
-        // Adjust shadow size based on the *base* screen size before the pixel multiplier
-        const shadowBaseSize = baseScreenSize;
-
-        const maxShadowDisplacement = shadowBaseSize * 1.5; 
-        const baseVerticalOffset = shadowBaseSize * 0.15;
-        const additionalVerticalOffset = shadowBaseSize * 0.25 * this.renderer.lightingSystem.shadowVerticalOffsetFactor;
-        const shadowX = screenPos.x + this.renderer.lightingSystem.shadowHorizontalOffsetFactor * maxShadowDisplacement;
-        const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
-
-        const baseWidthRadius = shadowBaseSize * 0.5;
-        const baseHeightRadius = shadowBaseSize * 0.5;
-
-        const shadowWidthFactor = this.renderer.lightingSystem.shadowWidthFactor; // Use factor from Renderer
-        const shadowHeightFactor = this.renderer.lightingSystem.shadowHeightFactor; // Use factor from Renderer
-
-        const shadowWidth = baseWidthRadius * shadowWidthFactor;
-        const shadowHeight = baseHeightRadius * shadowHeightFactor;
-
-        this.ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
-        this.ctx.beginPath();
-        this.ctx.ellipse(
-            shadowX,
-            shadowY,
-            shadowWidth,
-            shadowHeight,
-            0, 0, Math.PI * 2
-        );
-        this.ctx.fill();
-
+        // --- Get Light Information ---
+        const light = this.game.lightManager.calculateLightAt(obj.x, obj.y);
 
         // --- Sprite Rendering ---
         if (obj.spriteCellId && this.renderer.spriteManager) {
             const spriteOptions = {
                 smoothing: false, // Pixel art style
-                // Apply lighting tint if enabled
-                tint: this.renderer.lightingSystem.enabled ? {
-                    enabled: true,
-                    lightColor: this.renderer.lightingSystem.lightColor,
-                    ambientLight: this.renderer.lightingSystem.ambientLight
-                } : { enabled: false }
+                // Apply lighting tint using LightManager results
+                tint: {
+                    enabled: true, // Always attempt tinting now
+                    lightColor: light.color,
+                    intensity: light.intensity // Pass calculated intensity
+                }
             };
 
             // Use the SpriteManager to draw the sprite
@@ -101,29 +68,29 @@ export default class WorldObjectRenderer {
 
             if (!drawn) {
                  // Fallback rendering if sprite fails
-                 this.drawFallbackObject(obj, screenPos, finalDrawSize);
+                 this.drawFallbackObject(obj, screenPos, finalDrawSize, light); // Pass light info
             }
         } else {
             // Fallback rendering if no sprite info or manager
-             this.drawFallbackObject(obj, screenPos, finalDrawSize);
+             this.drawFallbackObject(obj, screenPos, finalDrawSize, light); // Pass light info
         }
-
 
         // Restore context state after drawing object and overlays
         this.ctx.restore();
     }
 
-    drawFallbackObject(obj, screenPos, drawSize) {
+    // --- UPDATED: drawFallbackObject signature ---
+    drawFallbackObject(obj, screenPos, drawSize, light) {
         // Simple circle fallback
         let fallbackColor = obj.color || '#888'; // Use object color or default grey
-         if (this.renderer.lightingSystem.enabled) {
-             const light = this.renderer.lightingSystem;
-             fallbackColor = this.adjustColorForLighting(
-                 fallbackColor,
-                 light.lightColor,
-                 light.ambientLight
-             );
-         }
+
+        // --- UPDATED: Use calculated light ---
+        fallbackColor = this.adjustColorForLighting(
+            fallbackColor,
+            light.color,
+            light.intensity
+        );
+        // --- END UPDATED ---
 
         this.ctx.fillStyle = fallbackColor;
         this.ctx.beginPath();
@@ -136,7 +103,8 @@ export default class WorldObjectRenderer {
          this.ctx.stroke();
     }
 
-    adjustColorForLighting(colorString, lightColor, ambientLight) {
+    // --- UPDATED: adjustColorForLighting signature ---
+    adjustColorForLighting(colorString, lightColor, lightIntensity) {
         let r, g, b;
 
         if (!colorString) colorString = '#888'; // Default grey if color is undefined
@@ -160,10 +128,18 @@ export default class WorldObjectRenderer {
             b = parseInt(rgb[2]);
         } else return colorString;
 
-        // Modulate by light color AND ambient intensity
-        r = Math.floor(r * (lightColor.r / 255) * ambientLight);
-        g = Math.floor(g * (lightColor.g / 255) * ambientLight);
-        b = Math.floor(b * (lightColor.b / 255) * ambientLight);
+        // --- UPDATED: Use calculated light values ---
+        // Modulate by light color AND intensity
+        // Normalize light color components (0-1) and multiply by intensity
+        const lightRNorm = (lightColor.r / 255) * lightIntensity;
+        const lightGNorm = (lightColor.g / 255) * lightIntensity;
+        const lightBNorm = (lightColor.b / 255) * lightIntensity;
+
+        // Apply modulation
+        r = Math.floor(r * lightRNorm);
+        g = Math.floor(g * lightGNorm);
+        b = Math.floor(b * lightBNorm);
+        // --- END UPDATED ---
 
         // Clamp values
         r = Math.max(0, Math.min(255, r));

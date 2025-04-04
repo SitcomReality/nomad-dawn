@@ -13,12 +13,14 @@ export default class WorldRenderer {
         this.ctx.fillStyle = '#1a1a1a';
         this.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
 
-        if (this.renderer.lightingSystem.enabled) {
-            const ambientLight = this.renderer.lightingSystem.ambientLight;
-            const bgBrightness = Math.max(10, Math.floor(26 * ambientLight));
-            this.ctx.fillStyle = `rgb(${bgBrightness}, ${bgBrightness}, ${bgBrightness})`;
-            this.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-        }
+        const lightAtCenter = this.game.lightManager.calculateLightAt(this.renderer.camera.x, this.renderer.camera.y);
+        const baseBrightness = 10; // Minimum background brightness
+        const lightBrightness = (lightAtCenter.color.r + lightAtCenter.color.g + lightAtCenter.color.b) / 3; // Average brightness
+        const finalBrightness = baseBrightness + (lightBrightness * 0.1); // Scale effect, avoid pure black/white
+        const bgColor = `rgb(${Math.floor(finalBrightness)}, ${Math.floor(finalBrightness)}, ${Math.floor(finalBrightness)})`;
+
+        this.ctx.fillStyle = bgColor;
+        this.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
 
         const camera = this.renderer.camera;
         const halfWidthWorld = viewWidthWorld / 2;
@@ -37,34 +39,29 @@ export default class WorldRenderer {
             viewHeightWorld
         );
 
-        // Render Terrain First
         for (const chunk of visibleChunks) {
             this.renderChunkTerrain(chunk);
         }
 
-        // Render World Objects (using WorldObjectManager)
         if (world.worldObjectManager) {
             const visibleObjects = world.worldObjectManager.getVisibleObjects(
                 viewBounds.minX, viewBounds.minY, viewBounds.maxX, viewBounds.maxY
             );
-            this.lastVisibleObjectCount = visibleObjects.length; // Store count for debug
+            this.lastVisibleObjectCount = visibleObjects.length; 
 
             for (const obj of visibleObjects) {
-                // Use the dedicated renderer for each object
                 this.worldObjectRenderer.render(obj);
             }
         } else {
-             // Log warning only if debug enabled
-             if (this.game?.debug?.isEnabled()) {
+            if (this.game?.debug?.isEnabled()) {
                 this.game.debug.warn("[WorldRenderer] WorldObjectManager not available.");
-             }
+            }
             this.lastVisibleObjectCount = 0;
         }
 
-        // Render Grid and Debug Info Last
         if (this.game?.debug?.isEnabled()) {
-            this.renderGrid(world); // Render grid lines if debug is on
-            this.renderDebugText(visibleChunks.length, this.lastVisibleObjectCount); // Render counts
+            this.renderGrid(world); 
+            this.renderDebugText(visibleChunks.length, this.lastVisibleObjectCount); 
         }
     }
 
@@ -77,7 +74,6 @@ export default class WorldRenderer {
         const screenRight = screenLeft + screenSize;
         const screenBottom = screenTop + screenSize;
 
-        // Basic culling check
         if (
             screenRight < 0 ||
             screenBottom < 0 ||
@@ -89,21 +85,18 @@ export default class WorldRenderer {
 
         let terrainColor = chunk.biome.color;
 
-        if (this.renderer.lightingSystem.enabled) {
-            const light = this.renderer.lightingSystem;
-            terrainColor = this.adjustColorForLighting(
-                terrainColor,
-                light.lightColor,
-                light.ambientLight
-            );
-        }
+        const light = this.game.lightManager.calculateLightAt(chunk.x, chunk.y);
+        terrainColor = this.adjustColorForLighting(
+            terrainColor,
+            light.color, 
+            light.intensity 
+        );
 
         this.ctx.fillStyle = terrainColor;
         this.ctx.fillRect(screenLeft, screenTop, screenSize, screenSize);
 
-        // Optional: Render chunk boundary for debugging
         if (this.game?.debug?.isEnabled() && this.game.config.SHOW_CHUNK_BOUNDARIES) {
-            this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)'; // Red for chunk boundaries
+            this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)'; 
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(screenLeft, screenTop, screenSize, screenSize);
         }
@@ -159,14 +152,14 @@ export default class WorldRenderer {
     }
 
     renderDebugText(chunkCount, objectCount) {
-         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-         this.ctx.font = '12px monospace';
-         this.ctx.textAlign = 'left';
-         this.ctx.fillText(`Visible Chunks: ${chunkCount}`, 10, this.renderer.canvas.height - 30);
-         this.ctx.fillText(`Rendered Objects: ${objectCount}`, 10, this.renderer.canvas.height - 15);
-     }
+        this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+        this.ctx.font = '12px monospace';
+        this.ctx.textAlign = 'left';
+        this.ctx.fillText(`Visible Chunks: ${chunkCount}`, 10, this.renderer.canvas.height - 30);
+        this.ctx.fillText(`Rendered Objects: ${objectCount}`, 10, this.renderer.canvas.height - 15);
+    }
 
-    adjustColorForLighting(colorString, lightColor, ambientLight) {
+    adjustColorForLighting(colorString, lightColor, lightIntensity) {
         let r, g, b;
         if (!colorString) colorString = '#888';
         if (colorString.startsWith('#')) {
@@ -187,9 +180,15 @@ export default class WorldRenderer {
             g = parseInt(rgb[1]);
             b = parseInt(rgb[2]);
         } else return colorString;
-        r = Math.floor(r * (lightColor.r / 255) * ambientLight);
-        g = Math.floor(g * (lightColor.g / 255) * ambientLight);
-        b = Math.floor(b * (lightColor.b / 255) * ambientLight);
+
+        const lightRNorm = (lightColor.r / 255) * lightIntensity;
+        const lightGNorm = (lightColor.g / 255) * lightIntensity;
+        const lightBNorm = (lightColor.b / 255) * lightIntensity;
+
+        r = Math.floor(r * lightRNorm);
+        g = Math.floor(g * lightGNorm);
+        b = Math.floor(b * lightBNorm);
+
         r = Math.max(0, Math.min(255, r));
         g = Math.max(0, Math.min(255, g));
         b = Math.max(0, Math.min(255, b));

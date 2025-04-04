@@ -3,7 +3,7 @@ export default class SpriteManager {
         this.renderer = renderer;
         this.game = game;
         this.spriteCache = {};
-        // Cache for tinted sprites: key format `${spriteCellId}_${r}_${g}_${b}_${ambient}`
+        // Cache for tinted sprites: key format `${spriteCellId}_tint_${r}_${g}_${b}_${intensity}`
         this.tintedSpriteCache = {};
         this.tintCanvas = null; // Reusable canvas for tinting
         this.tintCtx = null; // Context for the tinting canvas
@@ -189,8 +189,8 @@ export default class SpriteManager {
 
         if (options.tint && options.tint.enabled) {
              const tintColor = options.tint.lightColor || { r: 255, g: 255, b: 255 };
-             const ambient = options.tint.ambientLight ?? 1.0;
-             const tintedSprite = this.getTintedSprite(spriteCellId, tintColor, ambient); // Pass ambient light
+             const intensity = options.tint.intensity ?? 1.0; 
+             const tintedSprite = this.getTintedSprite(spriteCellId, tintColor, intensity); 
              if (tintedSprite) {
                  imageToDraw = tintedSprite.image;
                  sx = tintedSprite.sx;
@@ -226,14 +226,13 @@ export default class SpriteManager {
         return true;
     }
 
-    // --- Updated Tinting Logic ---
-    getTintedSprite(spriteCellId, tintColor, ambientLight) {
-        // Generate cache key including ambient light
+    getTintedSprite(spriteCellId, tintColor, intensity) {
+        // Generate cache key including intensity
         const r = tintColor.r ?? 255;
         const g = tintColor.g ?? 255;
         const b = tintColor.b ?? 255;
-        const ambient = Math.round(ambientLight * 100); // Scale ambient to use in key
-        const cacheKey = `${spriteCellId}_tint_${r}_${g}_${b}_${ambient}`;
+        const intensityKey = Math.round(intensity * 100); 
+        const cacheKey = `${spriteCellId}_tint_${r}_${g}_${b}_i${intensityKey}`;
 
         if (this.tintedSpriteCache[cacheKey]) {
             return this.tintedSpriteCache[cacheKey];
@@ -261,11 +260,10 @@ export default class SpriteManager {
                 0, 0, srcConfig.sw, srcConfig.sh
             );
 
-            // 2. Apply tint using multiply, considering ambient light
-            // Adjust tint color by ambient light first
-            const effectiveR = Math.floor(r * ambientLight);
-            const effectiveG = Math.floor(g * ambientLight);
-            const effectiveB = Math.floor(b * ambientLight);
+            // Adjust tint color by intensity
+            const effectiveR = Math.floor(r * intensity);
+            const effectiveG = Math.floor(g * intensity);
+            const effectiveB = Math.floor(b * intensity);
 
             tintCtx.globalCompositeOperation = 'multiply';
             tintCtx.fillStyle = `rgb(${effectiveR}, ${effectiveG}, ${effectiveB})`;
@@ -283,11 +281,8 @@ export default class SpriteManager {
             tintCtx.globalCompositeOperation = 'source-over';
 
             // Create a *new* canvas/image for the cache to avoid mutation issues
-            // This is crucial if OffscreenCanvas isn't available or if multiple draws need the same tint concurrently
             let finalImage;
             if (typeof OffscreenCanvas !== 'undefined' && tintCanvas instanceof OffscreenCanvas) {
-                // For OffscreenCanvas, transferToImageBitmap might be efficient if needed elsewhere,
-                // but for direct drawing, the canvas itself is fine. Let's create a new one for safety.
                  finalImage = new OffscreenCanvas(srcConfig.sw, srcConfig.sh);
                  finalImage.getContext('2d').drawImage(tintCanvas, 0, 0);
 
@@ -298,9 +293,8 @@ export default class SpriteManager {
                  finalImage.getContext('2d').drawImage(tintCanvas, 0, 0);
             }
 
-
             const tintedConfig = {
-                image: finalImage, // Use the *new* canvas/bitmap
+                image: finalImage, 
                 sx: 0,
                 sy: 0,
                 sw: srcConfig.sw,
@@ -314,7 +308,7 @@ export default class SpriteManager {
              this.game?.debug?.error(`[SpriteManager] Error during tinting process for ${spriteCellId}:`, error);
              // Reset composite operation in case of error
              if(tintCtx) tintCtx.globalCompositeOperation = 'source-over';
-             return null; // Return null on error
+             return null; 
         }
     }
 }

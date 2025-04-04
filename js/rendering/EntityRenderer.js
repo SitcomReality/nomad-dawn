@@ -13,16 +13,10 @@ export default class EntityRenderer {
         for (const entity of sortedEntities) {
             if (!entity) continue;
 
-            // --- NEW: Check player state and skip rendering if inside a vehicle ---
-            // We hide players (both local and remote) from the overworld view
-            // if their state indicates they are inside a vehicle.
-            // The InteriorRenderer is responsible for drawing the player when inside.
+            // Check player state and skip rendering if inside a vehicle
             if (entity.type === 'player' && (entity.playerState === 'Interior' || entity.playerState === 'Piloting' || entity.playerState === 'Building')) {
-                 // Skip rendering players who are not in the 'Overworld' state
                  continue;
             }
-            // --- END NEW ---
-
 
             const screenPos = this.renderer.worldToScreen(entity.x, entity.y);
             const screenSize = (entity.size || 20) * this.renderer.camera.zoom;
@@ -38,11 +32,11 @@ export default class EntityRenderer {
                 continue;
             }
 
-            // Extract lighting system for easier access
-            const light = this.renderer.lightingSystem;
+            // --- Get Light Information ---
+            const light = this.game.lightManager.calculateLightAt(entity.x, entity.y);
 
-            this.renderEntity(entity, screenPos, screenSize, player, light);
-            this.renderEntityOverlays(entity, screenPos, screenSize, player);
+            this.renderEntity(entity, screenPos, screenSize, player, light); // Pass light info
+            this.renderEntityOverlays(entity, screenPos, screenSize, player, light); // Pass light info
         }
     }
 
@@ -58,39 +52,6 @@ export default class EntityRenderer {
             this.ctx.globalAlpha = 0.9;
         }
 
-        // --- Shadow Rendering (using new logic) ---
-        if (light.enabled && light.shadowVisibility > 0 && entity.type !== 'projectile') {
-            const shadowAlpha = 0.3 * light.shadowVisibility;
-
-            // --- MODIFIED: Increased horizontal shadow displacement ---
-            const maxShadowDisplacement = screenSize * 1.6; 
-            // --- END MODIFIED ---
-            const baseVerticalOffset = screenSize * 0.15; 
-            const additionalVerticalOffset = screenSize * 0.15 * light.shadowVerticalOffsetFactor; 
-            const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * maxShadowDisplacement;
-            const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
-
-            const baseWidthRadius = screenSize * 0.5; 
-            const baseHeightRadius = screenSize * 0.5; 
-
-            const shadowWidthFactor = light.shadowWidthFactor; 
-            const shadowHeightFactor = light.shadowHeightFactor; 
-
-            const shadowWidth = baseWidthRadius * shadowWidthFactor;
-            const shadowHeight = baseHeightRadius * shadowHeightFactor;
-
-            this.ctx.fillStyle = `rgba(0, 0, 0, ${shadowAlpha})`;
-            this.ctx.beginPath();
-            this.ctx.ellipse(
-                shadowX,
-                shadowY,
-                shadowWidth,
-                shadowHeight,
-                0, 0, Math.PI * 2
-            );
-            this.ctx.fill();
-        }
-
         this.ctx.translate(screenPos.x, screenPos.y);
         if (entity.angle !== undefined && entity.angle !== 0) {
             this.ctx.rotate(entity.angle);
@@ -98,26 +59,20 @@ export default class EntityRenderer {
 
         if (entity.render && typeof entity.render === 'function') {
             let originalColor = entity.color;
-            if (light.enabled && entity.color) {
-                entity.color = this.renderer.worldRenderer.adjustColorForLighting(
-                    originalColor,
-                    light.lightColor,
-                    light.ambientLight
-                );
-            }
-            entity.render(this.ctx, 0, 0, screenSize);
-            if (light.enabled && entity.color) {
-                entity.color = originalColor;
-            }
+            entity.color = this.renderer.worldRenderer.adjustColorForLighting(
+                originalColor,
+                light.color,
+                light.intensity
+            );
+            entity.render(this.ctx, 0, 0, screenSize); 
+            entity.color = originalColor; 
         } else {
             let entityColor = entity.color || '#e04f5f';
-            if (light.enabled) {
-                entityColor = this.renderer.worldRenderer.adjustColorForLighting(
-                    entityColor,
-                    light.lightColor,
-                    light.ambientLight
-                );
-            }
+            entityColor = this.renderer.worldRenderer.adjustColorForLighting(
+                entityColor,
+                light.color,
+                light.intensity
+            );
             this.ctx.fillStyle = entityColor;
 
             this.ctx.beginPath();
@@ -135,12 +90,14 @@ export default class EntityRenderer {
         this.ctx.restore();
     }
 
-    renderEntityOverlays(entity, screenPos, screenSize, player) {
+    renderEntityOverlays(entity, screenPos, screenSize, player, light) {
         // Reset shadow blur just in case
         this.ctx.shadowBlur = 0;
 
+        const overlayAlpha = 1.0; 
+
         if (entity.name && this.renderer.camera.zoom > 0.5) {
-            this.ctx.fillStyle = (player && entity.id === player.id) ? 'white' : 'rgba(220, 220, 220, 0.9)';
+            this.ctx.fillStyle = (player && entity.id === player.id) ? `rgba(255, 255, 255, ${overlayAlpha})` : `rgba(220, 220, 220, ${overlayAlpha * 0.9})`;
             this.ctx.font = `bold ${Math.max(9, 12 * this.renderer.camera.zoom)}px monospace`;
             this.ctx.textAlign = 'center';
             this.ctx.shadowColor = 'black';
@@ -160,14 +117,16 @@ export default class EntityRenderer {
             const barX = screenPos.x - barWidth / 2;
             const barY = screenPos.y + barYOffset;
 
-            this.ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+            this.ctx.fillStyle = `rgba(0, 0, 0, ${overlayAlpha * 0.6})`;
             this.ctx.fillRect(barX, barY, barWidth, barHeight);
 
             const healthColor = healthPercent > 0.6 ? '#4caf50' : (healthPercent > 0.3 ? '#ffc107' : '#f44336');
             this.ctx.fillStyle = healthColor;
+            this.ctx.globalAlpha = overlayAlpha;
             this.ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
+            this.ctx.globalAlpha = 1.0; 
 
-            this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.8)';
+            this.ctx.strokeStyle = `rgba(0, 0, 0, ${overlayAlpha * 0.8})`;
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(barX, barY, barWidth, barHeight);
         }
