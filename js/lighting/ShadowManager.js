@@ -5,11 +5,10 @@ export default class ShadowManager {
     constructor(game) {
         this.game = game;
         this.shadowPolygons = []; // Stores calculated shadow polygons for the current frame
-        // --- NEW: Caster Geometry Cache ---
+        // --- Caster Geometry Cache ---
         this.casterCache = new Map(); // Cache caster geometry to avoid recalculation
         this.cacheInvalidationFrame = 0; // Frame counter to manage cache invalidation
         this.cacheValidFrames = 5; // How many frames a cache entry is valid
-        // --- END NEW ---
         this.debug = false; // Set to true to render debug info for shadows
         this.maxShadowDistance = 1500;
     }
@@ -23,49 +22,60 @@ export default class ShadowManager {
             return; // Required systems not available
         }
 
-        // --- NEW: Increment cache frame counter ---
+        // Increment cache frame counter
         this.cacheInvalidationFrame++;
-        // --- END NEW ---
 
         const camera = this.game.renderer?.camera;
         if (!camera) return;
-        const viewWidthWorld = (this.game.renderer.canvas.width / camera.zoom) * 1.5;
-        const viewHeightWorld = (this.game.renderer.canvas.height / camera.zoom) * 1.5;
-        const viewBounds = {
-            minX: camera.x - viewWidthWorld / 2,
-            minY: camera.y - viewHeightWorld / 2,
-            maxX: camera.x + viewWidthWorld / 2,
-            maxY: camera.y + viewHeightWorld / 2,
+
+        // --- INCREASED VIEW BOUNDS FOR SHADOWS ---
+        // Calculate wider bounds than just the viewport to catch shadows cast from outside
+        const viewPadding = this.maxShadowDistance * 0.5; // How far outside the view to check
+        const viewWidthWorld = (this.game.renderer.canvas.width / camera.zoom);
+        const viewHeightWorld = (this.game.renderer.canvas.height / camera.zoom);
+        const extendedViewBounds = {
+            minX: camera.x - viewWidthWorld / 2 - viewPadding,
+            minY: camera.y - viewHeightWorld / 2 - viewPadding,
+            maxX: camera.x + viewWidthWorld / 2 + viewPadding,
+            maxY: camera.y + viewHeightWorld / 2 + viewPadding,
         };
+        const extendedViewRadius = Math.max(extendedViewBounds.maxX - camera.x, extendedViewBounds.maxY - camera.y);
 
-        const lights = this.game.entities.getLightsInRadius(camera.x, camera.y, Math.max(viewWidthWorld, viewHeightWorld) / 2 + 500);
+        // Get lights within the extended view radius + max light range
+        const lights = this.game.entities.getLightsInRadius(camera.x, camera.y, extendedViewRadius + this.maxShadowDistance);
 
-        // --- Optimization: Get potential casters ONCE ---
-        const potentialCasters = this.getPotentialCasters(viewBounds);
-        // --- END Optimization ---
+        // Get potential casters within the extended view bounds
+        const potentialCasters = this.getPotentialCasters(extendedViewBounds);
 
         const pointLights = lights.filter(light => light.lightType === 'point' && light.intensity > 0.05 && light.range > 0);
 
         for (const light of pointLights) {
-            const lightDistSq = (light.x - camera.x)**2 + (light.y - camera.y)**2;
-            const maxViewDist = Math.max(viewWidthWorld, viewHeightWorld) / 2;
-            if (lightDistSq > (maxViewDist + light.range)**2) {
-                continue;
-            }
+             // --- Culling: Skip light if it's too far away to affect the viewport ---
+             const lightDistToViewCenterSq = (light.x - camera.x)**2 + (light.y - camera.y)**2;
+             const maxRelevantLightDist = extendedViewRadius + light.range;
+             if (lightDistToViewCenterSq > maxRelevantLightDist**2) {
+                 continue; // Light too far away to cast shadows into the extended view
+             }
 
             for (const caster of potentialCasters) {
-                // Basic distance check between light and caster
+                // --- Culling: Basic distance check between light and caster ---
                 const dx = light.x - caster.x;
                 const dy = light.y - caster.y;
-                const distSq = dx * dx + dy * dy;
-                if (distSq > (light.range * 1.5) * (light.range * 1.5)) {
+                const lightCasterDistSq = dx * dx + dy * dy;
+                // Skip if caster is beyond light range (plus a buffer?)
+                const lightRangeSq = light.range * light.range;
+                if (lightCasterDistSq > lightRangeSq * 1.1) { // Added 10% buffer
                     continue;
                 }
 
-                // --- UPDATED: Use getCasterGeometry with caching ---
-                const casterGeometry = this.getCasterGeometry(caster);
-                // --- END UPDATED ---
+                // --- Culling: Skip caster if it's too far from the view center to cast shadow into view ---
+                 const casterDistToViewCenterSq = (caster.x - camera.x)**2 + (caster.y - camera.y)**2;
+                 const maxRelevantCasterDist = extendedViewRadius + this.maxShadowDistance; // Max distance caster can be and still cast shadow into view
+                 if (casterDistToViewCenterSq > maxRelevantCasterDist**2) {
+                     continue;
+                 }
 
+                const casterGeometry = this.getCasterGeometry(caster);
                 if (!casterGeometry || casterGeometry.length < 3) continue;
 
                 const shadowPolygon = this.calculateShadowPolygonRaycast(light, casterGeometry);
@@ -75,25 +85,27 @@ export default class ShadowManager {
             }
         }
 
-        // --- NEW: Optional cache cleanup ---
         // Periodically clean up very old cache entries if needed
         // if (this.cacheInvalidationFrame % 100 === 0) { this.cleanupCache(); }
-        // --- END NEW ---
     }
 
-    // --- NEW: Helper to get potential casters ---
-    getPotentialCasters(viewBounds) {
-         // Get potential shadow casters within the viewport
+    // Helper to get potential casters within specified bounds
+    getPotentialCasters(bounds) {
+         // Get entities within the bounds
          const entities = this.game.entities.getAll()
-             .filter(e => e && e.type !== 'light_source' && e.type !== 'effect'); // Filter entities
+             .filter(e => e && e.type !== 'light_source' && e.type !== 'effect' &&
+                          e.x >= bounds.minX && e.x <= bounds.maxX &&
+                          e.y >= bounds.minY && e.y <= bounds.maxY); // Filter entities by bounds
+
+         // Get world objects within the bounds (already filtered by WorldObjectManager)
          const worldObjs = this.game.worldObjectManager.getVisibleObjects(
-             viewBounds.minX, viewBounds.minY, viewBounds.maxX, viewBounds.maxY
+             bounds.minX, bounds.minY, bounds.maxX, bounds.maxY
          );
 
+         // Combine and filter by shadow casting criteria
          return [...entities, ...worldObjs]
-             .filter(caster => caster && this.shouldCastShadow(caster)); // Filter only those that should cast shadows
+             .filter(caster => caster && this.shouldCastShadow(caster));
     }
-    // --- END NEW ---
 
     /**
      * Determines if an object/entity should cast a shadow.
@@ -101,16 +113,17 @@ export default class ShadowManager {
      * @returns {boolean} True if the object should cast shadows.
      */
     shouldCastShadow(obj) {
-        // ... existing shouldCastShadow logic ...
+        // Players/Vehicles cast shadows only when in Overworld
         if (obj.type === 'player' || obj.type === 'vehicle') {
-            // Add check for player state (don't cast shadows when inside?)
             if (obj.type === 'player' && obj.playerState !== 'Overworld') return false;
             return true;
         }
+        // Features/Resources cast shadows if they collide and are large enough
         if ((obj.type === 'feature' || obj.type === 'resource') && obj.collides === true) {
-             if (obj.size && obj.size < 15) return false;
+             if (obj.size && obj.size < 15) return false; // Don't cast shadows for small pebbles etc.
             return true;
         }
+        // Other types don't cast shadows by default
         return false;
     }
 
@@ -120,21 +133,19 @@ export default class ShadowManager {
      * @returns {Array<{x: number, y: number}>|null} Array of vertices or null.
      */
     getCasterGeometry(caster) {
-        // --- NEW: Cache Check ---
+        // Cache Check
         const cacheEntry = this.casterCache.get(caster.id);
-        // Check if cache exists and is still valid (based on frame counter)
         if (cacheEntry && cacheEntry.validUntilFrame >= this.cacheInvalidationFrame) {
-             // Return cached geometry if position hasn't changed significantly (simple check)
-             // More robust check might involve comparing caster.x/y with cacheEntry.x/y
              if (Math.abs(caster.x - cacheEntry.x) < 0.1 && Math.abs(caster.y - cacheEntry.y) < 0.1) {
                  return cacheEntry.geometry;
              }
         }
-        // --- END NEW ---
 
         // If cache miss or invalid, calculate geometry
         const size = caster.size || 20;
         const halfSize = size / 2;
+        // --- Simplification: Use Axis-Aligned Bounding Box (AABB) for now ---
+        // Rotation could be added here later if needed
         const geometry = [
             { x: caster.x - halfSize, y: caster.y - halfSize }, // Top-left
             { x: caster.x + halfSize, y: caster.y - halfSize }, // Top-right
@@ -142,14 +153,13 @@ export default class ShadowManager {
             { x: caster.x - halfSize, y: caster.y + halfSize }, // Bottom-left
         ];
 
-        // --- NEW: Update Cache ---
+        // Update Cache
         this.casterCache.set(caster.id, {
              geometry: geometry,
              validUntilFrame: this.cacheInvalidationFrame + this.cacheValidFrames,
-             x: caster.x, // Store position for change detection
+             x: caster.x,
              y: caster.y
         });
-        // --- END NEW ---
 
         return geometry;
     }
@@ -162,11 +172,10 @@ export default class ShadowManager {
      * @returns {Array<{x: number, y: number}>|null} The vertices of the shadow polygon or null.
      */
     calculateShadowPolygonRaycast(light, casterVertices) {
-        // ... existing calculateShadowPolygonRaycast logic ...
         if (!casterVertices || casterVertices.length < 3) return null;
 
         const lightPos = { x: light.x, y: light.y };
-        const maxDist = this.maxShadowDistance;
+        const maxDist = this.maxShadowDistance; // Use configured max shadow distance
         const silhouetteEdges = []; // Stores { v1: vertex, v2: vertex }
 
         // 1. Find silhouette edges (edges facing the light)
@@ -174,67 +183,65 @@ export default class ShadowManager {
             const v1 = casterVertices[i];
             const v2 = casterVertices[(i + 1) % casterVertices.length]; // Next vertex, wraps around
 
-            // Calculate edge vector and midpoint
             const edgeVecX = v2.x - v1.x;
             const edgeVecY = v2.y - v1.y;
             const midX = (v1.x + v2.x) / 2;
             const midY = (v1.y + v2.y) / 2;
-
-            // Calculate edge normal (pointing outwards for clockwise vertices)
             const normalX = edgeVecY;
             const normalY = -edgeVecX;
-
-            // Calculate vector from light to edge midpoint
             const lightToMidX = midX - lightPos.x;
             const lightToMidY = midY - lightPos.y;
-
-            // Calculate dot product of normal and light vector
             const dotProduct = normalX * lightToMidX + normalY * lightToMidY;
-
-            // If dot product > 0, the edge is facing the light (part of the silhouette)
-            // Add a small epsilon to handle light exactly on an edge extension?
             const epsilon = 1e-6;
             if (dotProduct > epsilon) {
                 silhouetteEdges.push({ v1: v1, v2: v2, index: i });
             }
         }
 
-        // Handle cases where no edges face the light (light inside caster? should not happen with check)
-        // or all edges face the light (should also not happen for convex)
         if (silhouetteEdges.length === 0 || silhouetteEdges.length === casterVertices.length) {
-            return null;
+            return null; // Light inside or exactly behind caster
         }
 
         // 2. Identify the start and end vertices of the silhouette chain
+        // This part assumes the silhouette forms a contiguous chain, which is true for convex casters
         let silhouetteStartVertex = null;
         let silhouetteEndVertex = null;
-        for (const edge of silhouetteEdges) {
+        // Find an edge whose previous edge is NOT in the silhouette list - its v1 is the start
+         for (const edge of silhouetteEdges) {
              const prevEdgeIndex = (edge.index - 1 + casterVertices.length) % casterVertices.length;
              if (!silhouetteEdges.some(e => e.index === prevEdgeIndex)) {
                   silhouetteStartVertex = edge.v1;
                   break;
              }
-        }
-         for (const edge of silhouetteEdges) {
-             const nextEdgeIndex = (edge.index + 1) % casterVertices.length;
-              if (!silhouetteEdges.some(e => e.index === nextEdgeIndex)) {
-                  silhouetteEndVertex = edge.v2;
-                  break;
-              }
          }
+         // Find an edge whose next edge is NOT in the silhouette list - its v2 is the end
+          for (const edge of silhouetteEdges) {
+              const nextEdgeIndex = (edge.index + 1) % casterVertices.length;
+               if (!silhouetteEdges.some(e => e.index === nextEdgeIndex)) {
+                   silhouetteEndVertex = edge.v2;
+                   break;
+               }
+          }
 
         if (!silhouetteStartVertex || !silhouetteEndVertex) {
              if (this.debug) console.warn("Could not determine silhouette start/end vertices.", silhouetteEdges);
              return null;
         }
 
-
         // 3. Project rays from the light through the silhouette start and end vertices
         const projectRay = (vertex) => {
             const dx = vertex.x - lightPos.x;
             const dy = vertex.y - lightPos.y;
-            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const scale = (maxDist + 1) / dist;
+             // Check for zero vector (light is exactly at the vertex)
+             if (dx === 0 && dy === 0) {
+                 // Handle this case: maybe return the vertex itself or offset slightly?
+                 // Returning vertex itself might cause issues. Let's offset slightly.
+                 const smallOffset = 0.01;
+                 return { x: vertex.x + smallOffset, y: vertex.y + smallOffset };
+             }
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            // Ensure scale is finite even if dist is very small
+             const scale = dist < 1e-6 ? maxDist / 1e-6 : maxDist / dist;
             return {
                 x: lightPos.x + dx * scale,
                 y: lightPos.y + dy * scale
@@ -245,7 +252,6 @@ export default class ShadowManager {
         const projectedEnd = projectRay(silhouetteEndVertex);
 
         // 4. Construct the final shadow polygon vertices in order
-        // Order: silhouette start -> projected start -> projected end -> silhouette end
         const finalPolygon = [
             { x: silhouetteStartVertex.x, y: silhouetteStartVertex.y },
             { x: projectedStart.x, y: projectedStart.y },
@@ -264,12 +270,11 @@ export default class ShadowManager {
         return this.shadowPolygons;
     }
 
-     // --- NEW: Optional cache cleanup ---
+     // Optional cache cleanup
      cleanupCache() {
          const currentFrame = this.cacheInvalidationFrame;
          const entriesToDelete = [];
          for (const [id, entry] of this.casterCache.entries()) {
-             // Delete if significantly older than valid frames (e.g., > 5x validity period)
              if (entry.validUntilFrame < currentFrame - (this.cacheValidFrames * 5)) {
                  entriesToDelete.push(id);
              }
@@ -279,5 +284,4 @@ export default class ShadowManager {
               console.log(`Cleaned up ${entriesToDelete.length} old shadow caster cache entries.`);
           }
      }
-     // --- END NEW ---
 }

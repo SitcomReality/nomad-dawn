@@ -30,28 +30,30 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 *   Modified relevant systems (`Player`, `Vehicle`) to create/destroy `LightSource` entities via `EntityManager`.
 *   Ensured `LightSource` positions update correctly if attached.
 
-**Phase 5: Shadow Implementation (In Progress)**
+**Phase 5: Shadow Implementation (COMPLETE)**
 
 *   Research and choose algorithm (**COMPLETE** - 2D Raycasting).
 *   Implement shadow calculation in `ShadowManager.js` (`calculateShadowPolygonRaycast`). (**COMPLETE**)
 *   Refine polygon generation (`getCasterGeometry`, silhouette edge detection, vertex ordering). (**COMPLETE**)
 *   Implement shadow rendering using an offscreen shadow mask buffer in `Renderer.js`. (**COMPLETE**)
+*   Optimize Shadow Calculation:
+    *   Cache caster geometry in `ShadowManager` (e.g., using `casterCache`). (**COMPLETE**)
+    *   Optimize caster finding (e.g., use viewport culling more effectively in `ShadowManager.calculateShadows`). (**COMPLETE**)
+    *   Potentially skip calculations for lights/casters far off-screen or lights with very low intensity. (**COMPLETE**)
 
 ---
 
 **Phase 5 - NEXT STEPS:**
 
-1.  **Optimize Shadow Calculation:**
-    *   Cache caster geometry in `ShadowManager` (e.g., using `casterCache`). (**COMPLETE**)
-    *   Optimize caster finding (e.g., use viewport culling more effectively in `ShadowManager.calculateShadows`). (**NEXT**)
-    *   Potentially skip calculations for lights/casters far off-screen or lights with very low intensity.
-2.  **Handle Complex Shapes:** Extend `getCasterGeometry` and silhouette finding to handle non-rectangular or rotated shapes if necessary.
-3.  **Improve Edge Cases:** Refine silhouette detection for edge cases (light very close to caster, light on an edge/vertex).
-4.  **Visual Refinements:**
+1.  **Handle Complex Shapes:** Extend `getCasterGeometry` and silhouette finding to handle non-rectangular or rotated shapes if necessary.
+2.  **Improve Edge Cases:** Refine silhouette detection for edge cases (light very close to caster, light on an edge/vertex).
+3.  **Visual Refinements:**
     *   Experiment with softer shadow edges (e.g., using blur on the mask or gradient fills).
-    *   Adjust shadow color/opacity (`rgba(0, 0, 0, 0.3)` in `Renderer.renderShadows` is currently used).
+    *   Adjust shadow color/opacity (`rgba(0, 0, 0, 1)` in `Renderer.renderShadows` is currently used - multiply blend mode makes this solid black).
 
 ---
+
+
 
 
 
