@@ -1,4 +1,3 @@
-// New file: js/core/InteractionManager.js
 export default class InteractionManager {
     constructor(game) {
         this.game = game;

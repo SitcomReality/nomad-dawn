@@ -426,7 +426,15 @@ export default class NetworkManager {
     subscribeRoomState(callback) {
         if (!this.connected || !this.room) return () => {};
         const wrappedCallback = (roomState) => {
-            try { callback(roomState); } catch (error) { this.game.debug.error('Error in room state subscription callback:', error); }
+            try { 
+                // ... existing code ...
+                // Pass resource overrides to WorldObjectManager
+                if (roomState.resources !== undefined && this.game.worldObjectManager) {
+                    this.game.worldObjectManager.updateResourceOverrides(roomState.resources);
+                }
+                // ... existing code ...
+                callback(roomState); 
+            } catch (error) { this.game.debug.error('Error in room state subscription callback:', error); }
         };
         return this.room.subscribeRoomState(wrappedCallback);
     }

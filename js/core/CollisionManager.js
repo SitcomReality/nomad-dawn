@@ -13,7 +13,13 @@ export default class CollisionManager {
         // Ensure entities and world exist before proceeding
         if (!this.game.entities || !this.game.world) return;
 
-        const colliders = this.game.entities.getAll().filter(e => e && e.collidesWith && e.onCollision && (e.type === 'player' || e.type === 'vehicle'));
+        const colliders = this.game.entities.getAll().filter(e => 
+             e && 
+             e.collidesWith && typeof e.collidesWith === 'function' && 
+             e.onCollision && typeof e.onCollision === 'function' && 
+             (e.type === 'player' || e.type === 'vehicle') &&
+             e.playerState !== 'Interior' 
+        );
 
         if (colliders.length === 0) return;
 

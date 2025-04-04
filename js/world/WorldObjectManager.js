@@ -1,4 +1,3 @@
-// New file: js/world/WorldObjectManager.js
 /**
  * Manages the state and visibility of world objects (features, resources)
  * based on generation and network overrides.
