@@ -16,9 +16,8 @@ import PerformanceMonitor from './PerformanceMonitor.js'; // NEW
 window.Player = Player;
 // Make Vehicle class accessible if needed by NetworkManager sync (consider better dependency management later)
 window.Vehicle = Vehicle;
-// Make Perlin globally available (consider passing via dependency injection later)
-import perlin from 'perlin';
-window.perlin = perlin; // Assign the imported default object
+// Import the specific noise function needed
+import { simplex2 } from 'perlin';
 
 export default class Game {
     constructor(options) {
@@ -53,6 +52,8 @@ export default class Game {
         // Player reference (potentially null in guest mode)
         this.player = null;
         this.world = null; // Initialize world as null
+        // Store the noise function obtained from import
+        this.noiseFunction = simplex2;
 
         // Seed Handling
         this.worldSeed = null;
@@ -234,7 +235,8 @@ export default class Game {
                 size: this.config.WORLD_SIZE,
                 chunkSize: this.config.CHUNK_SIZE,
                 maxLoadDistance: this.config.MAX_LOAD_DISTANCE,
-                noise: window.perlin,
+                // Pass the specific noise function
+                noiseFunction: this.noiseFunction,
                 debug: this.debug,
             });
             await this.world.initialize();

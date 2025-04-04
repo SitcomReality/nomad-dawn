@@ -15,13 +15,11 @@ export default class World {
         this.maxLoadDistance = options.maxLoadDistance || 2000;
 
         // Setup noise generator (passed from Game)
-        this.noise = options.noise || {
-            simplex2: (x, y) => {
-                // Simple fallback if noise library not available
-                const value = Math.sin(x * 0.1) * Math.cos(y * 0.1);
-                return value * 0.5;
-            }
-        };
+        this.noiseFunction = options.noiseFunction || ((x, y) => {
+            // Simple fallback if noise library not available
+            const value = Math.sin(x * 0.1) * Math.cos(y * 0.1);
+            return value * 0.5;
+        });
 
         // Debug flag
         this.debug = options.debug || false;
@@ -55,8 +53,8 @@ export default class World {
     }
 
     getNoise(x, y, seed = 0) {
-        // Use noise function to generate terrain values
-        return this.noise.simplex2(x + seed, y + seed) * 0.5 + 0.5;
+        // Use the injected noise function
+        return this.noiseFunction(x + seed, y + seed) * 0.5 + 0.5;
     }
 
     getBiome(height, moisture) {
@@ -108,11 +106,10 @@ export default class World {
             this.updateWorldObjectsFromNetwork(roomState.worldObjects);
         }
 
-        // --- NEW: Sync time of day ---
+        // --- Sync time of day ---
         if (roomState.timeOfDay !== undefined && typeof window.game?.setTimeOfDay === 'function') {
             window.game.setTimeOfDay(roomState.timeOfDay);
         }
-        // --- END NEW ---
     }
 
     findResourceById(resourceId) {
