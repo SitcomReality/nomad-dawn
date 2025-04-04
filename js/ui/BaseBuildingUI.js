@@ -253,131 +253,300 @@ export default class BaseBuildingUI {
     }
     
     updateVehicleStats() {
-        if (!this.activeVehicle) return;
-        
+        // --- DEBUG START ---
+        if (!this.activeVehicle) {
+             this.game.debug.warn("[BaseBuildingUI] updateVehicleStats called but activeVehicle is null.");
+             return; // Exit if no active vehicle
+        }
+        // this.game.debug.log("[BaseBuildingUI] Updating vehicle stats display for:", this.activeVehicle.id);
+        // --- DEBUG END ---
+
         const vehicleTypeElement = document.getElementById('vehicle-type');
         if (vehicleTypeElement) {
             vehicleTypeElement.textContent = this.activeVehicle.name || this.activeVehicle.vehicleType || 'Unknown';
+        } else {
+             this.game.debug.warn("[BaseBuildingUI] Element #vehicle-type not found.");
         }
         
         const healthElement = document.getElementById('vehicle-health');
         if (healthElement) {
-            healthElement.textContent = `${Math.floor(this.activeVehicle.health)}/${this.activeVehicle.maxHealth}`;
+            // Ensure health/maxHealth are numbers before using them
+            const currentHealth = typeof this.activeVehicle.health === 'number' ? Math.floor(this.activeVehicle.health) : '?';
+            const maxHealth = typeof this.activeVehicle.maxHealth === 'number' ? this.activeVehicle.maxHealth : '?';
+            healthElement.textContent = `${currentHealth}/${maxHealth}`;
+        } else {
+             this.game.debug.warn("[BaseBuildingUI] Element #vehicle-health not found.");
         }
         
         const speedElement = document.getElementById('vehicle-speed');
         if (speedElement) {
-            speedElement.textContent = `${this.activeVehicle.maxSpeed}`;
+             const maxSpeed = typeof this.activeVehicle.maxSpeed === 'number' ? this.activeVehicle.maxSpeed : '?';
+            speedElement.textContent = `${maxSpeed}`;
+        } else {
+             this.game.debug.warn("[BaseBuildingUI] Element #vehicle-speed not found.");
         }
         
         const storageElement = document.getElementById('vehicle-storage');
         if (storageElement) {
-            storageElement.textContent = `${this.activeVehicle.storage}`;
+             const storage = typeof this.activeVehicle.storage === 'number' ? this.activeVehicle.storage : '?';
+            storageElement.textContent = `${storage}`;
+        } else {
+             this.game.debug.warn("[BaseBuildingUI] Element #vehicle-storage not found.");
         }
     }
     
     updateModulesList() {
+        // --- DEBUG START ---
+        // this.game.debug.log("[BaseBuildingUI] Updating modules list.");
+        // --- DEBUG END ---
         const modulesList = document.getElementById('modules-list');
-        if (!modulesList) return;
+        if (!modulesList) {
+             this.game.debug.warn("[BaseBuildingUI] Element #modules-list not found.");
+             return;
+        }
         
-        modulesList.innerHTML = '';
+        modulesList.innerHTML = ''; // Clear previous list
         
         const moduleTypes = this.game.config?.MODULE_TYPES || []; 
+        if (moduleTypes.length === 0) {
+             this.game.debug.warn("[BaseBuildingUI] No MODULE_TYPES found in game config.");
+        }
         
+        // Keep track if any modules were added to show empty message if needed
+        let modulesAdded = false; 
         moduleTypes.forEach(module => {
+            // Check if module is already installed on the vehicle
+            const isInstalled = this.activeVehicle?.modules?.some(m => m.id === module.id);
+
+            // Create the module item element
             const moduleItem = document.createElement('div');
             moduleItem.className = 'module-item';
             moduleItem.dataset.id = module.id;
+            // Add installed class if needed
+            if (isInstalled) {
+                moduleItem.classList.add('installed'); // Add a class for styling installed modules
+            }
             
             const canCraft = this.canCraftModule(module);
             
+            let statusText = '';
+            if (isInstalled) {
+                 statusText = 'Installed';
+            } else if (canCraft) {
+                 statusText = 'Can Install';
+            } else {
+                 statusText = 'Missing Resources';
+            }
+
+            let statusClass = '';
+             if (isInstalled) {
+                 statusClass = 'installed-status'; // Specific class for styling
+             } else if (canCraft) {
+                 statusClass = 'can-craft';
+             } else {
+                 statusClass = 'cannot-craft';
+             }
+
             moduleItem.innerHTML = `
                 <div class="module-icon" style="background-color: ${module.color || '#5af'}"></div>
                 <div class="module-details">
                     <div class="module-name">${module.name}</div>
-                    <div class="module-craft-status ${canCraft ? 'can-craft' : 'cannot-craft'}">
-                        ${canCraft ? 'Can Install' : 'Missing Resources'}
+                    <div class="module-craft-status ${statusClass}">
+                        ${statusText}
                     </div>
                 </div>
             `;
             
+            // Add click handler to select the module
             moduleItem.addEventListener('click', () => {
-                this.selectModule(module);
-                
-                document.querySelectorAll('.module-item').forEach(item => {
-                    item.classList.remove('selected');
-                });
-                moduleItem.classList.add('selected');
+                 // Find the latest module config data when selecting
+                 const latestModuleConfig = this.game.config?.MODULE_TYPES.find(m => m.id === module.id);
+                 if (latestModuleConfig) {
+                    this.selectModule(latestModuleConfig); 
+                    
+                    // Visually indicate selection
+                    document.querySelectorAll('.module-item').forEach(item => {
+                        item.classList.remove('selected');
+                    });
+                    moduleItem.classList.add('selected');
+                 } else {
+                     this.game.debug.warn(`[BaseBuildingUI] Could not find config for selected module ID: ${module.id}`);
+                     this.selectModule(null); // Clear selection if config missing
+                 }
             });
             
             modulesList.appendChild(moduleItem);
+            modulesAdded = true; // Mark that we added at least one module
         });
         
-        if (modulesList.children.length === 0) {
+        // Show empty message if no modules were defined in config
+        if (!modulesAdded) {
             modulesList.innerHTML = '<div class="empty-message">No modules available</div>';
         }
     }
     
     selectModule(module) {
-        this.selectedModule = module;
+        this.selectedModule = module; // module can be null
         
         const moduleDetails = document.getElementById('module-details');
-        if (moduleDetails) {
-            let detailsHTML = `<h3>${module.name}</h3>`;
-            
-            if (module.description) {
-                detailsHTML += `<p>${module.description}</p>`;
-            }
-            
-            if (module.effect) {
-                detailsHTML += `<p>Effects:</p><ul>`;
-                for (const [stat, value] of Object.entries(module.effect)) {
-                    detailsHTML += `<li>+${value} ${stat}</li>`;
-                }
-                detailsHTML += `</ul>`;
-            }
-            
-            if (module.cost) { 
-                detailsHTML += `<p>Required Resources:</p><ul>`;
-                for (const [resource, amount] of Object.entries(module.cost)) {
-                    const resourceConfig = this.getResourceConfig(resource);
-                    const playerAmount = this.game.player?.resources[resource] || 0; 
-                    const hasEnough = playerAmount >= amount;
-                    
-                    detailsHTML += `<li class="${hasEnough ? 'has-enough' : 'not-enough'}">
-                        ${resourceConfig?.name || resource}: ${amount} (Have: ${playerAmount})
-                    </li>`;
-                }
-                detailsHTML += `</ul>`;
-            } else {
-                 detailsHTML += `<p>No resources required.</p>`; 
-            }
-            
-            moduleDetails.innerHTML = detailsHTML;
+        if (!moduleDetails) {
+             this.game.debug.warn("[BaseBuildingUI] Element #module-details not found.");
+             return;
+        }
+
+        // If module is null (e.g., selection cleared), reset the details panel
+        if (!module) {
+             moduleDetails.innerHTML = `<h3>Select a module</h3><p>Module details will appear here</p>`;
+             this.updateActionButtons(); // Update buttons for no selection
+             return;
         }
         
+        // --- DEBUG START ---
+        // this.game.debug.log(`[BaseBuildingUI] Selecting module: ${module.id}`, module);
+        // --- DEBUG END ---
+        
+        // Build details HTML
+        let detailsHTML = `<h3>${module.name}</h3>`;
+        
+        if (module.description) {
+            detailsHTML += `<p>${module.description}</p>`;
+        }
+        
+        // Show effects
+        if (module.effect && Object.keys(module.effect).length > 0) {
+            detailsHTML += `<p>Effects:</p><ul>`;
+            for (const [stat, value] of Object.entries(module.effect)) {
+                detailsHTML += `<li>+${value} ${stat}</li>`; // Simple display, could be more descriptive
+            }
+            detailsHTML += `</ul>`;
+        }
+        
+        // Show resource costs
+        if (module.cost && Object.keys(module.cost).length > 0) { 
+            detailsHTML += `<p>Required Resources:</p><ul>`;
+            for (const [resource, amount] of Object.entries(module.cost)) {
+                const resourceConfig = this.getResourceConfig(resource);
+                // Ensure player exists before accessing resources
+                const playerAmount = this.game.player?.resources[resource] || 0; 
+                const hasEnough = playerAmount >= amount;
+                
+                detailsHTML += `<li class="${hasEnough ? 'has-enough' : 'not-enough'}">
+                    ${resourceConfig?.name || resource}: ${amount} (Have: ${playerAmount})
+                </li>`;
+            }
+            detailsHTML += `</ul>`;
+        } else {
+             detailsHTML += `<p>Installation Cost: None</p>`; // Indicate if no cost
+        }
+        
+        // Update the details panel content
+        moduleDetails.innerHTML = detailsHTML;
+        
+        // Update action buttons based on the new selection
         this.updateActionButtons();
     }
     
     updateActionButtons() {
+        // --- DEBUG START ---
+        // this.game.debug.log(`[BaseBuildingUI] Updating action buttons. Selected module: ${this.selectedModule?.id}, Active vehicle: ${this.activeVehicle?.id}`);
+        // --- DEBUG END ---
+
         const installButton = document.getElementById('btn-install-module');
         const removeButton = document.getElementById('btn-remove-module');
         const enterButton = document.getElementById('btn-enter-vehicle');
-        
-        if (installButton) {
-            installButton.disabled = !(this.selectedModule && this.canCraftModule(this.selectedModule));
+
+        // Safety checks for button elements
+        if (!installButton || !removeButton || !enterButton) {
+             this.game.debug.warn("[BaseBuildingUI] One or more action buttons not found.");
+             return;
         }
         
-        if (removeButton) {
-            const hasModule = this.activeVehicle && this.activeVehicle.modules && 
-                this.selectedModule && this.activeVehicle.modules.some(m => m.id === this.selectedModule.id);
-                
-            removeButton.disabled = !hasModule;
-        }
+        // --- Enter Vehicle Button ---
+        // Enable only if there's an active vehicle and the player isn't already driving it
+        enterButton.disabled = !(this.activeVehicle && this.activeVehicle.driver !== this.game.player?.id);
         
-        if (enterButton) {
-            enterButton.disabled = !this.activeVehicle;
+        // --- Install/Remove Buttons ---
+        // Both require a module to be selected and an active vehicle
+        if (!this.selectedModule || !this.activeVehicle) {
+            installButton.disabled = true;
+            removeButton.disabled = true;
+            // this.game.debug.log("[BaseBuildingUI] Buttons disabled: No module selected or no active vehicle.");
+            return;
         }
+
+        // Check if the selected module type is already installed
+        const isInstalled = this.activeVehicle.modules?.some(m => m.id === this.selectedModule.id);
+        // Check if the player can afford to install it (if not already installed)
+        const canAfford = this.canCraftModule(this.selectedModule);
+
+        // Enable Install button if: module selected, vehicle active, NOT installed, AND can afford
+        installButton.disabled = !(!isInstalled && canAfford);
+
+        // Enable Remove button if: module selected, vehicle active, AND IS installed
+        removeButton.disabled = !isInstalled;
+
+        // --- DEBUG LOGGING ---
+        // this.game.debug.log(`[BaseBuildingUI] Button states: Install disabled=${installButton.disabled}, Remove disabled=${removeButton.disabled}, Enter disabled=${enterButton.disabled}`);
+        // this.game.debug.log(`  (isInstalled=${isInstalled}, canAfford=${canAfford})`);
+        // --- DEBUG LOGGING END ---
+    }
+    
+    update() {
+        if (!this.isVisible) return;
+        
+        // --- DEBUG START ---
+        if (!this.activeVehicle) {
+            this.game.debug.warn("[BaseBuildingUI] Update called but activeVehicle is null.");
+            this.hide(); // Hide if vehicle becomes invalid
+            return;
+        } else {
+            const vehicleEntity = this.game.entities.get(this.activeVehicle.id);
+             if (!vehicleEntity) {
+                 this.game.debug.warn(`[BaseBuildingUI] Active vehicle (ID: ${this.activeVehicle.id}) not found in EntityManager during update. Closing UI.`);
+                 this.hide();
+                 return;
+             }
+             // Ensure we're working with the latest instance from the entity manager
+             this.activeVehicle = vehicleEntity; 
+            // Log vehicle state being used for UI update
+            // this.game.debug.log(`[BaseBuildingUI] Updating UI for vehicle: ${this.activeVehicle.id}`, JSON.parse(JSON.stringify(this.activeVehicle))); 
+        }
+        // --- DEBUG END ---
+
+        // Re-render preview (might be slightly redundant if stats haven't changed visual much, but fine for now)
+        this.initVehiclePreview();
+        
+        // Update stats display
+        this.updateVehicleStats();
+        
+        // Update available modules list
+        this.updateModulesList();
+        
+        // Update details panel based on selected module (or clear if none)
+        if (this.selectedModule) {
+            // Reselect to ensure details (like resource cost checks) are current
+            // Find the module config again in case it changed (unlikely but safer)
+            const currentModuleConfig = this.game.config?.MODULE_TYPES.find(m => m.id === this.selectedModule.id);
+            if (currentModuleConfig) {
+                this.selectModule(currentModuleConfig); 
+            } else {
+                 // Selected module type no longer exists? Clear selection.
+                 this.selectedModule = null; 
+                 const moduleDetails = document.getElementById('module-details');
+                 if (moduleDetails) {
+                    moduleDetails.innerHTML = `<h3>Select a module</h3><p>Module details will appear here</p>`;
+                 }
+            }
+        } else {
+             // Clear details panel if no module is selected
+             const moduleDetails = document.getElementById('module-details');
+             if (moduleDetails) {
+                moduleDetails.innerHTML = `<h3>Select a module</h3><p>Module details will appear here</p>`;
+             }
+        }
+
+        // Update action button states
+        this.updateActionButtons();
     }
     
     installModule() {
@@ -506,32 +675,5 @@ export default class BaseBuildingUI {
         if (!this.game.config?.RESOURCE_TYPES) return null;
         
         return this.game.config.RESOURCE_TYPES.find(r => r.id === resourceType);
-    }
-    
-    update() {
-        if (!this.isVisible) return;
-        
-        if (!this.activeVehicle || !this.game.entities.get(this.activeVehicle.id)) {
-             this.game.debug.log("Active vehicle removed, closing Building UI.");
-             this.hide();
-             return;
-        }
-
-        this.initVehiclePreview();
-        
-        this.updateVehicleStats();
-        
-        this.updateModulesList();
-        
-        if (this.selectedModule) {
-            this.selectModule(this.selectedModule); 
-        } else {
-             const moduleDetails = document.getElementById('module-details');
-             if (moduleDetails) {
-                moduleDetails.innerHTML = `<h3>Select a module</h3><p>Module details will appear here</p>`;
-             }
-        }
-
-        this.updateActionButtons();
     }
 }

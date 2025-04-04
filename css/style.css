@@ -564,6 +564,20 @@ body {
     border: 1px solid var(--ui-highlight);
 }
 
+.module-item.installed {
+    opacity: 0.7;
+    border-left: 4px solid var(--ui-success);
+}
+
+.module-item.installed:hover {
+    opacity: 0.9;
+}
+
+.installed-status {
+    color: var(--ui-success);
+    font-style: italic;
+}
+
 .module-icon {
     width: 24px;
     height: 24px;
