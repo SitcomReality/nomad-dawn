@@ -1,3 +1,5 @@
+import InteriorSpriteRenderer from './InteriorSpriteRenderer.js';
+
 /**
  * Renders the vehicle interior grid specifically for the building UI.
  * This will allow placing tiles, objects, and visualizing the layout.
@@ -16,6 +18,9 @@ export default class VehicleBuildingRenderer {
         this.gridOffsetX = 0;
         this.gridOffsetY = 0;
         this.cellPixelSize = 30; // Size of each grid cell in pixels
+
+        // Initialize sprite renderer
+        this.spriteRenderer = new InteriorSpriteRenderer(game);
 
         this.colors = {
             background: '#2a2a2a',
@@ -268,38 +273,78 @@ export default class VehicleBuildingRenderer {
         const tileConfig = this.game.config?.INTERIOR_TILE_TYPES?.find(t => t.id === tileTypeId);
         const tileColor = tileConfig?.color || this.colors.defaultTile;
 
+        // First draw the base color as fallback
         ctx.fillStyle = tileColor;
         ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
 
-        // Simple indication - maybe a small border or subtle pattern later?
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(screenX, screenY, cellPixelSize, cellPixelSize);
-        // Later: Draw tile sprite if available
+        // Try to draw the sprite if available
+        const spriteId = this.spriteRenderer.getSpriteIdForItem(tileTypeId, 'tile');
+        if (spriteId) {
+            // Draw sprite centered in the cell
+            const success = this.spriteRenderer.renderSprite(
+                ctx, 
+                spriteId, 
+                screenX + cellPixelSize / 2, 
+                screenY + cellPixelSize / 2, 
+                cellPixelSize, 
+                cellPixelSize,
+                { smoothing: false }
+            );
+            
+            // If sprite rendering failed, we already have the color background
+            if (!success) {
+                // Add grid lines for better visibility
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                ctx.lineWidth = 1;
+                ctx.strokeRect(screenX, screenY, cellPixelSize, cellPixelSize);
+            }
+        } else {
+            // Simple pattern for tiles without sprites
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(screenX, screenY, cellPixelSize, cellPixelSize);
+        }
     }
 
     drawObject(x, y, objectTypeId) {
-         const ctx = this.ctx;
-         const cellPixelSize = this.cellPixelSize;
-         const screenX = this.gridOffsetX + x * cellPixelSize;
-         const screenY = this.gridOffsetY + y * cellPixelSize;
+        const ctx = this.ctx;
+        const cellPixelSize = this.cellPixelSize;
+        const screenX = this.gridOffsetX + x * cellPixelSize;
+        const screenY = this.gridOffsetY + y * cellPixelSize;
 
-         const objectConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
-         const objectColor = objectConfig?.color || this.colors.defaultObject;
-         const objectIcon = objectConfig?.icon || '?';
+        const objectConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
+        const objectColor = objectConfig?.color || this.colors.defaultObject;
+        const objectIcon = objectConfig?.icon || '?';
 
-         // Simple colored square for now
-         ctx.fillStyle = objectColor;
-         ctx.fillRect(screenX + 2, screenY + 2, cellPixelSize - 4, cellPixelSize - 4); // Inset slightly
+        // Draw background color first as fallback
+        ctx.fillStyle = objectColor;
+        ctx.fillRect(screenX + 2, screenY + 2, cellPixelSize - 4, cellPixelSize - 4);
 
-         // Draw Icon/Symbol
-         ctx.fillStyle = this.colors.text;
-         ctx.font = `bold ${cellPixelSize * 0.6}px monospace`;
-         ctx.textAlign = 'center';
-         ctx.textBaseline = 'middle';
-         ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1); // Adjust baseline slightly
-
-         // Later: Draw object sprite if available
+        // Try to draw the sprite if available
+        const spriteId = this.spriteRenderer.getSpriteIdForItem(objectTypeId, 'object');
+        let spriteDrawn = false;
+        
+        if (spriteId) {
+            // Draw sprite centered in the cell
+            spriteDrawn = this.spriteRenderer.renderSprite(
+                ctx, 
+                spriteId, 
+                screenX + cellPixelSize / 2, 
+                screenY + cellPixelSize / 2, 
+                cellPixelSize, 
+                cellPixelSize, 
+                { smoothing: false }
+            );
+        }
+        
+        // If no sprite or sprite drawing failed, use the icon fallback
+        if (!spriteDrawn) {
+            ctx.fillStyle = this.colors.text;
+            ctx.font = `bold ${cellPixelSize * 0.6}px monospace`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1);
+        }
     }
 
     drawSpecialLocation(location, color, label) {

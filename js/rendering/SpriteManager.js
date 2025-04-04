@@ -11,15 +11,56 @@ export default class SpriteManager {
             return this.spriteCache[spriteCellId];
         }
 
-        if (!this.game || !this.game.config || !this.game.config.SPRITE_CELLS || !this.game.config.SPRITESHEET_CONFIG) {
+        if (!this.game || !this.game.config) {
             // This is a significant setup issue, keep the warning
-            console.warn(`[SpriteManager] Game config, SPRITE_CELLS, or SPRITESHEET_CONFIG missing.`);
+            console.warn(`[SpriteManager] Game config missing.`);
+            return null;
+        }
+
+        // First check INTERIOR_SPRITES for an exact match
+        const interiorSprite = this.game.config.INTERIOR_SPRITES?.[spriteCellId];
+        if (interiorSprite) {
+            const sheetConfig = this.game.config.SPRITESHEET_CONFIG?.[interiorSprite.sheet];
+            if (!sheetConfig) {
+                // Log only if debug is enabled
+                if (this.game?.debug?.isEnabled()) {
+                    this.game.debug.log(`[SpriteManager] Spritesheet config not found for sheet ID: ${interiorSprite.sheet} (for sprite ${spriteCellId})`);
+                }
+                return null;
+            }
+
+            const image = this.game.resources.get(sheetConfig.id);
+            if (!image) {
+                // Log only if debug is enabled
+                if (this.game?.debug?.isEnabled()) {
+                    // console.log(`[SpriteManager] Spritesheet image not yet loaded: ${sheetConfig.id} (for sprite ${spriteCellId})`);
+                }
+                return null;
+            }
+
+            // Create config using the direct coordinates
+            const config = {
+                image: image,
+                sx: interiorSprite.x,
+                sy: interiorSprite.y,
+                sw: interiorSprite.width,
+                sh: interiorSprite.height,
+            };
+
+            this.spriteCache[spriteCellId] = config;
+            return config;
+        }
+
+        // If not found in INTERIOR_SPRITES, check SPRITE_CELLS (original method)
+        if (!this.game.config.SPRITE_CELLS || !this.game.config.SPRITESHEET_CONFIG) {
+            // Keep the warning
+            console.warn(`[SpriteManager] SPRITE_CELLS, or SPRITESHEET_CONFIG missing.`);
             return null;
         }
 
         const cellInfo = this.game.config.SPRITE_CELLS[spriteCellId];
         if (!cellInfo) {
-            // Log only if debug is enabled, otherwise fail silently
+            // Log only if debug is enabled
             if (this.game?.debug?.isEnabled()) {
                  this.game.debug.log(`[SpriteManager] Sprite cell info not found for ID: ${spriteCellId}`);
             }
@@ -39,7 +80,7 @@ export default class SpriteManager {
         if (!image) {
             // Log only if debug is enabled
             if (this.game?.debug?.isEnabled()) {
-                // console.log(`[SpriteManager] Spritesheet image not yet loaded: ${sheetConfig.id} (for sprite ${spriteCellId})`); // Kept console.log as it's less intrusive than debug.log spam
+                // console.log(`[SpriteManager] Spritesheet image not yet loaded: ${sheetConfig.id} (for sprite ${spriteCellId})`);
             }
             return null;
         }

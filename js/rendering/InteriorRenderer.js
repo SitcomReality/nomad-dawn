@@ -1,27 +1,32 @@
+import InteriorSpriteRenderer from './InteriorSpriteRenderer.js';
+
 export default class InteriorRenderer {
     constructor(renderer, game) {
         this.renderer = renderer;
         this.game = game;
         this.ctx = renderer.ctx;
 
+        // Initialize sprite renderer
+        this.spriteRenderer = new InteriorSpriteRenderer(game);
+
         // Define colors
         this.colors = {
             background: '#1a1a1a',
             gridLines: 'rgba(255, 255, 255, 0.1)',
-            gridBorder: 'rgba(255, 255, 255, 0.4)', // Slightly brighter border
+            gridBorder: 'rgba(255, 255, 255, 0.4)', 
             door: '#f1faee',
             pilotSeat: '#e63946',
             player: '#457b9d',
             defaultTile: '#333',
             defaultObject: '#a8dadc',
             text: '#f1faee',
-            errorBg: 'rgba(50, 0, 0, 0.8)', // Dark red for error screen
+            errorBg: 'rgba(50, 0, 0, 0.8)', 
         };
 
         // Define rendering parameters
-        this.padding = 30; // Padding around the grid
-        this.maxGridWidthPixels = 600; // Max width for the grid display
-        this.maxGridHeightPixels = 400; // Max height for the grid display
+        this.padding = 30; 
+        this.maxGridWidthPixels = 600; 
+        this.maxGridHeightPixels = 400; 
     }
 
     render(vehicle, player) {
@@ -43,7 +48,7 @@ export default class InteriorRenderer {
         // Calculate cell size based on fitting the grid within the allocated space
         const cellPixelWidth = gridPixelWidth / vehicle.gridWidth;
         const cellPixelHeight = gridPixelHeight / vehicle.gridHeight;
-        const cellPixelSize = Math.min(cellPixelWidth, cellPixelHeight); // Use the smaller dimension to maintain aspect ratio
+        const cellPixelSize = Math.min(cellPixelWidth, cellPixelHeight); 
 
         // Recalculate actual grid pixel dimensions based on uniform cell size
         const finalGridPixelWidth = cellPixelSize * vehicle.gridWidth;
@@ -58,7 +63,7 @@ export default class InteriorRenderer {
         this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
         // --- Draw Grid Background & Border ---
-        this.ctx.fillStyle = this.colors.defaultTile; // Default background tile color
+        this.ctx.fillStyle = this.colors.defaultTile; 
         this.ctx.fillRect(gridStartX, gridStartY, finalGridPixelWidth, finalGridPixelHeight);
         this.ctx.strokeStyle = this.colors.gridBorder;
         this.ctx.lineWidth = 2;
@@ -68,7 +73,7 @@ export default class InteriorRenderer {
         if (vehicle.gridTiles) {
             for (const cellKey in vehicle.gridTiles) {
                 const tileTypeId = vehicle.gridTiles[cellKey];
-                if (!tileTypeId) continue; // Skip null/empty tiles
+                if (!tileTypeId) continue; 
 
                 // Basic validation of cellKey format
                 const parts = cellKey.split(',');
@@ -88,7 +93,7 @@ export default class InteriorRenderer {
         if (vehicle.gridObjects) {
             for (const cellKey in vehicle.gridObjects) {
                 const objectTypeId = vehicle.gridObjects[cellKey];
-                if (!objectTypeId) continue; // Skip null/empty objects
+                if (!objectTypeId) continue; 
 
                 // Basic validation of cellKey format
                 const parts = cellKey.split(',');
@@ -127,7 +132,7 @@ export default class InteriorRenderer {
         // --- Draw Player ---
         const playerScreenX = gridStartX + player.gridX * cellPixelSize + cellPixelSize / 2;
         const playerScreenY = gridStartY + player.gridY * cellPixelSize + cellPixelSize / 2;
-        const playerScreenSize = cellPixelSize * 0.6; // Player smaller than cell
+        const playerScreenSize = cellPixelSize * 0.6; 
 
         this.ctx.fillStyle = this.colors.player;
         this.ctx.beginPath();
@@ -152,15 +157,37 @@ export default class InteriorRenderer {
         const tileConfig = this.game.config?.INTERIOR_TILE_TYPES?.find(t => t.id === tileTypeId);
         const tileColor = tileConfig?.color || this.colors.defaultTile;
 
+        // First draw the base color as fallback
         this.ctx.fillStyle = tileColor;
         this.ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
 
-        // Draw a subtle border or pattern if needed
-        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-        this.ctx.lineWidth = 1;
-        this.ctx.strokeRect(screenX + 0.5, screenY + 0.5, cellPixelSize - 1, cellPixelSize - 1);
-
-        // Later: Draw tile sprite if available
+        // Try to draw the sprite if available
+        const spriteId = this.spriteRenderer.getSpriteIdForItem(tileTypeId, 'tile');
+        if (spriteId) {
+            // Draw sprite centered in the cell
+            const success = this.spriteRenderer.renderSprite(
+                this.ctx, 
+                spriteId, 
+                screenX + cellPixelSize / 2, 
+                screenY + cellPixelSize / 2, 
+                cellPixelSize, 
+                cellPixelSize,
+                { smoothing: false }
+            );
+            
+            // If sprite rendering failed, we already have the color background
+            if (!success) {
+                // Add grid lines for better visibility
+                this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeRect(screenX + 0.5, screenY + 0.5, cellPixelSize - 1, cellPixelSize - 1);
+            }
+        } else {
+            // Draw a subtle border for tiles without sprites
+            this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+            this.ctx.lineWidth = 1;
+            this.ctx.strokeRect(screenX + 0.5, screenY + 0.5, cellPixelSize - 1, cellPixelSize - 1);
+        }
     }
 
     drawObject(x, y, objectTypeId, gridStartX, gridStartY, cellPixelSize) {
@@ -172,18 +199,35 @@ export default class InteriorRenderer {
         const objectColor = objectConfig?.color || this.colors.defaultObject;
         const objectIcon = objectConfig?.icon || '?';
 
-        // Draw colored square for the object base
+        // Draw colored square for the object base (fallback)
         this.ctx.fillStyle = objectColor;
-        this.ctx.fillRect(screenX + 1, screenY + 1, cellPixelSize - 2, cellPixelSize - 2); // Slightly inset
+        this.ctx.fillRect(screenX + 1, screenY + 1, cellPixelSize - 2, cellPixelSize - 2);
 
-        // Draw Icon/Symbol in the center
-        this.ctx.fillStyle = this.colors.text;
-        this.ctx.font = `bold ${cellPixelSize * 0.6}px monospace`; // Scale icon size with cell size
-        this.ctx.textAlign = 'center';
-        this.ctx.textBaseline = 'middle';
-        this.ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1); // Center icon (+1px vertical adjust)
-
-        // Later: Draw object sprite if available
+        // Try to draw the sprite if available
+        const spriteId = this.spriteRenderer.getSpriteIdForItem(objectTypeId, 'object');
+        let spriteDrawn = false;
+        
+        if (spriteId) {
+            // Draw sprite centered in the cell
+            spriteDrawn = this.spriteRenderer.renderSprite(
+                this.ctx,
+                spriteId,
+                screenX + cellPixelSize / 2,
+                screenY + cellPixelSize / 2,
+                cellPixelSize,
+                cellPixelSize,
+                { smoothing: false }
+            );
+        }
+        
+        // If no sprite or sprite drawing failed, use the icon fallback
+        if (!spriteDrawn) {
+            this.ctx.fillStyle = this.colors.text;
+            this.ctx.font = `bold ${cellPixelSize * 0.6}px monospace`;
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1);
+        }
     }
 
     drawSpecialLocation(location, color, label, gridStartX, gridStartY, cellPixelSize) {
@@ -193,7 +237,7 @@ export default class InteriorRenderer {
         const locY = gridStartY + location.y * cellPixelSize;
 
         this.ctx.fillStyle = color;
-        this.ctx.globalAlpha = 0.3; // Make it slightly transparent
+        this.ctx.globalAlpha = 0.3; 
         this.ctx.fillRect(locX, locY, cellPixelSize, cellPixelSize);
         this.ctx.globalAlpha = 1.0;
 
@@ -207,7 +251,7 @@ export default class InteriorRenderer {
         this.ctx.textAlign = 'center';
         this.ctx.textBaseline = 'middle';
         this.ctx.fillText(label, locX + cellPixelSize / 2, locY + cellPixelSize / 2);
-        this.ctx.textBaseline = 'alphabetic'; // Reset baseline
+        this.ctx.textBaseline = 'alphabetic'; 
     }
 
     renderError(message) {

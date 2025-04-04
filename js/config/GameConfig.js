@@ -172,21 +172,23 @@ export const Config = {
             id: 'wall_metal',
             name: 'Metal Wall',
             description: 'Basic structural element.',
-            collides: true, // Players cannot walk through
+            collides: true, 
             cost: { metal: 5 },
-            color: '#6c757d', // Grey
-            icon: '🧱'
+            color: '#6c757d',
+            icon: '🧱',
+            spriteId: 'wall_panel_small_black'
         },
         {
             id: 'storage_small',
             name: 'Small Storage Crate',
             description: 'Provides a small amount of storage space.',
-            collides: true, // Occupies a cell
-            interactable: true, // Can be interacted with (later)
-            effect: { storage: 50 }, // Example effect
+            collides: true,
+            interactable: true,
+            effect: { storage: 50 },
             cost: { metal: 15 },
-            color: '#8b4513', // Brown
-            icon: '📦'
+            color: '#8b4513',
+            icon: '📦',
+            spriteId: 'boxes_stacked'
         },
         {
             id: 'console_basic',
@@ -195,18 +197,20 @@ export const Config = {
             collides: true,
             interactable: true,
             cost: { metal: 10, energy: 5 },
-            color: '#457b9d', // Blue
-            icon: '💻'
+            color: '#457b9d',
+            icon: '💻',
+            spriteId: 'control_panel_small'
         },
         {
             id: 'bed_simple',
             name: 'Simple Cot',
             description: 'A place to rest.',
             collides: true,
-            interactable: true, // Could be used for healing/saving later
-            cost: { metal: 10, food: 5 }, // Maybe fabric later?
-            color: '#7d9951', // Greenish
-            icon: '🛏️'
+            interactable: true,
+            cost: { metal: 10, food: 5 },
+            color: '#7d9951',
+            icon: '🛏️',
+            spriteId: 'desk_dark_large'
         }
         // Add more objects like lights, power conduits, specific workstations etc.
     ],
@@ -219,24 +223,24 @@ export const Config = {
             name: 'Metal Floor Plate',
             description: 'Basic, durable flooring.',
             cost: { metal: 2 },
-            color: '#555', // Dark grey base color
-            // spriteCellId: 'tile_metal_floor' // Example for later sprite integration
+            color: '#555',
+            spriteId: 'floor_dark_teal'
         },
         {
             id: 'floor_grate',
             name: 'Grated Floor Panel',
             description: 'Allows visibility below, less sturdy.',
             cost: { metal: 3 },
-            color: '#777', // Lighter grey
-            // spriteCellId: 'tile_grate_floor'
+            color: '#777',
+            spriteId: 'floor_cobblestone'
         },
         {
             id: 'floor_hazard',
             name: 'Hazard Stripe Floor',
             description: 'Marking for potentially dangerous areas.',
-            cost: { metal: 2, energy: 1 }, // Energy for paint/lights?
-            color: '#ffcc00', // Yellow/Black base (represented as yellow here)
-            // spriteCellId: 'tile_hazard_floor'
+            cost: { metal: 2, energy: 1 },
+            color: '#ffcc00',
+            spriteId: 'floor_blue_gradient'
         }
         // Add more tile types like carpet, reinforced plating, etc.
     ],
@@ -290,6 +294,14 @@ export const Config = {
             spriteHeight: 512,
             columns: 4,
             rows: 4
+        },
+        interior: {
+            id: 'interior_furniture',
+            url: '/Interior-Furniture.png',
+            spriteWidth: 32,
+            spriteHeight: 32,
+            columns: 16,
+            rows: 32
         }
     },
 
@@ -329,5 +341,52 @@ export const Config = {
         'cactus': 'cactus_tall',
         'ruin': 'boulder_large', // Using boulder as placeholder for ruin
         // Add mappings for any other feature types used in FeatureGenerator
+    },
+    
+    INTERIOR_SPRITES: {
+        "wardrobe_teal": { sheet: 'interior', x: 0, y: 0, width: 64, height: 80 },
+        "chair_office_gray_1": { sheet: 'interior', x: 80, y: 8, width: 32, height: 40 },
+        "chair_office_gray_2": { sheet: 'interior', x: 120, y: 8, width: 32, height: 40 },
+        "wall_panel_small_black": { sheet: 'interior', x: 160, y: 8, width: 16, height: 16 },
+        "paper_note": { sheet: 'interior', x: 160, y: 32, width: 16, height: 16 },
+        "paper_scattered": { sheet: 'interior', x: 184, y: 32, width: 16, height: 16 },
+        "boxes_stacked": { sheet: 'interior', x: 88, y: 56, width: 32, height: 32 },
+        "chair_office_dark_1": { sheet: 'interior', x: 160, y: 56, width: 32, height: 32 },
+        "chair_office_dark_2": { sheet: 'interior', x: 200, y: 56, width: 32, height: 32 },
+        "window_double_closed": { sheet: 'interior', x: 216, y: 0, width: 64, height: 64 },
+        "window_single_closed_1": { sheet: 'interior', x: 288, y: 0, width: 32, height: 64 },
+        "window_single_closed_2": { sheet: 'interior', x: 336, y: 0, width: 32, height: 64 },
+        "window_single_narrow": { sheet: 'interior', x: 384, y: 0, width: 16, height: 64 },
+        "floor_water_dark": { sheet: 'interior', x: 128, y: 128, width: 64, height: 32 },
+        "floor_purple_gradient": { sheet: 'interior', x: 192, y: 128, width: 32, height: 32 },
+        "floor_green_gradient": { sheet: 'interior', x: 192, y: 160, width: 32, height: 32 },
+        "floor_blue_gradient": { sheet: 'interior', x: 192, y: 192, width: 32, height: 32 },
+        "floor_dark_blue_gradient": { sheet: 'interior', x: 192, y: 224, width: 32, height: 32 },
+        "wall_dark_diagonal_large": { sheet: 'interior', x: 224, y: 128, width: 192, height: 192 },
+        "control_panel_small": { sheet: 'interior', x: 8, y: 192, width: 24, height: 24 },
+        "counter_grate_left": { sheet: 'interior', x: 40, y: 184, width: 64, height: 40 },
+        "counter_safe_middle": { sheet: 'interior', x: 104, y: 184, width: 32, height: 40 },
+        "counter_plain_right": { sheet: 'interior', x: 136, y: 184, width: 32, height: 40 },
+        "grate_large": { sheet: 'interior', x: 0, y: 288, width: 160, height: 64 },
+        "desk_lamp_on": { sheet: 'interior', x: 176, y: 368, width: 32, height: 32 },
+        "desk_lamp_base": { sheet: 'interior', x: 160, y: 416, width: 64, height: 16 },
+        "vent_small_dark": { sheet: 'interior', x: 256, y: 320, width: 32, height: 32 },
+        "floor_tech_light_large": { sheet: 'interior', x: 224, y: 352, width: 128, height: 128 },
+        "console_complex": { sheet: 'interior', x: 352, y: 352, width: 128, height: 128 },
+        "wall_edge_vertical": { sheet: 'interior', x: 416, y: 352, width: 16, height: 192 },
+        "desk_dark_large": { sheet: 'interior', x: 0, y: 448, width: 128, height: 160 },
+        "desk_dark_sidepiece": { sheet: 'interior', x: 128, y: 464, width: 32, height: 112 },
+        "floor_blue_squares": { sheet: 'interior', x: 224, y: 480, width: 64, height: 32 },
+        "floor_dark_teal": { sheet: 'interior', x: 288, y: 480, width: 32, height: 32 },
+        "floor_beige_dirt": { sheet: 'interior', x: 352, y: 480, width: 32, height: 32 },
+        "floor_tech_gray_complex": { sheet: 'interior', x: 384, y: 480, width: 96, height: 32 },
+        "floor_cobblestone": { sheet: 'interior', x: 224, y: 512, width: 32, height: 32 },
+        "door_double_gray": { sheet: 'interior', x: 272, y: 512, width: 64, height: 64 },
+        "frame_dark_rect": { sheet: 'interior', x: 160, y: 624, width: 160, height: 64 },
+        "frame_dark_small": { sheet: 'interior', x: 0, y: 736, width: 128, height: 128 },
+        "bar_blue_short": { sheet: 'interior', x: 160, y: 768, width: 64, height: 16 },
+        "bar_blue_long": { sheet: 'interior', x: 160, y: 800, width: 256, height: 16 },
+        "bar_blue_medium_1": { sheet: 'interior', x: 160, y: 832, width: 128, height: 16 },
+        "bar_blue_medium_2": { sheet: 'interior', x: 160, y: 864, width: 128, height: 16 }
     }
 };
