@@ -98,29 +98,56 @@ export default class Player {
         } else if (this.playerState === 'Interior') {
             // Movement within the vehicle grid
              const direction = input.getMovementDirection();
-             if (direction.x !== 0 || direction.y !== 0) {
+             const vehicle = this.game.entities.get(this.currentVehicleId);
+             let canMoveX = true;
+             let canMoveY = true;
+
+             if (vehicle && (direction.x !== 0 || direction.y !== 0)) {
                  const moveAmount = this.interiorMoveSpeed * deltaTime;
-                 let nextGridX = this.gridX + direction.x * moveAmount;
-                 let nextGridY = this.gridY + direction.y * moveAmount;
+                 const nextGridX = this.gridX + direction.x * moveAmount;
+                 const nextGridY = this.gridY + direction.y * moveAmount;
 
-                 // --- Basic Grid Collision (Phase 2) ---
-                 // const vehicle = this.game.entities.get(this.currentVehicleId);
-                 // if (vehicle && vehicle.gridTiles) {
-                 //     const targetTileX = Math.floor(nextGridX);
-                 //     const targetTileY = Math.floor(nextGridY);
-                 //     const tileKey = `${targetTileX},${targetTileY}`;
-                 //     const tileType = vehicle.gridTiles[tileKey];
-                 //     // Example: Check for 'Wall' type collision
-                 //     if (tileType === 'Wall') {
-                 //         // Stop movement towards wall (more sophisticated collision needed later)
-                 //         nextGridX = this.gridX;
-                 //         nextGridY = this.gridY;
-                 //     }
-                 // }
+                 // --- Simple Grid Collision Check ---
+                 if (direction.x !== 0) {
+                     // Check cell player is trying to move INTO horizontally
+                     const targetCellX = Math.floor(nextGridX);
+                     const currentCellY = Math.floor(this.gridY);
+                     const cellKeyX = `${targetCellX},${currentCellY}`;
+                     const objectInCellX = vehicle.gridObjects?.[cellKeyX];
+                     // Check if the object type blocks movement (e.g., walls)
+                     if (objectInCellX === 'wall_metal') { // TODO: Use config or helper func
+                         canMoveX = false;
+                         // Optional: Snap player back to edge of current cell if moving towards wall
+                         // this.gridX = Math.round(this.gridX);
+                     }
+                 }
 
-                 // Update grid position (round for now, will need better handling)
-                 this.gridX = nextGridX;
-                 this.gridY = nextGridY;
+                 if (direction.y !== 0) {
+                     // Check cell player is trying to move INTO vertically
+                     const targetCellY = Math.floor(nextGridY);
+                     const currentCellX = Math.floor(this.gridX);
+                     const cellKeyY = `${currentCellX},${targetCellY}`;
+                     const objectInCellY = vehicle.gridObjects?.[cellKeyY];
+                     // Check if the object type blocks movement
+                      if (objectInCellY === 'wall_metal') { // TODO: Use config or helper func
+                         canMoveY = false;
+                          // Optional: Snap player back to edge of current cell
+                          // this.gridY = Math.round(this.gridY);
+                      }
+                 }
+
+                 // Apply movement only if allowed
+                 if (canMoveX) {
+                    this.gridX = nextGridX;
+                 }
+                 if (canMoveY) {
+                    this.gridY = nextGridY;
+                 }
+
+                 // --- Grid Boundary Check ---
+                 // Clamp position after applying movement
+                  this.gridX = Math.max(0, Math.min(vehicle.gridWidth ? vehicle.gridWidth - 0.01 : 9.99, this.gridX));
+                  this.gridY = Math.max(0, Math.min(vehicle.gridHeight ? vehicle.gridHeight - 0.01 : 9.99, this.gridY));
              }
         } else if (this.playerState === 'Piloting' || this.playerState === 'Building') {
              // No direct player movement input handled here
@@ -137,8 +164,8 @@ export default class Player {
             this.vehicleId !== prevState.vehicleId ||
             this.playerState !== prevState.playerState ||
             this.currentVehicleId !== prevState.currentVehicleId ||
-            this.gridX !== prevState.gridX || // Use simple !== check for grid position
-            this.gridY !== prevState.gridY ||
+            Math.abs(this.gridX - prevState.gridX) > 0.001 || // Use tolerance for float comparison
+            Math.abs(this.gridY - prevState.gridY) > 0.001 ||
             JSON.stringify(this.resources) !== JSON.stringify(prevState.resources)
         ) {
             stateDidChange = true;
@@ -403,11 +430,13 @@ export default class Player {
 
         const healthChanged = currentState.health !== lastState.health;
 
-        // Check interior state changes
+        // Check interior state changes (including grid position)
+         // Use a tolerance for grid position changes
+         const gridPosThreshold = 0.1;
         const interiorStateChanged = currentState.playerState !== lastState.playerState ||
                                      currentState.currentVehicleId !== lastState.currentVehicleId ||
-                                     currentState.gridX !== lastState.gridX ||
-                                     currentState.gridY !== lastState.gridY;
+                                     Math.abs(currentState.gridX - (lastState.gridX ?? 0)) > gridPosThreshold ||
+                                     Math.abs(currentState.gridY - (lastState.gridY ?? 0)) > gridPosThreshold;
 
         // More efficient resource check if resources change frequently
         const resourcesChanged = JSON.stringify(currentState.resources) !== JSON.stringify(lastState.resources || {});

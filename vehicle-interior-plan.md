@@ -18,17 +18,19 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
 
 **Phase 3: Interior Building Mode (COMPLETE)**
 
-1.  **`VehicleBuildingRenderer.js` (COMPLETE):** Renders the grid for the building UI.
-2.  **`VehicleBuildingManager.js` (COMPLETE):** Handles building logic and tool selection.
-3.  **`BaseBuildingUI.js` (COMPLETE):** Integrates the renderer and manager, handles UI interaction, and manages the 'Building' player state.
-4.  **`Game.js` (COMPLETE):** Handled the 'Building' `playerState` in `update` and `render`. Ensured interaction logic considers the state.
+*   **`VehicleBuildingRenderer.js` (COMPLETE):** Renders the grid for the building UI.
+*   **`VehicleBuildingManager.js` (COMPLETE):** Handles building logic and tool selection.
+*   **`BaseBuildingUI.js` (COMPLETE):** Integrates the renderer and manager, handles UI interaction, and manages the 'Building' player state.
+*   **`Game.js` (COMPLETE):** Handled the 'Building' `playerState` in `update` and `render`. Ensured interaction logic considers the state.
 
-**Phase 4: Advanced Interior Features (TODO - Next Step)**
+**Phase 4: Advanced Interior Features (In Progress)**
 
-1.  Implement collision detection for player movement within the grid against `gridObjects` (e.g., walls). (Modify `Player.update` in 'Interior' state).
-2.  Add specific object types to place (beds, storage, consoles) with associated data and rendering. (Update `VehicleBuildingManager`, `VehicleBuildingRenderer`, `BaseBuildingUI`).
+1.  Implement collision detection for player movement within the grid against `gridObjects` (e.g., walls). (**COMPLETE**) (Modified `Player.update` in 'Interior' state).
+2.  **NEXT:** Add specific object types to place (beds, storage, consoles) with associated data and rendering. (Update `VehicleBuildingManager`, `VehicleBuildingRenderer`, `BaseBuildingUI`, `GameConfig`).
 3.  Implement interactions with interior objects (e.g., accessing storage). (Modify `Game.handleInputInteractions` or add new input handlers).
 4.  Refine rendering in `InteriorRenderer` to draw actual tiles/objects based on `vehicle.gridTiles` / `vehicle.gridObjects`.
 5.  Synchronization improvements for multi-player building inside the same vehicle.
 6.  Add tile/object selection UI to the `BaseBuildingUI`'s `tool-info-area`.
+
+
 
