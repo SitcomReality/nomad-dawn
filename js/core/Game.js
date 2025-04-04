@@ -9,8 +9,9 @@ import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
 import Vehicle from '../entities/Vehicle.js'; // Needed for initial spawn
 import CollisionManager from './CollisionManager.js';
-import InteractionManager from './InteractionManager.js'; // NEW
-import PerformanceMonitor from './PerformanceMonitor.js'; // NEW
+import InteractionManager from './InteractionManager.js';
+import PerformanceMonitor from './PerformanceMonitor.js';
+import WorldObjectManager from '../world/WorldObjectManager.js'; // NEW
 
 // Make Player class globally accessible for EntityManager remote player creation
 window.Player = Player;
@@ -41,8 +42,9 @@ export default class Game {
         this.network = new NetworkManager(this); // Pass game instance
         this.ui = new UIManager(this); // Pass game instance
         this.collisions = new CollisionManager(this);
-        this.interactions = new InteractionManager(this); // NEW
-        this.performance = new PerformanceMonitor(this); // NEW
+        this.interactions = new InteractionManager(this);
+        this.performance = new PerformanceMonitor(this);
+        this.worldObjectManager = new WorldObjectManager(this); // NEW
 
         // Make config available to the game
         this.config = Config;
@@ -242,6 +244,7 @@ export default class Game {
                 maxLoadDistance: this.config.MAX_LOAD_DISTANCE,
                 noiseFunction: this.noiseFunction,
                 debug: this.debug,
+                worldObjectManager: this.worldObjectManager // Pass the manager
             });
             await this.world.initialize();
 
@@ -315,9 +318,11 @@ export default class Game {
                 this.network.updateRoomState({ timeOfDay: this.timeOfDay });
                 this.lastTimeSync = timestamp;
             }
-        } else {
-            // Non-authority clients receive time via network in world.syncFromNetworkState
         }
+
+        const cameraCenterX = this.player ? this.player.x : 0;
+        const cameraCenterY = this.player ? this.player.y : 0;
+        this.world?.update(deltaTime, cameraCenterX, cameraCenterY);
 
         if (this.player && !this.isGuestMode) {
             const vehicle = this.player.currentVehicleId ? this.entities.get(this.player.currentVehicleId) : null;
@@ -331,36 +336,34 @@ export default class Game {
                 case 'Piloting':
                     if (vehicle?.update) {
                         vehicle.update(deltaTime, this.input);
-                        if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
-                            this.network.updateRoomState({
-                                vehicles: { [vehicle.id]: vehicle.getMinimalNetworkState() }
-                            });
-                            if (vehicle.clearStateChanged) vehicle.clearStateChanged();
-                        }
                     }
                     break;
                 case 'Building':
                     this.ui?.baseBuilding?.buildingManager?.update?.(deltaTime);
                     break;
             }
-            if (this.player.hasStateChanged()) {
-                this.network.updatePresence(this.player.getNetworkState());
-                this.player.clearStateChanged();
-            }
         }
-
-        const cameraCenterX = this.player ? this.player.x : 0;
-        const cameraCenterY = this.player ? this.player.y : 0;
-        this.world?.update(deltaTime, cameraCenterX, cameraCenterY);
 
         for (const entity of this.entities.getAll()) {
             if (this.player && entity.id === this.player.id) continue;
             if (entity.type === 'vehicle' && this.player && entity.driver === this.player.id && this.player.playerState === 'Piloting') continue;
+
             entity.update?.(deltaTime, null);
+
+            if (entity.type === 'vehicle' && entity.hasStateChanged?.()) {
+                this.network.updateRoomState({
+                    vehicles: { [entity.id]: entity.getMinimalNetworkState() }
+                });
+                entity.clearStateChanged?.();
+            }
+        }
+
+        if (this.player && !this.isGuestMode && this.player.hasStateChanged()) {
+            this.network.updatePresence(this.player.getNetworkState());
+            this.player.clearStateChanged();
         }
 
         this.ui.update();
-
         if (!this.isGuestMode && this.player?.playerState === 'Overworld') {
             this.collisions.checkCollisions();
         }

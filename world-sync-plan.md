@@ -4,7 +4,7 @@ This plan outlines the steps to synchronize procedurally generated world feature
 
 **Goal:** Ensure all players see the same world features and resources in the same locations, and that collected resources disappear for everyone. Ensure all players experience the same time of day.
 
-**Constraints:** Minimize changes to existing files per step, especially those identified as being at maximum length (`js/ui/InventoryUI.js`, `js/entities/VehicleBuildingManager.js`, `js/entities/Player.js`, `js/rendering/WorldRenderer.js`, `js/ui/BuildingToolPanel.js`, `js/core/NetworkManager.js`). Prefer creating new files over complex modifications to long files.
+**Constraints:** Minimize changes to existing files per step, especially those identified as being at maximum length (`js/ui/InventoryUI.js`, `js/entities/VehicleBuildingManager.js`, `js/entities/Player.js`, `js/rendering/WorldRenderer.js`, `js/ui/BuildingToolPanel.js`, `js/core/NetworkManager.js`, `js/core/Game.js`). Prefer creating new files over complex modifications to long files.
 
 ---
 
@@ -39,15 +39,12 @@ This plan outlines the steps to synchronize procedurally generated world feature
     *   Modified `World.syncFromNetworkState`: Stores `roomState.resources` into `this.resourceOverrides`.
     *   Added `World.isResourceActive(resourceId)`: Checks `this.resourceOverrides` to see if a resource should be considered active (not `null`).
 
-*   *Files modified:* `World.js` (existing).
-
 ---
 
 **Phase 5: Update Collection Logic (COMPLETE)**
 
-1.  **Refactor Collection:**
-    *   Moved resource collection logic (`requestCollectResource`) from `Player.js` to `InteractionManager.js`.
-2.  **Modify `InteractionManager.requestCollectResource`:**
+*   **Refactor Collection:** Moved resource collection logic (`requestCollectResource`) from `Player.js` to `InteractionManager.js`.
+*   **Modify `InteractionManager.requestCollectResource`:**
     *   When 'E' is pressed near a resource (`handleOverworldInteraction`), call `requestCollectResource`.
     *   `requestCollectResource` now:
         *   Triggers local visual effect.
@@ -55,28 +52,31 @@ This plan outlines the steps to synchronize procedurally generated world feature
         *   Updates player's local resource count (which flags presence update).
         *   Checks `world.isResourceActive` before attempting collection.
 
-*   *Files modified:* `Player.js` (existing, long - logic removed), `InteractionManager.js` (existing - logic added).
+---
+
+**Phase 6: Update Rendering Logic (COMPLETE)**
+
+*   **Create `WorldObjectManager`:** New class `js/world/WorldObjectManager.js`.
+    *   Stores generated features/resources.
+    *   Receives `roomState.resources` updates via `updateResourceOverrides`.
+    *   Provides `getVisibleObjects(bounds)` method, filtering out collected/inactive objects.
+    *   Provides `findResourceById(id)` method.
+*   **Integrate `WorldObjectManager`:**
+    *   Instantiated in `Game.js`.
+    *   `NetworkManager` passes `roomState.resources` updates to `WorldObjectManager`.
+    *   `ChunkManager` registers generated objects with `WorldObjectManager` and removes them on unload.
+    *   `World` uses `WorldObjectManager` for `isResourceActive` and `findResourceById`.
+*   **Refactor `WorldRenderer`:**
+    *   Created `js/rendering/WorldObjectRenderer.js` and moved `renderWorldObject` and `adjustColorForLighting` into it.
+    *   `WorldRenderer.render` now gets visible objects from `game.worldObjectManager.getVisibleObjects()` and calls `worldObjectRenderer.render()` for each object, instead of iterating chunk features/resources.
 
 ---
 
-**Phase 6: Update Rendering Logic (NEXT)**
+**Phase 7: (NEXT) Resource Respawn/Cleanup**
 
-1.  **Create `WorldObjectManager`:** New class `js/world/WorldObjectManager.js`.
-    *   Holds generated features/resources.
-    *   Receives `roomState.resources` updates.
-    *   Provides `getVisibleObjects(area)` method, filtering out collected objects based on `roomState` overrides.
-2.  **Refactor `WorldRenderer`:**
-    *   Modify `WorldRenderer.renderChunk`: Call `game.worldObjectManager.getVisibleObjects()` instead of iterating `chunk.features`/`resources` directly. Render only returned objects.
-3.  **Integrate `WorldObjectManager`:** Instantiate in `Game.js`, pass `roomState.resources` updates, register generated objects from chunks.
-
-*   *Files potentially modified:* `WorldRenderer.js` (existing, long - logic removal/simplification), `Game.js` (existing), `World.js` (existing), `ChunkManager.js` (existing).
-*   *New file:* `js/world/WorldObjectManager.js`.
+*   Implement server-side or host-client logic to periodically remove `null` entries from `roomState.resources`, allowing resources to respawn based on the deterministic generator. This is likely outside the scope of the current client-side focus.
 
 ---
 
-**Phase 7: (Future) Resource Respawn/Cleanup**
 
-*   Server-side or host-client logic to periodically remove `null` entries from `roomState.resources`, allowing respawn.
-
----
 

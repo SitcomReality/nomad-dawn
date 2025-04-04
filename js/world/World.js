@@ -25,17 +25,19 @@ export default class World {
         // Debug flag
         this.debug = options.debug || false;
 
+        // --- NEW: WorldObjectManager reference ---
+        this.worldObjectManager = options.worldObjectManager;
+        if (!this.worldObjectManager) {
+             console.error("WorldObjectManager not provided to World constructor!");
+             // Optionally create a fallback, though Game should provide it
+             // this.worldObjectManager = new WorldObjectManager(window.game);
+        }
+        // --- END NEW ---
+
         // Initialize managers
         this.chunkManager = new ChunkManager(this);
         this.resourceGenerator = new ResourceGenerator(this);
         this.featureGenerator = new FeatureGenerator(this);
-
-        // Resource state overrides from network
-        // Map<string, null | { amount: number, ...otherState }>
-        // resourceId -> null means collected/removed
-        // resourceId -> object means state override (e.g., reduced amount)
-        // If resourceId is not present, it uses the generated state.
-        this.resourceOverrides = {};
     }
 
     async initialize() {
@@ -98,117 +100,52 @@ export default class World {
 
     syncFromNetworkState(roomState) {
         // Update world state from network
-        if (roomState.resources) {
-             // Directly update the `resourceOverrides` state from the network
-             // This object now represents the *overrides* to the generated state
-             // (e.g., { "resource-id-1": null, "resource-id-2": { amount: 30 } })
-             // A null value means it's collected/removed.
-             this.resourceOverrides = roomState.resources || {};
-             // TODO: We might need to trigger a visual update if a resource visible on screen gets updated.
-             // This will be handled more formally in Phase 6 (WorldObjectManager)
+        if (roomState.resources !== undefined) { // Check specifically for resources key
+             // --- NEW: Update WorldObjectManager with overrides ---
+             if (this.worldObjectManager) {
+                 this.worldObjectManager.updateResourceOverrides(roomState.resources);
+             }
+             // --- END NEW ---
         }
 
         if (roomState.worldObjects) {
             this.updateWorldObjectsFromNetwork(roomState.worldObjects);
         }
 
-        // --- Sync time of day ---
+        // Sync time of day
         if (roomState.timeOfDay !== undefined && typeof window.game?.setTimeOfDay === 'function') {
             window.game.setTimeOfDay(roomState.timeOfDay);
         }
     }
 
     /**
-     * Checks if a resource is considered active based on network overrides.
-     * If the resource ID exists as a key in `this.resourceOverrides` and its value is null,
-     * it means it has been collected/removed according to the network state.
-     * If the ID is not present, it defaults to active (using generated state).
+     * Checks if a resource is considered active using the WorldObjectManager.
      * @param {string} resourceId - The ID of the resource to check.
      * @returns {boolean} True if the resource is active, false otherwise.
      */
     isResourceActive(resourceId) {
-        return !(this.resourceOverrides[resourceId] === null);
+        // --- NEW: Delegate to WorldObjectManager ---
+         if (!this.worldObjectManager) return false; // Cannot determine if manager missing
+         const resource = this.worldObjectManager.findResourceById(resourceId);
+         return !!resource; // Active if the manager returns an object for it
+        // --- END NEW ---
     }
 
+    /**
+     * Finds a resource by ID using the WorldObjectManager.
+     * @param {string} resourceId - The ID of the resource to find.
+     * @returns {Object|null} The resource object or null if not found/inactive.
+     */
     findResourceById(resourceId) {
-        // This might need refinement later if resources aren't always loaded
-        for (const chunkId in this.chunkManager.chunks) {
-            const chunk = this.chunkManager.chunks[chunkId];
-            if (chunk && chunk.resources) {
-                const found = chunk.resources.find(r => r.id === resourceId);
-                if (found) {
-                    // Apply overrides if they exist
-                    const override = this.resourceOverrides[resourceId];
-                    if (override === null) {
-                        // If null override, it's collected, so return null
-                        return null;
-                    } else if (override) {
-                        // Apply other state overrides (e.g., amount)
-                        return { ...found, ...override };
-                    }
-                    // No override, return the found resource
-                    return found;
-                }
-            }
-        }
-        return null;
-    }
-
-    addResourceToChunk(resource) {
-        const chunkCoordinates = this.chunkManager.getChunkCoordinates(resource.x, resource.y);
-        const chunkId = this.chunkManager.getChunkId(resource.x, resource.y);
-
-        // Ensure the target chunk exists before adding
-        if (!this.chunkManager.chunks[chunkId]) {
-            // Generate the chunk if it doesn't exist when a resource needs to be added
-            console.warn(`Target chunk ${chunkId} for resource ${resource.id} not generated yet.`);
-            this.chunkManager.generateChunk(chunkCoordinates.x, chunkCoordinates.y).then(chunk => {
-                if (chunk && chunk.resources && !chunk.resources.some(r => r.id === resource.id)) {
-                    chunk.resources.push(resource);
-                }
-            }).catch(err => {
-                console.error(`Error generating chunk ${chunkId} for resource ${resource.id}:`, err);
-            });
-            return;
-        }
-
-        const chunk = this.chunkManager.chunks[chunkId];
-        if (chunk && chunk.resources && !chunk.resources.some(r => r.id === resource.id)) {
-            chunk.resources.push(resource);
-        } else if (chunk && chunk.resources && chunk.resources.some(r => r.id === resource.id)) {
-            // Already exists, nothing to do
-        } else if (!chunk) {
-            console.warn(`Attempted to add resource ${resource.id} to non-existent chunk ${chunkId} after check.`);
-        }
-    }
-
-    updateResourceChunkLocation(resource) {
-        const currentChunkId = this.chunkManager.getChunkId(resource.x, resource.y);
-        let foundInCorrectChunk = false;
-
-        // Check if it's in the correct chunk's list
-        if (this.chunkManager.chunks[currentChunkId] && this.chunkManager.chunks[currentChunkId].resources) {
-            if (this.chunkManager.chunks[currentChunkId].resources.some(r => r.id === resource.id)) {
-                foundInCorrectChunk = true;
-            }
-        }
-
-        // If not in the correct chunk, remove from any incorrect chunk and add to the correct one
-        if (!foundInCorrectChunk) {
-            // Remove from any chunk it might be incorrectly listed in
-            for (const chunkId in this.chunkManager.chunks) {
-                if (this.chunkManager.chunks[chunkId].resources) {
-                    const initialLength = this.chunkManager.chunks[chunkId].resources.length;
-                    this.chunkManager.chunks[chunkId].resources = this.chunkManager.chunks[chunkId].resources.filter(r => r.id !== resource.id);
-                }
-            }
-            // Add to the correct chunk
-            this.addResourceToChunk(resource);
-        }
+         // --- NEW: Delegate to WorldObjectManager ---
+         if (!this.worldObjectManager) return null;
+         return this.worldObjectManager.findResourceById(resourceId);
+         // --- END NEW ---
     }
 
     updateWorldObjectsFromNetwork(worldObjects) {
         // Update world objects like buildings, etc.
+        // Currently unused, but kept for potential future features
         for (const [id, data] of Object.entries(worldObjects)) {
             // Handle object updates similar to resources
         }

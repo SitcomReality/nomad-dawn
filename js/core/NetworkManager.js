@@ -14,10 +14,9 @@ export default class NetworkManager {
         this.unsubscribeRoomState = null;
         this.unsubscribePresenceRequests = null;
 
-        // --- NEW: World Seed Tracking ---
+        // World Seed Tracking
         this.worldSeed = null;
         this.worldSeedConfirmed = false;
-        // --- END NEW ---
     }
 
     async initialize() {
@@ -38,32 +37,25 @@ export default class NetworkManager {
                  this.game.debug.log('Network connection initialized. Client ID:', this.clientId);
             }
 
-            // --- NEW: Handle World Seed ---
+            // Handle World Seed
             const initialRoomState = this.room.roomState || {};
             if (initialRoomState.worldSeed !== undefined && initialRoomState.worldSeed !== null) {
-                // Seed exists in room state, use it.
                 this.worldSeed = initialRoomState.worldSeed;
                 this.worldSeedConfirmed = true;
                 this.game.debug.log(`World seed received from room state: ${this.worldSeed}`);
             } else if (!isGuest) {
-                // No seed exists, and we are not a guest. Propose a seed.
                 this.worldSeed = Math.floor(Math.random() * 9999999);
                 this.worldSeedConfirmed = false; // Not confirmed until echoed back
                 this.game.debug.log(`No world seed found. Proposing seed: ${this.worldSeed}`);
-                // Send update immediately, hoping to establish the seed
-                // --- NEW: Also propose initial timeOfDay if authority ---
                  const initialState = { worldSeed: this.worldSeed };
                  if (this.game.timeAuthority && initialRoomState.timeOfDay === undefined) {
                      initialState.timeOfDay = this.game.timeOfDay;
-                     this.game.lastTimeSync = performance.now(); // Set initial sync time
+                     this.game.lastTimeSync = performance.now();
                  }
                  this.updateRoomState(initialState);
-                 // --- END NEW ---
             } else {
-                 // Is a guest and no seed exists yet. Wait for subscription callback.
                  this.game.debug.log("Guest mode: Waiting for world seed from room state...");
             }
-            // --- END NEW ---
 
             // Set up handlers *after* successful initialization
             this.setupNetworkHandlers();
@@ -71,12 +63,10 @@ export default class NetworkManager {
             return true; // Indicate successful initialization attempt
         } catch (error) {
             this.game.debug.error('Failed to initialize network connection', error);
-            // Let the Game class handle the error display/state
             throw error;
         }
     }
 
-    // Method to clean up subscriptions
     disconnect() {
         if (this.unsubscribePresence) this.unsubscribePresence();
         if (this.unsubscribeRoomState) this.unsubscribeRoomState();
@@ -89,16 +79,15 @@ export default class NetworkManager {
         this.game.debug.log('Network disconnected and listeners cleaned up.');
     }
 
-    // Moved from Game.js: Set up network event handling
     setupNetworkHandlers() {
         if (!this.room) {
             this.game.debug.error("Network room not available for setting up handlers.");
             return;
         }
 
-        // Store unsubscribe functions to call them later if needed
+        // Presence Subscription
         this.unsubscribePresence = this.subscribePresence((presence) => {
-             // Update peer names dynamically (important for UI/debug)
+             // Update peer names dynamically
              const peers = this.getPeers();
              for (const entity of this.game.entities.getByType('player')) {
                  const peerInfo = peers ? peers[entity.id] : null;
@@ -108,50 +97,45 @@ export default class NetworkManager {
                  }
              }
             // Sync entity states from presence data
-            // Pass localPlayerId to avoid self-updating position based on network echo
-            this.game.entities.syncFromNetworkPresence(presence, this.clientId); // Use this.clientId
+            this.game.entities.syncFromNetworkPresence(presence, this.clientId);
         });
 
+        // Room State Subscription
         this.unsubscribeRoomState = this.subscribeRoomState((roomState) => {
-             // --- NEW: Handle world seed updates ---
+             // Handle world seed updates
              if (!this.worldSeedConfirmed && roomState.worldSeed !== undefined && roomState.worldSeed !== null) {
                  this.worldSeed = roomState.worldSeed;
                  this.worldSeedConfirmed = true;
                  this.game.debug.log(`World seed confirmed via subscription: ${this.worldSeed}`);
-                 // Signal the Game class that the seed is ready (if it was waiting)
-                 this.game.confirmWorldSeed?.(this.worldSeed); // Add this method to Game
+                 this.game.confirmWorldSeed?.(this.worldSeed);
              }
-             // --- END NEW ---
 
-            if (this.game.world?.syncFromNetworkState) { // Check if method exists
-                this.game.world.syncFromNetworkState(roomState);
-            } else if (this.game.world) {
-                 // Fallback if syncFromNetworkState isn't on World (it should be)
-                 if (roomState.resources) {
-                     this.game.world.resourceOverrides = roomState.resources || {};
-                 }
-                 if (roomState.worldObjects) {
-                     this.game.world.updateWorldObjectsFromNetwork(roomState.worldObjects);
-                 }
-                 // --- NEW: Apply time sync fallback here too ---
-                 if (roomState.timeOfDay !== undefined && typeof this.game.setTimeOfDay === 'function') {
-                     this.game.setTimeOfDay(roomState.timeOfDay);
-                 }
-                 // --- END NEW ---
-            }
+             // Pass relevant parts to World and WorldObjectManager
+             // Pass resource overrides to WorldObjectManager
+             if (roomState.resources !== undefined && this.game.worldObjectManager) {
+                 this.game.worldObjectManager.updateResourceOverrides(roomState.resources);
+             }
+             // Pass time/other world state to World (World no longer handles resources directly)
+             if (this.game.world?.syncFromNetworkState) {
+                  // Create a copy excluding resources, as World doesn't need them directly
+                  const worldStateOnly = { ...roomState };
+                  delete worldStateOnly.resources;
+                  this.game.world.syncFromNetworkState(worldStateOnly);
+             }
+
              // Sync vehicle states if they are in roomState
              if (roomState.vehicles) {
                  this.syncVehiclesFromNetwork(roomState.vehicles);
              }
         });
 
+        // Presence Update Request Subscription
         this.unsubscribePresenceRequests = this.subscribePresenceUpdateRequests((updateRequest, fromClientId) => {
             this.handlePresenceUpdateRequest(updateRequest, fromClientId);
         });
 
-        // Handle network events (onmessage)
+        // Message Handling
         this.room.onmessage = (event) => {
-            // Assuming event structure is { data: { type: ..., payload: ... } }
             this.handleNetworkEvent(event.data || event);
         };
     }
@@ -382,17 +366,15 @@ export default class NetworkManager {
                           this.game.entities.syncFromNetworkPresence(this.room.presence, this.clientId);
                      }
                  }
-                 // --- NEW: Re-check time authority when peers change ---
+                 // Re-check time authority when peers change
                  this.game.handlePeersChanged?.();
-                 // --- END NEW ---
                  break;
 
              case 'disconnected':
                  this.game.debug.log(`Player disconnected: ${eventData.username || 'Unknown'} (${eventData.clientId})`);
                  // Entity removal handled by syncFromNetworkPresence
-                 // --- NEW: Re-check time authority when peers change ---
+                 // Re-check time authority when peers change
                  this.game.handlePeersChanged?.();
-                 // --- END NEW ---
                  break;
 
              case 'explosion':
