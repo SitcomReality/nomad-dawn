@@ -9,13 +9,12 @@ import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
 import Vehicle from '../entities/Vehicle.js'; // Needed for collision checks and initial spawn
 import CollisionManager from './CollisionManager.js'; // Import the new CollisionManager
-import PlayerActionHandler from './PlayerActionHandler.js'; // Import the new handler
 
 export default class Game {
     constructor(options) {
         this.canvas = options.canvas;
         this.debug = options.debug;
-
+        
         // Game state variables
         this.isRunning = false;
         this.lastFrameTime = 0;
@@ -28,20 +27,18 @@ export default class Game {
         this.resources = new ResourceManager();
         this.input = new InputManager(this.canvas);
         // Pass game instance to Renderer constructor
-        this.renderer = new Renderer(this.canvas, this);
+        this.renderer = new Renderer(this.canvas, this); 
         this.entities = new EntityManager();
         // Pass game instance to NetworkManager constructor
         this.network = new NetworkManager(this);
         // Pass game instance to UIManager constructor
-        this.ui = new UIManager(this);
+        this.ui = new UIManager(this); 
         // Initialize CollisionManager
         this.collisions = new CollisionManager(this);
-        // Initialize PlayerActionHandler
-        this.playerActions = new PlayerActionHandler(this);
-
+        
         // Make config available to the game
         this.config = Config;
-
+        
         // Player reference (potentially null in guest mode)
         this.player = null;
 
@@ -51,20 +48,17 @@ export default class Game {
         this.fpsUpdateInterval = 1000; // Update FPS display every second
         this.lastFpsUpdate = 0;
 
-        // Interaction settings
-        this.interactionDistance = 75; // Max distance to interact with vehicles
-
         // Make Vehicle class accessible if needed by NetworkManager sync (consider better dependency management later)
-        window.Vehicle = Vehicle;
-
+        window.Vehicle = Vehicle; 
+        
         // Bind game loop to maintain this context
         this.gameLoop = this.gameLoop.bind(this);
     }
-
+    
     async initializeNetwork() {
         try {
             await this.network.initialize();
-
+            
             // Check if we got a client ID. If not, enter guest mode.
             if (!this.network.clientId) {
                  this.isGuestMode = true;
@@ -73,26 +67,26 @@ export default class Game {
                  // Don't initialize player object
                  this.player = null;
                  // Modify UI for guest mode
-                 this.ui.setGuestMode(true);
+                 this.ui.setGuestMode(true); 
             } else {
                  this.isGuestMode = false;
                  // Initialize the player *after* network connection
                  this.player = new Player(this.network.clientId, this);
                  this.entities.add(this.player); // Add player to manager immediately
-
+                 
                  // Update player name using peer info
-                 this.updatePlayerNameFromPeers();
-
+                 this.updatePlayerNameFromPeers(); 
+                 
                  // Modify UI for player mode
                  this.ui.setGuestMode(false);
             }
-
+            
             // Network handlers are now set up inside network.initialize()
 
             // Add initial test vehicle if none exists in room state
             // We check inside the method if guest or not
             this.addInitialTestVehicle();
-
+            
             return true;
         } catch (error) {
             // If network init *itself* fails catastrophically
@@ -101,7 +95,7 @@ export default class Game {
             if (loadingMessage) loadingMessage.textContent = `Network Error: ${error.message}`;
             // Potentially force guest mode on catastrophic failure? Or just halt.
             // For now, halt by re-throwing.
-            throw error;
+            throw error; 
         }
     }
 
@@ -115,7 +109,7 @@ export default class Game {
 
         const currentVehicles = this.network.room.roomState?.vehicles;
         const testVehicleId = 'vehicle-test-hauler-initial';
-
+        
         this.debug.log("Checking for initial test vehicle...");
         this.debug.log("Current roomState.vehicles:", currentVehicles);
 
@@ -123,15 +117,15 @@ export default class Game {
         // Check if currentVehicles is truthy before checking keys or content
         if (!currentVehicles || Object.keys(currentVehicles).length === 0 || !currentVehicles[testVehicleId]) {
              this.debug.log(`Attempting to add initial test vehicle (${testVehicleId})...`);
-
+            
              // Find the config for the 'hauler' vehicle
              const vehicleConfig = this.config?.VEHICLE_TYPES.find(v => v.id === 'hauler');
              if (!vehicleConfig) {
                  this.debug.error("Could not find 'hauler' vehicle config to spawn test vehicle.");
                  return;
              }
-
-             // Define the vehicle state including default grid properties
+            
+             // Define the vehicle state
              const testVehicleState = {
                  id: testVehicleId,
                  type: 'vehicle',
@@ -142,22 +136,9 @@ export default class Game {
                  angle: 0,
                  health: vehicleConfig.health,
                  maxHealth: vehicleConfig.health,
-                 modules: [],
-                 // Add default grid properties
-                 gridWidth: 5,
-                 gridHeight: 5,
-                 gridTiles: { // Example basic floor
-                    '0,0':'Floor', '1,0':'Floor', '2,0':'Floor', '3,0':'Floor', '4,0':'Floor',
-                    '0,1':'Floor', '1,1':'Floor', '2,1':'Floor', '3,1':'Floor', '4,1':'Floor',
-                    '0,2':'Floor', '1,2':'Floor', '2,2':'Floor', '3,2':'Floor', '4,2':'Floor',
-                    '0,3':'Floor', '1,3':'Floor', '2,3':'Floor', '3,3':'Floor', '4,3':'Floor',
-                    '0,4':'Floor', '1,4':'Floor', '2,4':'Floor', '3,4':'Floor', '4,4':'Floor',
-                 },
-                 gridObjects: {},
-                 doorLocation: { x: 0, y: 0 },
-                 pilotSeatLocation: { x: 1, y: 0 },
+                 modules: []
              };
-
+            
              this.debug.log(`Sending updateRoomState for vehicle:`, testVehicleState);
              // Send the update to the room state
              this.network.updateRoomState({
@@ -182,7 +163,7 @@ export default class Game {
              this.debug.log(`Player name set to: ${this.player.name}`);
         }
     }
-
+    
     async loadAssets() {
         try {
             const assetsToLoad = [
@@ -203,7 +184,7 @@ export default class Game {
             }
 
             await this.resources.loadAssets(assetsToLoad);
-
+            
             this.debug.log('Assets loaded successfully');
             return true;
         } catch (error) {
@@ -211,7 +192,7 @@ export default class Game {
             throw error;
         }
     }
-
+    
     async initializeWorld() {
         try {
             // Create the game world
@@ -220,19 +201,19 @@ export default class Game {
                 size: this.config.WORLD_SIZE,
                 chunkSize: this.config.CHUNK_SIZE,
                 maxLoadDistance: this.config.MAX_LOAD_DISTANCE,
-                noise: window.perlin,
+                noise: window.perlin, 
                 // Pass the debug instance itself, not just the boolean flag
-                debug: this.debug,
+                debug: this.debug, 
             });
-
+            
             await this.world.initialize();
-
+            
             // Position player in the world only if not in guest mode
             if (this.player && !this.isGuestMode) {
                 const startPosition = this.world.getRandomSpawnPoint();
                 this.player.setPosition(startPosition.x, startPosition.y);
                 this.debug.log(`Player spawned at (${startPosition.x.toFixed(0)}, ${startPosition.y.toFixed(0)})`);
-
+                
                 // Sync initial player state to network
                 this.network.updatePresence(this.player.getNetworkState());
                 this.player.clearStateChanged(); // Mark initial state as sent
@@ -241,7 +222,7 @@ export default class Game {
             } else {
                  this.debug.warn("World initialized, but player entity not found (and not in guest mode).");
             }
-
+            
             this.debug.log('World initialized successfully');
             return true;
         } catch (error) {
@@ -251,7 +232,7 @@ export default class Game {
             throw error;
         }
     }
-
+    
     start() {
         if (!this.isRunning) {
             this.isRunning = true;
@@ -261,7 +242,7 @@ export default class Game {
             this.debug.log('Game started');
         }
     }
-
+    
     stop() {
         this.isRunning = false;
         this.debug.log('Game stopped');
@@ -269,7 +250,7 @@ export default class Game {
             this.network.disconnect(); // Clean up network listeners
         }
     }
-
+    
     gameLoop(timestamp) {
         if (!this.isRunning) return;
 
@@ -277,7 +258,7 @@ export default class Game {
         const now = performance.now();
         const rawDt = (now - this.lastFrameTime) / 1000; // Delta time in seconds
         this.lastFrameTime = now;
-
+        
         // Cap delta time for physics/updates to prevent instability
         this.deltaTime = Math.min(rawDt, 1 / 30); // Cap at 30 FPS equivalent
         this.rawDeltaTime = rawDt; // Store uncapped for FPS calculation
@@ -287,13 +268,13 @@ export default class Game {
 
         // Process input
         this.input.update(); // Reset one-time inputs like mouse wheel
-
+        
         // Update game logic
         this.update(this.deltaTime);
-
+        
         // Render the scene
         this.render();
-
+        
         // Request next frame
         requestAnimationFrame(this.gameLoop);
     }
@@ -304,75 +285,55 @@ export default class Game {
         const timeIncrement = deltaTime / cycleDuration;
         this.timeOfDay = (this.timeOfDay + timeIncrement) % 1; // Keep time between 0 and 1
 
-        // --- Handle Player Input Actions (using PlayerActionHandler) ---
-        this.playerActions.handleInput(deltaTime);
+        // --- Player Update (Handle Guest Mode) ---
+        if (this.player && !this.isGuestMode) {
+            // Handle player input/update only if not inside a vehicle they are driving
+            const vehicle = this.player.vehicleId ? this.entities.get(this.player.vehicleId) : null;
+            const isDriving = vehicle && vehicle.driver === this.player.id;
 
-        // --- Handle Player Movement / Vehicle Driving ---
-        const player = this.player;
-        const isDriving = player && player.playerState === 'Piloting';
-        const isUIActive = this.ui.isMajorUIActive(); // Check if inventory/build/menu is open
-
-        if (player && !this.isGuestMode) {
-            // Update player entity itself (handles movement based on state)
-             if (!isUIActive) { // Don't update movement if a major UI panel is open
-                player.update(deltaTime, this.input);
-             }
-
-            // If player is piloting, update the vehicle they are driving
-            if (isDriving) {
-                const vehicle = this.entities.get(player.currentVehicleId);
-                if (vehicle) {
-                     if (!isUIActive) { // Don't update vehicle movement if UI panel open
-                        vehicle.update(deltaTime, this.input);
-                     }
-                    // Sync vehicle state if it changed
-                    if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
-                         this.debug.log(`Vehicle ${vehicle.id} state changed, sending update.`); // Debug log
-                        this.network.updateRoomState({
-                            vehicles: {
-                                [vehicle.id]: vehicle.getNetworkState() // Send minimal state
-                            }
-                        });
-                        if(vehicle.clearStateChanged) vehicle.clearStateChanged();
-                    }
-                }
+            // Player movement/action update (if not driving)
+            if (!isDriving) {
+                this.player.update(deltaTime, this.input);
             }
 
-            // Sync player state if it changed
-            if (player.hasStateChanged()) {
-                 this.debug.log(`Player ${player.id} state changed, sending update.`); // Debug log
-                this.network.updatePresence(player.getNetworkState());
-                player.clearStateChanged();
+            // Sync player state if changed
+            if (this.player.hasStateChanged()) {
+                // NetworkManager now handles the guest check internally for updatePresence
+                this.network.updatePresence(this.player.getNetworkState());
+                this.player.clearStateChanged();
             }
-        }
-        // --- End Player/Vehicle Update ---
+
+            // Update the vehicle the player is driving based on input
+            if (isDriving && vehicle && vehicle.update) {
+                 vehicle.update(deltaTime, this.input);
+                 // Sync vehicle state if it changed
+                 if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
+                     // NetworkManager handles guest check for updateRoomState
+                     this.network.updateRoomState({
+                         vehicles: {
+                             [vehicle.id]: vehicle.getNetworkState() 
+                         }
+                     });
+                     if(vehicle.clearStateChanged) vehicle.clearStateChanged();
+                 }
+            }
+        } // End Player Update
 
         // --- World Update ---
-        const cameraCenterX = player ? player.x : 0; // Center on 0,0 in guest mode
-        const cameraCenterY = player ? player.y : 0;
+        // Determine camera center for chunk loading
+        const cameraCenterX = this.player ? this.player.x : 0; // Center on 0,0 in guest mode
+        const cameraCenterY = this.player ? this.player.y : 0;
         if (this.world) {
             this.world.update(deltaTime, cameraCenterX, cameraCenterY);
         }
-
-        // --- Entity Updates (Remote Players, Non-Driven Vehicles, etc.) ---
-        const localPlayerId = player ? player.id : null;
-        const drivenVehicleId = isDriving ? player.currentVehicleId : null;
-
-        this.entities.getAll().forEach(entity => {
-             if (!entity) return;
-             // Skip local player and the vehicle they are piloting (handled above)
-             if (entity.id === localPlayerId || entity.id === drivenVehicleId) {
-                 return;
-             }
-             // Remote player interpolation and other entity updates happen here
-             if (entity.update) {
-                 entity.update(deltaTime);
-             }
-        });
-
+        
+        // --- Entity Updates ---
+        // Update all other entities (remote players, AI, non-driven vehicles)
+        this.entities.update(deltaTime);
+        
         // --- UI Update ---
         this.ui.update(); // Updates HUD, checks open panels
-
+        
         // --- Collision Checks (Use CollisionManager, Skip for Guests) ---
         if (!this.isGuestMode) {
             this.collisions.checkCollisions(); // Use the collision manager
@@ -390,71 +351,30 @@ export default class Game {
 
         // Clear canvas
         this.renderer.clear();
-
+        
         // Determine camera target for rendering
-        // Follow player in Overworld, center on vehicle if piloting, 0,0 if guest/interior
-        let cameraTarget = { x: 0, y: 0 };
-        if (this.player) {
-            if (this.player.playerState === 'Overworld') {
-                cameraTarget = this.player;
-            } else if (this.player.playerState === 'Piloting') {
-                const vehicle = this.entities.get(this.player.currentVehicleId);
-                if (vehicle) cameraTarget = vehicle;
-                 else cameraTarget = this.player; // Fallback to player pos if vehicle missing
-            } else if (this.player.playerState === 'Interior' || this.player.playerState === 'Building') {
-                 // Keep camera centered on player's *overworld* position while inside/building
-                 // This prevents the camera snapping when entering/exiting
-                 cameraTarget = { x: this.player.x, y: this.player.y };
-            }
-        } else if (this.isGuestMode) {
-            // Maybe follow a selected player in guest mode? For now, origin.
-            cameraTarget = { x: 0, y: 0 };
-        }
+        const cameraTarget = this.player || { x: 0, y: 0 }; // Target player or origin in guest mode
 
         // Render world background and chunks (Renderer handles camera update based on target)
         if (this.world) {
-             // Check player state to decide *what* to render in the main view
-             if (this.player && this.player.playerState === 'Interior') {
-                 // Render placeholder for Interior View (Step 3)
-                  this.renderer.clear();
-                  this.renderer.ctx.fillStyle = '#050510';
-                  this.renderer.ctx.fillRect(0,0, this.renderer.canvas.width, this.renderer.canvas.height);
-                  // Add text placeholder
-                   this.renderer.ctx.fillStyle = 'white';
-                   this.renderer.ctx.font = '20px monospace';
-                   this.renderer.ctx.textAlign = 'center';
-                   this.renderer.ctx.fillText(`Inside Vehicle ${this.player.currentVehicleId} (Grid: ${this.player.gridX}, ${this.player.gridY}) - Rendering TBD`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
-
-             } else {
-                 // Render Overworld normally (even if building UI is open)
-                 this.renderer.renderWorld(this.world, cameraTarget);
-             }
-
+            this.renderer.renderWorld(this.world, cameraTarget); // Pass camera target
         } else {
              // Fallback background if world not ready
-             this.renderer.clear();
              this.renderer.ctx.fillStyle = '#111';
              this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
         }
-
+        
         // Render entities (players, vehicles, etc.)
-        // Only render overworld entities if player is not in Interior state
-        if (!this.player || this.player.playerState !== 'Interior') {
-             // Don't render the local player entity if they are inside a vehicle (Interior or Piloting)
-             const entitiesToRender = this.entities.getAll().filter(e => {
-                 // Render if it's NOT the local player AND the local player is NOT in Overworld state
-                return !(this.player && e.id === this.player.id && this.player.playerState !== 'Overworld');
-             });
-            this.renderer.renderEntities(entitiesToRender, this.player);
-        }
-
-        // Render visual effects (always render)
+        // Pass the actual local player (or null) for highlighting purposes
+        this.renderer.renderEntities(this.entities.getAll(), this.player); 
+        
+        // Render visual effects
         this.renderer.renderEffects();
-
+        
         // Render UI overlays (Minimap rendered here, HUD elements are DOM)
         // Pass game state which includes player (or null)
-        this.renderer.renderUI(this);
-
+        this.renderer.renderUI(this); 
+        
         // Render debug information onto the DOM overlay
         if (this.debug && this.debug.isEnabled()) {
             // The actual DOM update happens in updatePerformanceMetrics
@@ -476,29 +396,23 @@ export default class Game {
             if (this.debug) {
                  const memoryUsage = performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : 'N/A';
                  const networkState = this.network ? (this.network.connected ? 'Connected' : 'Disconnected') : 'N/A';
-                 const playerPos = this.player ?
-                     (this.player.playerState === 'Interior' ? `Vehicle Grid (${this.player.gridX},${this.player.gridY})` : `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})`) :
-                     (this.isGuestMode ? 'Guest Mode' : 'N/A');
+                 const playerPos = this.player ? `(${Math.floor(this.player.x)}, ${Math.floor(this.player.y)})` : (this.isGuestMode ? 'Guest Mode' : 'N/A');
                  const clientId = this.network ? (this.network.clientId ? this.network.clientId.substring(0, 8) : (this.isGuestMode ? 'Guest' : 'None')) : 'N/A';
                  const timeOfDayStr = this.timeOfDay.toFixed(3); // Add time of day to debug
                  const vehiclesCount = this.entities ? this.entities.getByType('vehicle').length : 'N/A'; // Count vehicles
-                 const playerStateStr = this.player ? this.player.playerState : (this.isGuestMode ? 'Guest' : 'N/A');
-                 const currentVehicleIdStr = this.player?.currentVehicleId ?? 'None'; // Show current vehicle ID
 
                  this.debug.updateStats({
-                     FPS: avgFps,
-                     FrameTime: avgFrameTimeMs.toFixed(2) + ' ms',
-                     TimeOfDay: timeOfDayStr, // Display time of day
-                     Mode: this.isGuestMode ? 'Guest' : 'Player',
-                     PlayerState: playerStateStr, // Add player state
-                     VehicleID: currentVehicleIdStr, // Add current vehicle ID
-                     Entities: this.entities ? this.entities.count() : 'N/A',
-                     Vehicles: vehiclesCount, // Show vehicle count
-                     PlayerPos: playerPos,
-                     Memory: memoryUsage,
-                     ActiveChunks: this.world ? this.world.chunkManager.activeChunkIds.size : 'N/A',
-                     Network: networkState,
-                     ClientID: clientId
+                    FPS: avgFps,
+                    FrameTime: avgFrameTimeMs.toFixed(2) + ' ms',
+                    TimeOfDay: timeOfDayStr, // Display time of day
+                    Mode: this.isGuestMode ? 'Guest' : 'Player',
+                    Entities: this.entities ? this.entities.count() : 'N/A',
+                    Vehicles: vehiclesCount, // Show vehicle count
+                    PlayerPos: playerPos,
+                    Memory: memoryUsage,
+                    ActiveChunks: this.world ? this.world.chunkManager.activeChunkIds.size : 'N/A',
+                    Network: networkState,
+                    ClientID: clientId
                 });
                  // Directly update the DOM element via renderer as DebugUtils only stores data
                  this.renderer.renderDebugInfo(this.debug.getDebugData());
@@ -519,22 +433,4 @@ export default class Game {
      resumeSimulation() {
          this.debug.log("Simulation Resumed");
      }
-
-     // Helper to find the closest vehicle within a radius
-     findClosestVehicle(x, y, radius) {
-        const vehicles = this.entities.getByType('vehicle');
-        let closestVehicle = null;
-        let closestDistanceSq = radius * radius;
-
-        for (const vehicle of vehicles) {
-            const dx = vehicle.x - x;
-            const dy = vehicle.y - y;
-            const distanceSq = dx * dx + dy * dy;
-            if (distanceSq < closestDistanceSq) {
-                closestDistanceSq = distanceSq;
-                closestVehicle = vehicle;
-            }
-        }
-        return closestVehicle;
-    }
 }

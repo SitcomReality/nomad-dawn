@@ -6,21 +6,21 @@ export default class NetworkManager {
         this.connected = false;
         this.lastSyncTime = 0;
         this.syncInterval = 100; // Minimum time between syncs (ms)
-        
+
         // Unsubscribe functions
         this.unsubscribePresence = null;
         this.unsubscribeRoomState = null;
         this.unsubscribePresenceRequests = null;
     }
-    
+
     async initialize() {
         try {
             this.room = new WebsimSocket();
             await this.room.initialize();
-            
+
             this.clientId = this.room.clientId;
             this.connected = true;
-            
+
             // If clientId is still null/undefined after init, something is wrong.
             // Game class will handle turning this into guest mode.
             if (!this.clientId) {
@@ -30,8 +30,8 @@ export default class NetworkManager {
             }
 
             // Set up handlers *after* successful initialization
-            this.setupNetworkHandlers(); 
-            
+            this.setupNetworkHandlers();
+
             return true; // Indicate successful initialization attempt
         } catch (error) {
             this.game.debug.error('Failed to initialize network connection', error);
@@ -77,7 +77,7 @@ export default class NetworkManager {
         this.unsubscribeRoomState = this.subscribeRoomState((roomState) => {
             // --- DEBUG ---
             if (roomState.vehicles) {
-                this.game.debug.log("Received roomState update with vehicles:", JSON.parse(JSON.stringify(roomState.vehicles))); // Log a copy
+                // this.game.debug.log("Received roomState update with vehicles:", JSON.parse(JSON.stringify(roomState.vehicles))); // Log a copy
             }
             // --- END DEBUG ---
 
@@ -103,11 +103,8 @@ export default class NetworkManager {
 
     // Moved from Game.js: Sync Vehicles
     syncVehiclesFromNetwork(networkVehicles) {
-         // --- DEBUG ---
-         // this.game.debug.log("[SyncVehicles] Starting sync. Received data:", JSON.parse(JSON.stringify(networkVehicles))); // Log received data
-         // --- DEBUG END ---
-
-         const Vehicle = window.Vehicle;
+         // Lazily import Vehicle or ensure it's globally available
+         const Vehicle = window.Vehicle; // Assuming Vehicle is globally accessible
          if (!Vehicle) {
              this.game.debug.error("[SyncVehicles] Vehicle class not found!");
              return;
@@ -120,6 +117,7 @@ export default class NetworkManager {
 
         const presentVehicleIds = new Set(Object.keys(networkVehicles));
 
+        // Update or create vehicles
         for (const vehicleId in networkVehicles) {
             const data = networkVehicles[vehicleId];
             let vehicle = this.game.entities.get(vehicleId);
@@ -132,13 +130,15 @@ export default class NetworkManager {
                  continue;
             }
 
+            // Basic data validation
              if (!data || typeof data !== 'object' || !data.vehicleType || typeof data.x !== 'number' || typeof data.y !== 'number') {
-                 this.game.debug.warn(`[SyncVehicles] Received incomplete or invalid vehicle data for ID ${vehicleId}, skipping sync. Data:`, data);
+                 this.game.debug.warn(`[SyncVehicles] Received incomplete/invalid vehicle data for ID ${vehicleId}, skipping sync. Data:`, data);
                  presentVehicleIds.delete(vehicleId);
                  continue;
              }
 
             if (!vehicle) {
+                 // Create new vehicle entity
                  const vehicleConfig = this.game.config.VEHICLE_TYPES.find(v => v.id === data.vehicleType);
                  if (!vehicleConfig) {
                      this.game.debug.warn(`[SyncVehicles] Received data for unknown vehicle type: ${data.vehicleType}. Cannot create ${vehicleId}.`);
@@ -152,7 +152,7 @@ export default class NetworkManager {
                      continue;
                  }
 
-                 // Update state from network data *after* creation with defaults
+                 // Update state from network data *after* creation
                  vehicle.x = data.x;
                  vehicle.y = data.y;
                  vehicle.angle = data.angle ?? vehicle.angle;
@@ -161,31 +161,31 @@ export default class NetworkManager {
                  vehicle.driver = data.driver ?? null;
                  vehicle.passengers = data.passengers ?? [];
                  vehicle.modules = data.modules ?? [];
-                 // --- Sync Grid Properties ---
+
+                 // --- NEW: Sync grid properties ---
                  vehicle.gridWidth = data.gridWidth ?? vehicle.gridWidth;
                  vehicle.gridHeight = data.gridHeight ?? vehicle.gridHeight;
-                 vehicle.gridTiles = data.gridTiles ?? {}; // Default to empty if missing
-                 vehicle.gridObjects = data.gridObjects ?? {}; // Default to empty
-                 vehicle.doorLocation = data.doorLocation ?? { x: 0, y: 0 };
-                 vehicle.pilotSeatLocation = data.pilotSeatLocation ?? { x: 1, y: 0 };
-                 // --- End Sync Grid Properties ---
+                 // Ensure gridTiles and gridObjects are objects, not null/undefined
+                 vehicle.gridTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : {};
+                 vehicle.gridObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : {};
+                 vehicle.doorLocation = data.doorLocation ?? vehicle.doorLocation;
+                 vehicle.pilotSeatLocation = data.pilotSeatLocation ?? vehicle.pilotSeatLocation;
+                 // --- END NEW ---
 
-
+                // Recalculate stats based on initial modules received
                 if (vehicle.recalculateStatsFromModules) {
                     vehicle.recalculateStatsFromModules();
                 }
 
                  const addedEntity = this.game.entities.add(vehicle);
                  if(!addedEntity) {
-                     this.game.debug.error(`[SyncVehicles] Failed to add ${vehicleId} to EntityManager (add returned null/undefined).`);
+                     this.game.debug.error(`[SyncVehicles] Failed to add ${vehicleId} to EntityManager.`);
                  }
 
             } else {
+                 // Update existing vehicle state
                  const modulesChanged = JSON.stringify(vehicle.modules) !== JSON.stringify(data.modules ?? []);
-                 const gridTilesChanged = JSON.stringify(vehicle.gridTiles) !== JSON.stringify(data.gridTiles ?? {});
-                 const gridObjectsChanged = JSON.stringify(vehicle.gridObjects) !== JSON.stringify(data.gridObjects ?? {});
 
-                 // Update vehicle state
                  vehicle.x = data.x ?? vehicle.x;
                  vehicle.y = data.y ?? vehicle.y;
                  vehicle.angle = data.angle ?? vehicle.angle;
@@ -194,15 +194,19 @@ export default class NetworkManager {
                  vehicle.driver = data.driver ?? null;
                  vehicle.passengers = data.passengers ?? [];
                  vehicle.modules = data.modules ?? [];
-                 // --- Sync Grid Properties ---
+
+                 // --- NEW: Sync grid properties ---
                  vehicle.gridWidth = data.gridWidth ?? vehicle.gridWidth;
                  vehicle.gridHeight = data.gridHeight ?? vehicle.gridHeight;
-                 vehicle.gridTiles = data.gridTiles ?? vehicle.gridTiles;
-                 vehicle.gridObjects = data.gridObjects ?? vehicle.gridObjects;
+                 // Ensure gridTiles and gridObjects are objects, not null/undefined
+                 vehicle.gridTiles = typeof data.gridTiles === 'object' && data.gridTiles !== null ? data.gridTiles : vehicle.gridTiles;
+                 vehicle.gridObjects = typeof data.gridObjects === 'object' && data.gridObjects !== null ? data.gridObjects : vehicle.gridObjects;
                  vehicle.doorLocation = data.doorLocation ?? vehicle.doorLocation;
                  vehicle.pilotSeatLocation = data.pilotSeatLocation ?? vehicle.pilotSeatLocation;
-                 // --- End Sync Grid Properties ---
+                 // --- END NEW ---
 
+                 // Recalculate stats ONLY if modules changed or if maxHealth isn't matching
+                 const vehicleConfig = this.game.config.VEHICLE_TYPES.find(v => v.id === data.vehicleType);
                  if (modulesChanged || vehicle.maxHealth !== (data.maxHealth ?? vehicleConfig?.health ?? 200)) {
                      if (vehicle.recalculateStatsFromModules) {
                          vehicle.recalculateStatsFromModules();
@@ -212,15 +216,14 @@ export default class NetworkManager {
                  }
 
                  vehicle.health = Math.min(vehicle.health, vehicle.maxHealth);
-
-                 // TODO: Handle grid updates if they trigger visual changes or logic
-                 // if (gridTilesChanged || gridObjectsChanged) { ... }
             }
         }
 
+         // Remove local vehicles no longer in network state
          const currentVehicles = this.game.entities.getByType('vehicle');
          for (const localVehicle of currentVehicles) {
              if (!localVehicle || !localVehicle.id) continue;
+
              if (!presentVehicleIds.has(localVehicle.id)) {
                  this.game.debug.log(`[SyncVehicles] Removing local vehicle ${localVehicle.id} (no longer in network state)`);
                  this.game.entities.remove(localVehicle.id);
@@ -230,8 +233,7 @@ export default class NetworkManager {
 
     // Moved from Game.js: Handle Presence Update Requests
     handlePresenceUpdateRequest(updateRequest, fromClientId) {
-         // Guest mode check: Guests cannot respond to requests.
-         // Also need the player object to exist.
+         // Guest mode check
          if (this.game.isGuestMode || !this.game.player) return;
 
          const player = this.game.player;
@@ -244,12 +246,10 @@ export default class NetworkManager {
                      player.takeDamage(damageAmount);
                      this.game.debug.log(`Took ${damageAmount} damage from ${this.getPeerUsername(fromClientId)}. Health: ${player.health}`);
 
-                     // Update network presence ONLY if health actually changed
                      if (player.health !== previousHealth) {
                          this.updatePresence({
                              health: player.health,
                          });
-                         // Trigger local damage effect
                          this.game.renderer.createEffect('damage_taken', player.x, player.y);
                      }
                  }
@@ -281,12 +281,9 @@ export default class NetworkManager {
          switch (eventData.type) {
              case 'connected':
                  this.game.debug.log(`Player connected: ${eventData.username || 'Unknown'} (${eventData.clientId})`);
-                 // Ensure player name is updated if they connect after initial load
                  if (this.game.player && eventData.clientId === this.game.player.id) {
-                      this.game.updatePlayerNameFromPeers(); // Call Game's helper method
+                      this.game.updatePlayerNameFromPeers();
                  } else {
-                     // Trigger presence sync to potentially create the new player entity
-                     // Need presence data, get it from room object
                      if (this.room && this.room.presence) {
                           this.game.entities.syncFromNetworkPresence(this.room.presence, this.clientId);
                      }
@@ -295,7 +292,7 @@ export default class NetworkManager {
 
              case 'disconnected':
                  this.game.debug.log(`Player disconnected: ${eventData.username || 'Unknown'} (${eventData.clientId})`);
-                 // Entity removal is handled by syncFromNetworkPresence
+                 // Entity removal handled by syncFromNetworkPresence
                  break;
 
              case 'explosion':
@@ -304,134 +301,90 @@ export default class NetworkManager {
                          'explosion',
                          eventData.x,
                          eventData.y,
-                         { size: eventData.size || 30 } // Use default size from effect renderer
+                         { size: eventData.size || 30 }
                      );
                  }
                  break;
 
              case 'play_sound':
                  // Placeholder
-                 // this.game.debug.log(`Received play_sound event: ${eventData.soundId}`);
                  break;
 
              default:
-                 // this.game.debug.log('Received event:', eventData);
                  break;
          }
     }
-    
+
     // --- Existing methods ---
-    
+
     updatePresence(presenceData) {
-        // Prevent guests from sending presence updates
-        if (this.game.isGuestMode || !this.connected || !this.room) return; 
-        
+        if (this.game.isGuestMode || !this.connected || !this.room) return;
         const now = performance.now();
-        // Throttle updates based on syncInterval
-        if (now - this.lastSyncTime < this.syncInterval) return; 
-        
+        if (now - this.lastSyncTime < this.syncInterval) return;
         this.lastSyncTime = now;
         this.room.updatePresence(presenceData);
     }
-    
-    updateRoomState(stateData) {
-         // Prevent guests from modifying room state
-        if (this.game.isGuestMode || !this.connected || !this.room) return;
-        
-        // --- DEBUG ---
-        this.game.debug.log(`Sending updateRoomState:`, JSON.parse(JSON.stringify(stateData))); 
-        // --- END DEBUG ---
 
+    updateRoomState(stateData) {
+        if (this.game.isGuestMode || !this.connected || !this.room) return;
+        // this.game.debug.log(`Sending updateRoomState:`, JSON.parse(JSON.stringify(stateData)));
         this.room.updateRoomState(stateData);
     }
-    
+
     requestPresenceUpdate(clientId, updateData) {
-        // Prevent guests from sending requests
         if (this.game.isGuestMode || !this.connected || !this.room) return;
-        
         this.room.requestPresenceUpdate(clientId, updateData);
     }
-    
+
     subscribePresence(callback) {
         if (!this.connected || !this.room) return () => {};
-        
-        // Wrap callback to handle potential errors during execution
         const wrappedCallback = (presence) => {
-            try {
-                 callback(presence);
-            } catch (error) {
-                 this.game.debug.error('Error in presence subscription callback:', error);
-            }
+            try { callback(presence); } catch (error) { this.game.debug.error('Error in presence subscription callback:', error); }
         };
         return this.room.subscribePresence(wrappedCallback);
     }
-    
+
     subscribeRoomState(callback) {
         if (!this.connected || !this.room) return () => {};
-        
-        // Wrap callback for error handling
         const wrappedCallback = (roomState) => {
-            try {
-                 callback(roomState);
-            } catch (error) {
-                 this.game.debug.error('Error in room state subscription callback:', error);
-            }
+            try { callback(roomState); } catch (error) { this.game.debug.error('Error in room state subscription callback:', error); }
         };
         return this.room.subscribeRoomState(wrappedCallback);
     }
-    
+
     subscribePresenceUpdateRequests(callback) {
         if (!this.connected || !this.room) return () => {};
-        
-        // Wrap callback for error handling
          const wrappedCallback = (updateRequest, fromClientId) => {
-             try {
-                 callback(updateRequest, fromClientId);
-             } catch (error) {
-                 this.game.debug.error('Error in presence update request callback:', error);
-             }
+             try { callback(updateRequest, fromClientId); } catch (error) { this.game.debug.error('Error in presence update request callback:', error); }
          };
         return this.room.subscribePresenceUpdateRequests(wrappedCallback);
     }
-    
+
     send(eventData) {
-        // Prevent guests from sending events
         if (this.game.isGuestMode || !this.connected || !this.room) return;
-        
-        // Add client identification to the event
-        const data = {
-            ...eventData,
-            // Use stored clientId, don't rely on game.player which might be null in guest mode
-            clientId: this.clientId, 
-            username: this.getPeerUsername(this.clientId) || 'Guest'
-        };
-        
+        const data = { ...eventData, clientId: this.clientId, username: this.getPeerUsername(this.clientId) || 'Guest' };
         this.room.send(data);
     }
-    
+
     getPeers() {
         if (!this.connected || !this.room) return {};
-        
         return this.room.peers;
     }
-    
+
     getPeerUsername(clientId) {
         if (!this.connected || !this.room || !this.room.peers || !this.room.peers[clientId]) {
             return clientId ? `Guest (${clientId.substring(0,4)})` : 'Unknown';
         }
-        
         return this.room.peers[clientId].username;
     }
-    
+
     getMyPresence() {
         if (!this.connected || !this.room || !this.clientId) return {};
-        
         return this.room.presence[this.clientId] || {};
     }
-    
+
     isClientConnected(clientId) {
         if (!this.connected || !this.room) return false;
-        
         return !!this.room.peers[clientId];
     }
 }
