@@ -17,8 +17,8 @@ window.Player = Player;
 // Make Vehicle class accessible if needed by NetworkManager sync (consider better dependency management later)
 window.Vehicle = Vehicle;
 // Make Perlin globally available (consider passing via dependency injection later)
-import { noise } from 'perlin';
-window.perlin = noise; // Assign the imported noise object
+import perlin from 'perlin';
+window.perlin = perlin; // Assign the imported default object
 
 export default class Game {
     constructor(options) {
