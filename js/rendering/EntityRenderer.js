@@ -58,27 +58,26 @@ export default class EntityRenderer {
         }
 
         if (entity.render && typeof entity.render === 'function') {
-            let originalColor = entity.color;
-            entity.color = this.renderer.worldRenderer.adjustColorForLighting(
-                originalColor,
-                light.color,
-                light.intensity
-            );
-            entity.render(this.ctx, 0, 0, screenSize); 
-            entity.color = originalColor; 
+            // Entity's custom render function is responsible for its own appearance,
+            // including potentially applying lighting effects if needed.
+            // We no longer modify entity.color here.
+            entity.render(this.ctx, 0, 0, screenSize);
         } else {
-            let entityColor = entity.color || '#e04f5f';
+            // Fallback rendering for entities without a custom render method
+            let entityColor = entity.color || '#e04f5f'; // Get original color or default
+            // Adjust the color *here* for the fallback rendering
             entityColor = this.renderer.worldRenderer.adjustColorForLighting(
-                entityColor,
+                entityColor, // Pass the string color here
                 light.color,
                 light.intensity
             );
-            this.ctx.fillStyle = entityColor;
+            this.ctx.fillStyle = entityColor; // Use the adjusted color
 
             this.ctx.beginPath();
             this.ctx.arc(0, 0, screenSize / 2, 0, Math.PI * 2);
             this.ctx.fill();
 
+            // Draw direction indicator (white line)
             this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
             this.ctx.lineWidth = Math.max(1, 2 * this.renderer.camera.zoom);
             this.ctx.beginPath();
@@ -94,7 +93,7 @@ export default class EntityRenderer {
         // Reset shadow blur just in case
         this.ctx.shadowBlur = 0;
 
-        const overlayAlpha = 1.0; 
+        const overlayAlpha = 1.0;
 
         if (entity.name && this.renderer.camera.zoom > 0.5) {
             this.ctx.fillStyle = (player && entity.id === player.id) ? `rgba(255, 255, 255, ${overlayAlpha})` : `rgba(220, 220, 220, ${overlayAlpha * 0.9})`;
@@ -124,7 +123,7 @@ export default class EntityRenderer {
             this.ctx.fillStyle = healthColor;
             this.ctx.globalAlpha = overlayAlpha;
             this.ctx.fillRect(barX, barY, barWidth * healthPercent, barHeight);
-            this.ctx.globalAlpha = 1.0; 
+            this.ctx.globalAlpha = 1.0;
 
             this.ctx.strokeStyle = `rgba(0, 0, 0, ${overlayAlpha * 0.8})`;
             this.ctx.lineWidth = 1;

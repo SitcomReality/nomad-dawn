@@ -47,7 +47,7 @@ export default class WorldRenderer {
             const visibleObjects = world.worldObjectManager.getVisibleObjects(
                 viewBounds.minX, viewBounds.minY, viewBounds.maxX, viewBounds.maxY
             );
-            this.lastVisibleObjectCount = visibleObjects.length; 
+            this.lastVisibleObjectCount = visibleObjects.length;
 
             for (const obj of visibleObjects) {
                 this.worldObjectRenderer.render(obj);
@@ -60,8 +60,8 @@ export default class WorldRenderer {
         }
 
         if (this.game?.debug?.isEnabled()) {
-            this.renderGrid(world); 
-            this.renderDebugText(visibleChunks.length, this.lastVisibleObjectCount); 
+            this.renderGrid(world);
+            this.renderDebugText(visibleChunks.length, this.lastVisibleObjectCount);
         }
     }
 
@@ -88,15 +88,15 @@ export default class WorldRenderer {
         const light = this.game.lightManager.calculateLightAt(chunk.x, chunk.y);
         terrainColor = this.adjustColorForLighting(
             terrainColor,
-            light.color, 
-            light.intensity 
+            light.color,
+            light.intensity
         );
 
         this.ctx.fillStyle = terrainColor;
         this.ctx.fillRect(screenLeft, screenTop, screenSize, screenSize);
 
         if (this.game?.debug?.isEnabled() && this.game.config.SHOW_CHUNK_BOUNDARIES) {
-            this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)'; 
+            this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(screenLeft, screenTop, screenSize, screenSize);
         }
@@ -161,7 +161,14 @@ export default class WorldRenderer {
 
     adjustColorForLighting(colorString, lightColor, lightIntensity) {
         let r, g, b;
-        if (!colorString) colorString = '#888';
+
+        if (!colorString) colorString = '#888'; 
+
+        if (typeof colorString !== 'string') {
+            console.warn('[adjustColorForLighting] Received non-string color:', colorString, 'Using default #888.');
+            colorString = '#888';
+        }
+
         if (colorString.startsWith('#')) {
             const hex = colorString.substring(1);
             if (hex.length === 3) {

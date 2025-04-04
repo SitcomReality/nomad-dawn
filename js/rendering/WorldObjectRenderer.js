@@ -103,11 +103,19 @@ export default class WorldObjectRenderer {
          this.ctx.stroke();
     }
 
-    // --- UPDATED: adjustColorForLighting signature ---
+    // --- UPDATED: adjustColorForLighting signature and robustness ---
     adjustColorForLighting(colorString, lightColor, lightIntensity) {
         let r, g, b;
 
-        if (!colorString) colorString = '#888'; // Default grey if color is undefined
+        // Add a check for null/undefined colorString
+        if (!colorString) colorString = '#888'; // Default grey if color is undefined/null
+
+        // Ensure colorString is actually a string before calling .startsWith()
+        if (typeof colorString !== 'string') {
+            console.warn('[adjustColorForLighting] Received non-string color:', colorString, 'Using default #888.');
+            colorString = '#888';
+        }
+
 
         if (colorString.startsWith('#')) {
             const hex = colorString.substring(1);
@@ -119,14 +127,24 @@ export default class WorldObjectRenderer {
                 r = parseInt(hex.substring(0, 2), 16);
                 g = parseInt(hex.substring(2, 4), 16);
                 b = parseInt(hex.substring(4, 6), 16);
-            } else return colorString;
+            } else {
+                 console.warn('[adjustColorForLighting] Invalid hex color:', colorString, 'Using default #888.');
+                 r = g = b = 136; // #888
+            }
         } else if (colorString.startsWith('rgb')) {
             const rgb = colorString.match(/\d+/g);
-            if (!rgb || rgb.length < 3) return colorString;
-            r = parseInt(rgb[0]);
-            g = parseInt(rgb[1]);
-            b = parseInt(rgb[2]);
-        } else return colorString;
+            if (!rgb || rgb.length < 3) {
+                 console.warn('[adjustColorForLighting] Invalid rgb color:', colorString, 'Using default #888.');
+                 r = g = b = 136; // #888
+            } else {
+                r = parseInt(rgb[0]);
+                g = parseInt(rgb[1]);
+                b = parseInt(rgb[2]);
+            }
+        } else {
+             console.warn('[adjustColorForLighting] Unknown color format:', colorString, 'Using default #888.');
+             r = g = b = 136; // #888
+        }
 
         // --- UPDATED: Use calculated light values ---
         // Modulate by light color AND intensity
