@@ -417,15 +417,24 @@ body {
 
 .object-cost {
     font-size: 0.8em;
-    margin-left: auto; 
+    margin-left: auto;
     display: flex;
-    gap: 4px; 
+    gap: 4px;
     align-items: center;
-    flex-shrink: 0; 
+    flex-shrink: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 80px;
 }
-.object-cost span span { 
+.object-cost span {
+    line-height: 1; 
+    display: inline-flex; 
+    align-items: center;
+}
+.object-cost span span {
     display: inline-block;
-    min-width: 20px; 
+    min-width: 20px;
     text-align: right;
 }
 
@@ -457,15 +466,17 @@ body {
 .object-name {
     flex-grow: 1; 
 }
-.object-cost {
-    font-size: 0.8em;
-    margin-left: auto; 
-    display: flex;
-    gap: 5px;
+.cost-ok { 
+    color: var(--ui-text); 
 }
-.cost-ok { color: var(--ui-success); }
-.cost-missing { color: var(--ui-accent); }
-.cost-free { color: var(--ui-text-dim); font-style: italic;}
+.cost-missing { 
+    color: var(--ui-accent); 
+}
+.cost-free {
+    color: var(--ui-text-dim);
+    font-style: italic;
+    min-height: 1em; 
+}
 
 #vehicle-building-canvas-container {
     flex-grow: 1; 

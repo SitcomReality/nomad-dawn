@@ -28,8 +28,10 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
 4.  Refine rendering in `InteriorRenderer` to draw actual tiles/objects based on `vehicle.gridTiles` / `vehicle.gridObjects` when the player is inside (not building). (**COMPLETE**)
 5.  Synchronization improvements for multi-player building inside the same vehicle. (**COMPLETE**)
 6.  Refactor `BaseBuildingUI.js` into smaller modules (`BaseBuildingUI.js`, `BuildingToolPanel.js`) for better maintainability. (**COMPLETE**)
-7.  **NEXT:** Refine tile/object selection UI in `BuildingToolPanel` (e.g., better presentation, categories, tooltips showing resource costs clearly).
-8.  Add tile placement functionality (`place_tile` tool), including defining different tile types in `GameConfig` and updating `VehicleBuildingManager`, `VehicleBuildingRenderer`, and `BuildingToolPanel`.
+7.  Refine tile/object selection UI in `BuildingToolPanel` (e.g., better presentation, categories, tooltips showing resource costs clearly). (**COMPLETE**)
+8.  **NEXT:** Add tile placement functionality (`place_tile` tool), including defining different tile types in `GameConfig` and updating `VehicleBuildingManager`, `VehicleBuildingRenderer`, and `BuildingToolPanel`.
 9.  Consider adding visual locking/feedback for cell modifications in the building UI (Deferred).
+
+
 
 

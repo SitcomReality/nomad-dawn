@@ -1,5 +1,3 @@
-// New file: js/ui/BuildingToolPanel.js
-
 /**
  * Manages the tool selection panel within the BaseBuildingUI.
  * Handles tool buttons, object/tile selection lists, and costs.
@@ -164,7 +162,10 @@ export default class BuildingToolPanel {
              const button = document.createElement('button');
              button.className = 'object-select-button';
              button.dataset.objectTypeId = objType.id;
-             button.title = `${objType.name} - ${objType.description || ''}`;
+             // Generate detailed tooltip content first
+             const tooltipContent = this.generateDetailedTooltip(objType);
+             button.title = tooltipContent; // Set the detailed tooltip
+
              button.innerHTML = `
                  <span class="object-icon">${objType.icon || '❓'}</span>
                  <span class="object-name">${objType.name}</span>
@@ -174,6 +175,23 @@ export default class BuildingToolPanel {
              this.updateButtonAffordability(button, objType);
              container.appendChild(button);
          });
+    }
+
+    // NEW: Generate detailed tooltip content
+    generateDetailedTooltip(objConfig) {
+        let tooltip = `${objConfig.name}\n${objConfig.description || 'No description.'}`;
+        if (objConfig.cost && Object.keys(objConfig.cost).length > 0) {
+            tooltip += `\n\nCost:`;
+            for (const [resource, amount] of Object.entries(objConfig.cost)) {
+                 const playerAmount = this.game.player?.resources[resource] || 0;
+                 const resConfig = this.game.config.RESOURCE_TYPES.find(r => r.id === resource);
+                 const resName = resConfig?.name || resource;
+                 tooltip += `\n- ${amount} ${resName} (Have: ${playerAmount})`;
+            }
+        } else {
+             tooltip += `\n\nCost: Free`;
+        }
+        return tooltip;
     }
 
     updateButtonAffordability(button, objConfig) {
@@ -196,25 +214,29 @@ export default class BuildingToolPanel {
 
     formatResourceCost(cost) {
         if (!cost || Object.keys(cost).length === 0) {
-            return '<span class="cost-free">Free</span>';
+            // Return a non-breaking space or similar if you want it to take up minimal space but still exist
+            return '<div class="object-cost cost-free" title="Free"></div>';
         }
         let costHtml = '<div class="object-cost">';
+        let tooltipParts = []; // Build tooltip parts for the cost section specifically
         for (const [resource, amount] of Object.entries(cost)) {
             const playerAmount = this.game.player?.resources[resource] || 0;
             const hasEnough = playerAmount >= amount;
             const resConfig = this.game.config.RESOURCE_TYPES.find(r => r.id === resource);
             const resName = resConfig?.name || resource;
             const resColor = resConfig?.color || '#ccc';
-            // Use a simpler display, maybe show required/have on hover/tooltip
-             costHtml += `<span class="${hasEnough ? 'cost-ok' : 'cost-missing'}" title="Need: ${amount} ${resName} (Have: ${playerAmount})">
-                           <span style="color:${resColor}; font-size: 0.8em;">${amount}</span>
-                        </span>`;
-
+            // Keep the concise colored amount display
+            costHtml += `<span class="${hasEnough ? 'cost-ok' : 'cost-missing'}" style="color:${resColor}; font-size: 0.8em; margin-left: 3px;">${amount}</span>`;
+            // Add detailed part to the cost-specific tooltip
+            tooltipParts.push(`${amount} ${resName} (Have: ${playerAmount})`);
         }
+        // Add the tooltip to the wrapper div
         costHtml += '</div>';
+        // Combine the parts into a title attribute for the wrapper div
+        const costTooltip = tooltipParts.length > 0 ? `Cost: ${tooltipParts.join(', ')}` : 'Free';
+        costHtml = costHtml.replace('<div class="object-cost">', `<div class="object-cost" title="${costTooltip}">`);
         return costHtml;
     }
-
 
     selectObjectType(objectTypeId) {
         if (!this.buildingManager) return;
@@ -249,13 +271,24 @@ export default class BuildingToolPanel {
                      // Also update the cost display itself in case resource amounts changed
                      const costElement = button.querySelector('.object-cost');
                      if (costElement) {
-                          // Extract the inner spans from the formatted cost HTML
-                         const newCostHtmlContent = this.formatResourceCost(objConfig.cost)
-                            .replace('<div class="object-cost">', '')
-                            .replace('</div>','');
-                         if (costElement.innerHTML !== newCostHtmlContent) {
-                            costElement.innerHTML = newCostHtmlContent;
-                         }
+                          // Re-generate cost HTML and tooltip content
+                          const newCostHtmlContent = this.formatResourceCost(objConfig.cost)
+                             .replace(/<div class="object-cost"[^>]*>/, '') // Remove opening tag with title
+                             .replace('</div>','');
+                          const newCostTooltip = `Cost: ${this.generateDetailedTooltip(objConfig).split('\n\nCost:')[1] || 'Free'}`;
+
+                          // Update only if changed
+                          if (costElement.innerHTML !== newCostHtmlContent) {
+                             costElement.innerHTML = newCostHtmlContent;
+                          }
+                          if (costElement.title !== newCostTooltip) {
+                              costElement.title = newCostTooltip;
+                          }
+                     }
+                     // Update main button tooltip as well if needed (though it might be static content + cost)
+                     const newButtonTooltip = this.generateDetailedTooltip(objConfig);
+                     if (button.title !== newButtonTooltip) {
+                          button.title = newButtonTooltip;
                      }
                  }
              });
