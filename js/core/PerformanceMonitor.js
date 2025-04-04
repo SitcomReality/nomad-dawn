@@ -19,8 +19,8 @@ export default class PerformanceMonitor {
         this.frameTimeAccumulator += rawDeltaTime;
 
         if (timestamp - this.lastFpsUpdate >= this.fpsUpdateInterval) {
-             const avgFps = this.frameTimeAccumulator > 0 ? Math.round(this.frameCounter / this.frameTimeAccumulator) : 0;
-             const avgFrameTimeMs = this.frameCounter > 0 ? (this.frameTimeAccumulator / this.frameCounter) * 1000 : 0;
+             const avgFps = this.frameTimeAccumulator > 0 ? Math.round(this.frameCounter * 1000 / this.frameTimeAccumulator) : 0; 
+             const avgFrameTimeMs = this.frameCounter > 0 ? (this.frameTimeAccumulator / this.frameCounter) : 0; 
 
             // Update debug stats
             if (this.game.debug) {
@@ -45,6 +45,8 @@ export default class PerformanceMonitor {
                  const timeOfDayStr = this.game.timeOfDay.toFixed(3);
                  const vehiclesCount = this.game.entities ? this.game.entities.getByType('vehicle').length : 'N/A';
 
+                 const womStats = this.game.worldObjectManager?.getPerformanceStats() || {};
+
                  this.game.debug.updateStats({
                     FPS: avgFps,
                     FrameTime: avgFrameTimeMs.toFixed(2) + ' ms',
@@ -56,16 +58,18 @@ export default class PerformanceMonitor {
                     Memory: memoryUsage,
                     ActiveChunks: this.game.world ? this.game.world.chunkManager.activeChunkIds.size : 'N/A',
                     Network: networkState,
-                    ClientID: clientId
+                    ClientID: clientId,
+                    WOM_Total: womStats.totalObjects ?? 'N/A',
+                    WOM_Visible: womStats.lastReturnCount ?? 'N/A',
+                    WOM_Checked: womStats.lastCheckCount ?? 'N/A',
+                    WOM_CheckMs: womStats.lastCheckMs ?? 'N/A'
                 });
 
-                 // Update the DOM overlay via the renderer
                  if (this.game.renderer && this.game.debug.isEnabled()) {
                     this.game.renderer.renderDebugInfo(this.game.debug.getDebugData());
                  }
             }
 
-            // Reset counters for the next interval
             this.frameCounter = 0;
             this.frameTimeAccumulator = 0;
             this.lastFpsUpdate = timestamp;

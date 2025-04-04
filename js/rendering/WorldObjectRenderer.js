@@ -20,12 +20,18 @@ export default class WorldObjectRenderer {
 
         const screenPos = this.renderer.worldToScreen(obj.x, obj.y);
         const baseScreenSize = (obj.size || 10) * this.renderer.camera.zoom; // Base size based on obj.size and zoom
-        const spriteDrawScaleFactor = 5; // Factor to scale the sprite drawing
-        const finalDrawWidth = baseScreenSize * spriteDrawScaleFactor;
-        const finalDrawHeight = baseScreenSize * spriteDrawScaleFactor;
+        
+        // --- Dynamic Sprite Scaling ---
+        // Define a base world size where the sprite is drawn at 1x scale
+        const baseWorldSizeFor1xScale = 16; // e.g., an object with size 16 uses the sprite at its native resolution conceptually
+        const scaleRelativeToBase = (obj.size || 10) / baseWorldSizeFor1xScale;
+        // Define a pixel size multiplier for the drawn sprite
+        const spritePixelMultiplier = 3 * this.renderer.camera.zoom; // Adjust this factor as needed for visual style
+        const finalDrawSize = baseWorldSizeFor1xScale * scaleRelativeToBase * spritePixelMultiplier;
+        // --- End Dynamic Sprite Scaling ---
 
         // More aggressive culling: check based on the final draw size
-        const cullMargin = Math.max(finalDrawWidth, finalDrawHeight) / 2; // Use half of the larger dimension
+        const cullMargin = finalDrawSize / 2; // Use half of the draw size
         if (
             screenPos.x + cullMargin < 0 ||
             screenPos.y + cullMargin < 0 ||
@@ -41,14 +47,16 @@ export default class WorldObjectRenderer {
         // --- Shadow Rendering (using new logic) ---
         const shadowAlpha = 0.3 * this.renderer.lightingSystem.shadowVisibility; // Fade shadow with visibility
 
-        const maxShadowDisplacement = baseScreenSize * 0.75;
-        const baseVerticalOffset = baseScreenSize * 0.075;
-        const additionalVerticalOffset = baseScreenSize * 0.1 * this.renderer.lightingSystem.shadowVerticalOffsetFactor; // Lower at dawn/dusk
+        // Adjust shadow size based on the *base* screen size before the pixel multiplier
+        const shadowBaseSize = baseScreenSize;
+        const maxShadowDisplacement = shadowBaseSize * 0.75;
+        const baseVerticalOffset = shadowBaseSize * 0.075;
+        const additionalVerticalOffset = shadowBaseSize * 0.1 * this.renderer.lightingSystem.shadowVerticalOffsetFactor; // Lower at dawn/dusk
         const shadowX = screenPos.x + this.renderer.lightingSystem.shadowHorizontalOffsetFactor * maxShadowDisplacement;
         const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
 
-        const baseWidthRadius = baseScreenSize * 0.3; // Base width radius at noon
-        const baseHeightRadius = baseScreenSize * 0.25; // Base height radius at noon
+        const baseWidthRadius = shadowBaseSize * 0.3; // Base width radius at noon
+        const baseHeightRadius = shadowBaseSize * 0.25; // Base height radius at noon
 
         const shadowWidthFactor = 1.0 + this.renderer.lightingSystem.shadowVerticalOffsetFactor * 1.5; // Max stretch = 2.5
         const shadowHeightFactor = 1.0 - this.renderer.lightingSystem.shadowVerticalOffsetFactor * 0.55; // Max squash = 0.45
@@ -66,6 +74,66 @@ export default class WorldObjectRenderer {
             0, 0, Math.PI * 2
         );
         this.ctx.fill();
+
+
+        // --- Sprite Rendering ---
+        if (obj.spriteCellId && this.renderer.spriteManager) {
+            const spriteOptions = {
+                smoothing: false, // Pixel art style
+                // Apply lighting tint if enabled
+                tint: this.renderer.lightingSystem.enabled ? {
+                    enabled: true,
+                    lightColor: this.renderer.lightingSystem.lightColor,
+                    ambientLight: this.renderer.lightingSystem.ambientLight
+                } : { enabled: false }
+            };
+
+            // Use the SpriteManager to draw the sprite
+            const drawn = this.renderer.spriteManager.drawSprite(
+                this.ctx,
+                obj.spriteCellId,
+                screenPos.x,
+                screenPos.y,
+                finalDrawSize, // Use calculated final draw size
+                finalDrawSize, // Use calculated final draw size
+                spriteOptions
+            );
+
+            if (!drawn) {
+                 // Fallback rendering if sprite fails
+                 this.drawFallbackObject(obj, screenPos, finalDrawSize);
+            }
+        } else {
+            // Fallback rendering if no sprite info or manager
+             this.drawFallbackObject(obj, screenPos, finalDrawSize);
+        }
+
+
+        // Restore context state after drawing object and overlays
+        this.ctx.restore();
+    }
+
+    drawFallbackObject(obj, screenPos, drawSize) {
+        // Simple circle fallback
+        let fallbackColor = obj.color || '#888'; // Use object color or default grey
+         if (this.renderer.lightingSystem.enabled) {
+             const light = this.renderer.lightingSystem;
+             fallbackColor = this.adjustColorForLighting(
+                 fallbackColor,
+                 light.lightColor,
+                 light.ambientLight
+             );
+         }
+
+        this.ctx.fillStyle = fallbackColor;
+        this.ctx.beginPath();
+        this.ctx.arc(screenPos.x, screenPos.y, drawSize / 2, 0, Math.PI * 2);
+        this.ctx.fill();
+
+         // Optional: Add a border for visibility
+         this.ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+         this.ctx.lineWidth = 1;
+         this.ctx.stroke();
     }
 
     adjustColorForLighting(colorString, lightColor, ambientLight) {
@@ -92,10 +160,12 @@ export default class WorldObjectRenderer {
             b = parseInt(rgb[2]);
         } else return colorString;
 
+        // Modulate by light color AND ambient intensity
         r = Math.floor(r * (lightColor.r / 255) * ambientLight);
         g = Math.floor(g * (lightColor.g / 255) * ambientLight);
         b = Math.floor(b * (lightColor.b / 255) * ambientLight);
 
+        // Clamp values
         r = Math.max(0, Math.min(255, r));
         g = Math.max(0, Math.min(255, g));
         b = Math.max(0, Math.min(255, b));

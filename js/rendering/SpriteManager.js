@@ -3,6 +3,34 @@ export default class SpriteManager {
         this.renderer = renderer;
         this.game = game;
         this.spriteCache = {};
+        // Cache for tinted sprites: key format `${spriteCellId}_${r}_${g}_${b}_${ambient}`
+        this.tintedSpriteCache = {};
+        this.tintCanvas = null; // Reusable canvas for tinting
+        this.tintCtx = null; // Context for the tinting canvas
+    }
+
+    // Initialize or get the offscreen canvas for tinting
+    _getTintCanvas(width, height) {
+        if (!this.tintCanvas) {
+            try {
+                this.tintCanvas = new OffscreenCanvas(width, height);
+            } catch (e) {
+                // Fallback for environments without OffscreenCanvas
+                this.tintCanvas = document.createElement('canvas');
+            }
+            this.tintCanvas.width = width;
+            this.tintCanvas.height = height;
+            this.tintCtx = this.tintCanvas.getContext('2d', { willReadFrequently: true }); // Optimize for frequent getImageData/putImageData
+        } else {
+            // Ensure size is adequate
+            if (this.tintCanvas.width < width || this.tintCanvas.height < height) {
+                this.tintCanvas.width = Math.max(this.tintCanvas.width, width);
+                this.tintCanvas.height = Math.max(this.tintCanvas.height, height);
+                 // Context might be lost on resize, re-get it
+                 this.tintCtx = this.tintCanvas.getContext('2d', { willReadFrequently: true });
+            }
+        }
+        return this.tintCtx;
     }
 
     getSpriteConfig(spriteCellId) {
@@ -132,10 +160,10 @@ export default class SpriteManager {
              }
             return false;
         }
-        if (spriteConfig.sw === 0 || spriteConfig.sh === 0) {
+        if (spriteConfig.sw <= 0 || spriteConfig.sh <= 0) {
             // Log error only if debug enabled
              if (this.game?.debug?.isEnabled()) {
-                 this.game.debug.error(`[SpriteManager] Sprite config for ${spriteCellId} has zero source dimensions (sw/sh).`);
+                 this.game.debug.error(`[SpriteManager] Sprite config for ${spriteCellId} has zero or negative source dimensions (sw/sh). sw=${spriteConfig.sw}, sh=${spriteConfig.sh}`);
              }
             return false;
         }
@@ -143,54 +171,50 @@ export default class SpriteManager {
         ctx.save();
 
         if (options.alpha !== undefined) ctx.globalAlpha = options.alpha;
+        // Handle rotation *before* tinting/drawing if needed
         if (options.rotation) {
-            ctx.translate(x, y);
+            ctx.translate(x, y); // Move origin to the drawing center
             ctx.rotate(options.rotation);
+            // After rotation, drawing happens relative to the new origin (0,0)
             x = 0;
             y = 0;
         }
 
-        if (options.shadow && options.shadow.enabled && options.shadow.length > 0) {
-            ctx.save();
-            if (!options.rotation) ctx.translate(x, y);
+        // Tinting logic
+        let imageToDraw = spriteConfig.image;
+        let sx = spriteConfig.sx;
+        let sy = spriteConfig.sy;
+        let sw = spriteConfig.sw;
+        let sh = spriteConfig.sh;
 
-            const shadowX = options.shadow.direction.x * options.shadow.length;
-            const shadowY = options.shadow.direction.y * options.shadow.length;
-
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-            ctx.beginPath();
-            ctx.ellipse(
-                shadowX,
-                shadowY,
-                width * 0.4,
-                width * 0.2,
-                0, 0, Math.PI * 2
-            );
-            ctx.fill();
-            ctx.restore();
-        }
-
-        let tintedConfig = spriteConfig;
-        // Tinting logic remains the same
         if (options.tint && options.tint.enabled) {
-            const tintColor = options.tint.lightColor;
-            // TODO: Implement tinting logic if needed, possibly using getTintedSprite
-            // For now, just use the original config
+             const tintColor = options.tint.lightColor || { r: 255, g: 255, b: 255 };
+             const ambient = options.tint.ambientLight ?? 1.0;
+             const tintedSprite = this.getTintedSprite(spriteCellId, tintColor, ambient); // Pass ambient light
+             if (tintedSprite) {
+                 imageToDraw = tintedSprite.image;
+                 sx = tintedSprite.sx;
+                 sy = tintedSprite.sy;
+                 sw = tintedSprite.sw;
+                 sh = tintedSprite.sh;
+             } else if (this.game?.debug?.isEnabled()) {
+                 this.game.debug.warn(`[SpriteManager] Failed to get tinted sprite for ${spriteCellId}`);
+             }
         }
 
+        // Apply translation if not rotating
         if (!options.rotation) {
-            ctx.translate(x, y);
+             ctx.translate(x, y);
         }
 
         ctx.imageSmoothingEnabled = options.smoothing !== undefined ? options.smoothing : false;
         try {
-            // REMOVED: console.log for drawImage call
+            // Draw relative to the translated/rotated origin
             ctx.drawImage(
-                tintedConfig.image,
-                tintedConfig.sx, tintedConfig.sy, tintedConfig.sw, tintedConfig.sh,
-                -width / 2, -height / 2, width, height
+                imageToDraw,
+                sx, sy, sw, sh,
+                -width / 2, -height / 2, width, height // Draw centered around the origin
             );
-            // REMOVED: console.log for successful draw
         } catch (e) {
             // Keep error logging
             this.game?.debug?.error(`[SpriteManager] Error drawing sprite ${spriteCellId}:`, e);
@@ -202,65 +226,95 @@ export default class SpriteManager {
         return true;
     }
 
-    // getTintedSprite logic remains the same
-    getTintedSprite(spriteCellId, tintColor) {
-        const cacheKey = `${spriteCellId}_tint_${tintColor.r}_${tintColor.g}_${tintColor.b}`;
+    // --- Updated Tinting Logic ---
+    getTintedSprite(spriteCellId, tintColor, ambientLight) {
+        // Generate cache key including ambient light
+        const r = tintColor.r ?? 255;
+        const g = tintColor.g ?? 255;
+        const b = tintColor.b ?? 255;
+        const ambient = Math.round(ambientLight * 100); // Scale ambient to use in key
+        const cacheKey = `${spriteCellId}_tint_${r}_${g}_${b}_${ambient}`;
 
-        if (this.spriteCache[cacheKey]) {
-            return this.spriteCache[cacheKey];
+        if (this.tintedSpriteCache[cacheKey]) {
+            return this.tintedSpriteCache[cacheKey];
         }
 
         const srcConfig = this.getSpriteConfig(spriteCellId);
-        if (!srcConfig) return null;
+        if (!srcConfig || srcConfig.sw <= 0 || srcConfig.sh <= 0) return null;
 
-        let offscreenCanvas, offCtx;
-        try {
-            offscreenCanvas = new OffscreenCanvas(srcConfig.sw, srcConfig.sh);
-            offCtx = offscreenCanvas.getContext('2d');
-            if (!offCtx) throw new Error("Could not get OffscreenCanvas 2D context");
-        } catch (e) {
-            // Log warning only if debug enabled
-            if (this.game?.debug?.isEnabled()) {
-                this.game.debug.warn(`OffscreenCanvas not supported or failed, using regular canvas for tinting ${spriteCellId}. Performance may be affected.`);
-            }
-            offscreenCanvas = document.createElement('canvas');
-            offscreenCanvas.width = srcConfig.sw;
-            offscreenCanvas.height = srcConfig.sh;
-            offCtx = offscreenCanvas.getContext('2d');
-            if (!offCtx) {
-                this.game?.debug?.error(`Failed to get canvas context for tinting ${spriteCellId}`);
-                return srcConfig;
-            }
+        // Get the reusable tint context, ensuring it's large enough
+        const tintCtx = this._getTintCanvas(srcConfig.sw, srcConfig.sh);
+        if (!tintCtx) {
+             this.game?.debug?.error(`Failed to get tinting context for ${spriteCellId}`);
+             return null;
         }
+        const tintCanvas = tintCtx.canvas;
 
-        offCtx.drawImage(
-            srcConfig.image,
-            srcConfig.sx, srcConfig.sy, srcConfig.sw, srcConfig.sh,
-            0, 0, srcConfig.sw, srcConfig.sh
-        );
+        // Clear the specific area needed (faster than clearRect(0,0,w,h))
+        tintCtx.clearRect(0, 0, srcConfig.sw, srcConfig.sh);
 
-        offCtx.globalCompositeOperation = 'multiply';
-        offCtx.fillStyle = `rgb(${tintColor.r}, ${tintColor.g}, ${tintColor.b})`;
-        offCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
+        try {
+            // 1. Draw the original sprite onto the tint canvas
+            tintCtx.drawImage(
+                srcConfig.image,
+                srcConfig.sx, srcConfig.sy, srcConfig.sw, srcConfig.sh,
+                0, 0, srcConfig.sw, srcConfig.sh
+            );
 
-        offCtx.globalCompositeOperation = 'destination-in';
-        offCtx.drawImage(
-            srcConfig.image,
-            srcConfig.sx, srcConfig.sy, srcConfig.sw, srcConfig.sh,
-            0, 0, srcConfig.sw, srcConfig.sh
-        );
+            // 2. Apply tint using multiply, considering ambient light
+            // Adjust tint color by ambient light first
+            const effectiveR = Math.floor(r * ambientLight);
+            const effectiveG = Math.floor(g * ambientLight);
+            const effectiveB = Math.floor(b * ambientLight);
 
-        offCtx.globalCompositeOperation = 'source-over';
+            tintCtx.globalCompositeOperation = 'multiply';
+            tintCtx.fillStyle = `rgb(${effectiveR}, ${effectiveG}, ${effectiveB})`;
+            tintCtx.fillRect(0, 0, srcConfig.sw, srcConfig.sh);
 
-        const tintedConfig = {
-            image: offscreenCanvas,
-            sx: 0,
-            sy: 0,
-            sw: srcConfig.sw,
-            sh: srcConfig.sh
-        };
+            // 3. Use destination-in to retain original alpha channel
+            tintCtx.globalCompositeOperation = 'destination-in';
+            tintCtx.drawImage(
+                srcConfig.image,
+                srcConfig.sx, srcConfig.sy, srcConfig.sw, srcConfig.sh,
+                0, 0, srcConfig.sw, srcConfig.sh
+            );
 
-        this.spriteCache[cacheKey] = tintedConfig;
-        return tintedConfig;
+            // 4. Reset composite operation
+            tintCtx.globalCompositeOperation = 'source-over';
+
+            // Create a *new* canvas/image for the cache to avoid mutation issues
+            // This is crucial if OffscreenCanvas isn't available or if multiple draws need the same tint concurrently
+            let finalImage;
+            if (typeof OffscreenCanvas !== 'undefined' && tintCanvas instanceof OffscreenCanvas) {
+                // For OffscreenCanvas, transferToImageBitmap might be efficient if needed elsewhere,
+                // but for direct drawing, the canvas itself is fine. Let's create a new one for safety.
+                 finalImage = new OffscreenCanvas(srcConfig.sw, srcConfig.sh);
+                 finalImage.getContext('2d').drawImage(tintCanvas, 0, 0);
+
+            } else {
+                 finalImage = document.createElement('canvas');
+                 finalImage.width = srcConfig.sw;
+                 finalImage.height = srcConfig.sh;
+                 finalImage.getContext('2d').drawImage(tintCanvas, 0, 0);
+            }
+
+
+            const tintedConfig = {
+                image: finalImage, // Use the *new* canvas/bitmap
+                sx: 0,
+                sy: 0,
+                sw: srcConfig.sw,
+                sh: srcConfig.sh
+            };
+
+            this.tintedSpriteCache[cacheKey] = tintedConfig;
+            return tintedConfig;
+
+        } catch (error) {
+             this.game?.debug?.error(`[SpriteManager] Error during tinting process for ${spriteCellId}:`, error);
+             // Reset composite operation in case of error
+             if(tintCtx) tintCtx.globalCompositeOperation = 'source-over';
+             return null; // Return null on error
+        }
     }
 }

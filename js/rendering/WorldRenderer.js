@@ -6,6 +6,7 @@ export default class WorldRenderer {
         this.game = game;
         this.ctx = renderer.ctx;
         this.worldObjectRenderer = new WorldObjectRenderer(renderer, game);
+        this.lastVisibleObjectCount = 0; // For debug logging
     }
 
     render(world, player, viewWidthWorld, viewHeightWorld) {
@@ -23,7 +24,7 @@ export default class WorldRenderer {
         const halfWidthWorld = viewWidthWorld / 2;
         const halfHeightWorld = viewHeightWorld / 2;
         const viewBounds = {
-            minX: camera.x - halfWidthWorld - 100,
+            minX: camera.x - halfWidthWorld - 100, // Add buffer for large objects/shadows
             minY: camera.y - halfHeightWorld - 100,
             maxX: camera.x + halfWidthWorld + 100,
             maxY: camera.y + halfHeightWorld + 100
@@ -36,23 +37,34 @@ export default class WorldRenderer {
             viewHeightWorld
         );
 
+        // Render Terrain First
         for (const chunk of visibleChunks) {
             this.renderChunkTerrain(chunk);
         }
 
+        // Render World Objects (using WorldObjectManager)
         if (world.worldObjectManager) {
             const visibleObjects = world.worldObjectManager.getVisibleObjects(
                 viewBounds.minX, viewBounds.minY, viewBounds.maxX, viewBounds.maxY
             );
+            this.lastVisibleObjectCount = visibleObjects.length; // Store count for debug
+
             for (const obj of visibleObjects) {
+                // Use the dedicated renderer for each object
                 this.worldObjectRenderer.render(obj);
             }
         } else {
-            console.warn("[WorldRenderer] WorldObjectManager not available.");
+             // Log warning only if debug enabled
+             if (this.game?.debug?.isEnabled()) {
+                this.game.debug.warn("[WorldRenderer] WorldObjectManager not available.");
+             }
+            this.lastVisibleObjectCount = 0;
         }
 
+        // Render Grid and Debug Info Last
         if (this.game?.debug?.isEnabled()) {
-            this.renderGrid(world);
+            this.renderGrid(world); // Render grid lines if debug is on
+            this.renderDebugText(visibleChunks.length, this.lastVisibleObjectCount); // Render counts
         }
     }
 
@@ -65,6 +77,7 @@ export default class WorldRenderer {
         const screenRight = screenLeft + screenSize;
         const screenBottom = screenTop + screenSize;
 
+        // Basic culling check
         if (
             screenRight < 0 ||
             screenBottom < 0 ||
@@ -88,8 +101,9 @@ export default class WorldRenderer {
         this.ctx.fillStyle = terrainColor;
         this.ctx.fillRect(screenLeft, screenTop, screenSize, screenSize);
 
-        if (this.game?.debug?.isEnabled()) {
-            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+        // Optional: Render chunk boundary for debugging
+        if (this.game?.debug?.isEnabled() && this.game.config.SHOW_CHUNK_BOUNDARIES) {
+            this.ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)'; // Red for chunk boundaries
             this.ctx.lineWidth = 1;
             this.ctx.strokeRect(screenLeft, screenTop, screenSize, screenSize);
         }
@@ -143,6 +157,14 @@ export default class WorldRenderer {
             this.ctx.restore();
         }
     }
+
+    renderDebugText(chunkCount, objectCount) {
+         this.ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+         this.ctx.font = '12px monospace';
+         this.ctx.textAlign = 'left';
+         this.ctx.fillText(`Visible Chunks: ${chunkCount}`, 10, this.renderer.canvas.height - 30);
+         this.ctx.fillText(`Rendered Objects: ${objectCount}`, 10, this.renderer.canvas.height - 15);
+     }
 
     adjustColorForLighting(colorString, lightColor, ambientLight) {
         let r, g, b;
