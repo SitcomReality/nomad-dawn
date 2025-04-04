@@ -31,10 +31,9 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
 7.  Refine tile/object selection UI in `BuildingToolPanel` (e.g., better presentation, categories, tooltips showing resource costs clearly). (**COMPLETE**)
 8.  Add tile placement functionality (`place_tile` tool), including defining different tile types in `GameConfig` and updating `VehicleBuildingManager`, `VehicleBuildingRenderer`, and `BuildingToolPanel`. (**COMPLETE**)
 9.  Add visual locking/feedback for cell modifications in the building UI (e.g., briefly highlighting the cell being modified, showing a pending state). (**COMPLETE**)
-10. **NEXT:** Implement tile/object rotation (requires changes to `VehicleBuildingManager`, `BuildingToolPanel` for selection, `VehicleBuildingRenderer`, `InteriorRenderer`, and potentially adding `angle` to `gridObjects` in `Vehicle.js` and network sync).
-11. **FUTURE:** Add sprite rendering for tiles and objects in both `VehicleBuildingRenderer` and `InteriorRenderer`.
+10.  Add sprite rendering for tiles and objects in both `VehicleBuildingRenderer` and `InteriorRenderer`.
 
-
+**FUTURE:** Implement tile/object rotation (requires changes to `VehicleBuildingManager`, `BuildingToolPanel` for selection, `VehicleBuildingRenderer`, `InteriorRenderer`, and potentially adding `angle` to `gridObjects` in `Vehicle.js` and network sync).
 
 
 
