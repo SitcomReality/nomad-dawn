@@ -16,6 +16,7 @@ export default class InteriorRenderer {
             player: '#457b9d',
             defaultTile: '#333',
             defaultObject: '#a8dadc',
+            text: '#f1faee' // Added for object icons
         };
 
         // Define rendering parameters
@@ -58,17 +59,41 @@ export default class InteriorRenderer {
         this.ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
         // --- Draw Grid Background & Border ---
-        this.ctx.fillStyle = this.colors.defaultTile;
+        this.ctx.fillStyle = this.colors.defaultTile; // Default background tile color
         this.ctx.fillRect(gridStartX, gridStartY, finalGridPixelWidth, finalGridPixelHeight);
         this.ctx.strokeStyle = this.colors.gridBorder;
         this.ctx.lineWidth = 2;
         this.ctx.strokeRect(gridStartX, gridStartY, finalGridPixelWidth, finalGridPixelHeight);
 
         // --- Draw Grid Tiles ---
-        // TODO: Iterate through vehicle.gridTiles and draw different tile types if needed
+        if (vehicle.gridTiles) {
+             for (const cellKey in vehicle.gridTiles) {
+                 const tileTypeId = vehicle.gridTiles[cellKey];
+                 if (!tileTypeId) continue; // Skip null/empty tiles
+
+                 const [xStr, yStr] = cellKey.split(',');
+                 const x = parseInt(xStr, 10);
+                 const y = parseInt(yStr, 10);
+                 if (isNaN(x) || isNaN(y)) continue;
+
+                 this.drawTile(x, y, tileTypeId, gridStartX, gridStartY, cellPixelSize);
+             }
+        }
 
         // --- Draw Grid Objects ---
-        // TODO: Iterate through vehicle.gridObjects and draw them (e.g., walls, consoles)
+        if (vehicle.gridObjects) {
+            for (const cellKey in vehicle.gridObjects) {
+                 const objectTypeId = vehicle.gridObjects[cellKey];
+                 if (!objectTypeId) continue; // Skip null/empty objects
+
+                 const [xStr, yStr] = cellKey.split(',');
+                 const x = parseInt(xStr, 10);
+                 const y = parseInt(yStr, 10);
+                 if (isNaN(x) || isNaN(y)) continue;
+
+                 this.drawObject(x, y, objectTypeId, gridStartX, gridStartY, cellPixelSize);
+            }
+        }
 
         // --- Draw Grid Lines ---
         this.ctx.strokeStyle = this.colors.gridLines;
@@ -100,15 +125,6 @@ export default class InteriorRenderer {
         this.ctx.arc(playerScreenX, playerScreenY, playerScreenSize / 2, 0, Math.PI * 2);
         this.ctx.fill();
 
-        // Draw player direction indicator (optional)
-        // const angle = player.angle ?? 0; // Assuming player has an angle property even inside?
-        // this.ctx.strokeStyle = 'white';
-        // this.ctx.lineWidth = 2;
-        // this.ctx.beginPath();
-        // this.ctx.moveTo(playerScreenX, playerScreenY);
-        // this.ctx.lineTo(playerScreenX + Math.cos(angle) * playerScreenSize / 2, playerScreenY + Math.sin(angle) * playerScreenSize / 2);
-        // this.ctx.stroke();
-
         // --- Draw UI Text Info ---
         this.ctx.fillStyle = 'white';
         this.ctx.font = '14px monospace';
@@ -118,6 +134,42 @@ export default class InteriorRenderer {
         this.ctx.fillText(`[WASD] Move | [E] Use/Exit`, this.padding, canvasHeight - this.padding);
 
     }
+
+    drawTile(x, y, tileTypeId, gridStartX, gridStartY, cellPixelSize) {
+         const screenX = gridStartX + x * cellPixelSize;
+         const screenY = gridStartY + y * cellPixelSize;
+
+         // TODO: Look up tile config (color, sprite, etc.) if tiles become complex
+         const tileColor = this.colors.defaultTile; // Currently all tiles are the same default
+
+         this.ctx.fillStyle = tileColor;
+         this.ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
+         // Later: Draw tile sprite if available
+    }
+
+    drawObject(x, y, objectTypeId, gridStartX, gridStartY, cellPixelSize) {
+         const screenX = gridStartX + x * cellPixelSize;
+         const screenY = gridStartY + y * cellPixelSize;
+
+         // Look up object configuration from game config
+         const objectConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
+         const objectColor = objectConfig?.color || this.colors.defaultObject;
+         const objectIcon = objectConfig?.icon || '?';
+
+         // Draw colored square for the object base
+         this.ctx.fillStyle = objectColor;
+         this.ctx.fillRect(screenX + 1, screenY + 1, cellPixelSize - 2, cellPixelSize - 2); // Slightly inset
+
+         // Draw Icon/Symbol in the center
+         this.ctx.fillStyle = this.colors.text;
+         this.ctx.font = `bold ${cellPixelSize * 0.6}px monospace`; // Scale icon size with cell size
+         this.ctx.textAlign = 'center';
+         this.ctx.textBaseline = 'middle';
+         this.ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1); // Center icon (+1px vertical adjust)
+
+         // Later: Draw object sprite if available
+    }
+
 
     drawSpecialLocation(location, color, label, gridStartX, gridStartY, cellPixelSize) {
         if (!location || typeof location.x !== 'number' || typeof location.y !== 'number') return;
