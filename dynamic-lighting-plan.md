@@ -31,18 +31,24 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 
 ---
 
-**Phase 4: Adding Light Sources (Step 11 COMPLETE, Step 12 NEXT)**
+**Phase 4: Adding Light Sources (COMPLETE)**
 
-11. Modify relevant systems (e.g., `Player` for torches) to create/destroy `LightSource` entities and add/remove them via `EntityManager`. (**COMPLETE - Added player light**)
-12. Ensure `LightSource` positions are updated correctly if attached to moving entities (e.g., in `LightSource.update` or `EntityManager.update`). **(NEXT - Currently handled by `LightSource.update`)**
+11. Modify relevant systems (e.g., `Player` for torches) to create/destroy `LightSource` entities and add/remove them via `EntityManager`. (**COMPLETE**)
+12. Ensure `LightSource` positions are updated correctly if attached to moving entities (e.g., in `LightSource.update` or `EntityManager.update`). Added offset calculation based on owner angle. Added light creation to `Vehicle`. (**COMPLETE**)
 
 ---
 
-**Phase 5: Shadow Implementation (Advanced)**
+**Phase 5: Shadow Implementation (NEXT)**
 
-13. Research and choose a shadow casting algorithm suitable for 2D (e.g., shadow mapping using an offscreen buffer, 2D raycasting).
-14. Implement shadow calculation in `LightManager` or a dedicated `ShadowManager`.
-15. Modify renderers (`WorldObjectRenderer`, `EntityRenderer`) to draw calculated shadows based on light source positions and occluder geometry.
+13. Research and choose a shadow casting algorithm suitable for 2D (e.g., shadow mapping using an offscreen buffer, 2D raycasting with polygon clipping).
+14. Implement shadow calculation in `LightManager` or a dedicated `ShadowManager`. This will likely involve:
+    *   Identifying potential shadow casters (entities, world objects) near each light source.
+    *   Calculating shadow polygons based on light position and caster geometry.
+    *   Storing shadow data efficiently.
+15. Modify renderers (`WorldObjectRenderer`, `EntityRenderer`, `WorldRenderer` for terrain) to draw calculated shadows. This might involve:
+    *   Rendering to an offscreen shadow mask buffer.
+    *   Applying the shadow mask during the main rendering pass.
+    *   OR directly drawing shadow polygons with appropriate blending.
 
 ---
 
