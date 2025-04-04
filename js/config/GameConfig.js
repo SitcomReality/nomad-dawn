@@ -16,21 +16,24 @@ export const Config = {
             name: 'Metal',
             color: '#a0a0a0',
             description: 'Basic building material for structures and vehicles',
-            spriteCellId: 'metal_lump'
+            spriteCellId: 'metal_lump',
+            size: 30
         },
         {
             id: 'energy',
             name: 'Energy Crystals',
             color: '#f0e050',
             description: 'Powers vehicles and advanced structures',
-            spriteCellId: 'battery_car'
+            spriteCellId: 'battery_car',
+            size: 24
         },
         {
             id: 'food',
             name: 'Food Source',
             color: '#50c020',
             description: 'Required for player survival and healing',
-            spriteCellId: 'food_fruit'
+            spriteCellId: 'food_fruit',
+            size: 28
         },
         // Rare resources
         {
@@ -39,7 +42,8 @@ export const Config = {
             color: '#2ea83b',
             description: 'Highly efficient but dangerous energy source',
             rare: true,
-            spriteCellId: 'barrel_toxic'
+            spriteCellId: 'barrel_toxic',
+            size: 20
         },
         {
             id: 'silicon',
@@ -47,7 +51,8 @@ export const Config = {
             color: '#b9d0d7',
             description: 'Used for advanced electronics and solar panels',
             rare: true,
-            spriteCellId: 'metal_ingots'
+            spriteCellId: 'metal_ingots',
+            size: 24
         },
         {
             id: 'crystal',
@@ -55,7 +60,8 @@ export const Config = {
             color: '#9966cc',
             description: 'Exotic material with unique properties',
             rare: true,
-            spriteCellId: 'crystal' // Assuming a sprite exists or will be added
+            spriteCellId: 'crystal', 
+            size: 32
         },
         {
             id: 'medicine',
@@ -63,7 +69,8 @@ export const Config = {
             color: '#d14a87',
             description: 'Used for crafting advanced medical supplies',
             rare: true,
-            spriteCellId: 'flowers_pink' // Placeholder sprite
+            spriteCellId: 'flowers_pink', 
+            size: 22
         },
         {
             id: 'exotic_wood',
@@ -71,7 +78,8 @@ export const Config = {
             color: '#8b4513',
             description: 'Rare material for specialized construction',
             rare: true,
-            spriteCellId: 'tree_round' // Placeholder sprite
+            spriteCellId: 'tree_round', 
+            size: 36
         }
     ],
     
@@ -328,7 +336,7 @@ export const Config = {
         'tire': { sheet: 'environmental', col: 1, row: 3 },
         'metal_ingots': { sheet: 'environmental', col: 2, row: 3 },
         'metal_lump': { sheet: 'environmental', col: 3, row: 3 },
-        'crystal': { sheet: 'environmental', col: 0, row: 3 } // Assuming this is the correct position
+        'crystal': { sheet: 'environmental', col: 0, row: 3 } 
     },
 
     // Define Feature Types with Sprite Info (if not already defined elsewhere)
