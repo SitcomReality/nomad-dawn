@@ -24,10 +24,9 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
 
 1.  Implement collision detection for player movement within the grid against `gridObjects` (e.g., walls). (**COMPLETE**) (Modified `Player.update` in 'Interior' state).
 2.  Add specific object types to place (walls, storage, consoles, beds) with associated data (cost, color, collision) and basic rendering in the building UI. Add UI for selecting which object to place. (**COMPLETE**) (Updated `GameConfig`, `VehicleBuildingManager`, `BaseBuildingUI`, `VehicleBuildingRenderer`).
-3.  **NEXT:** Implement interactions with interior objects (e.g., accessing storage via 'E' key). (Modify `Game.handleInputInteractions`, potentially add interaction logic to `Player.js` or specific object classes if created).
-4.  Refine rendering in `InteriorRenderer` to draw actual tiles/objects based on `vehicle.gridTiles` / `vehicle.gridObjects` when the player is inside (not building).
+3.  Implement interactions with interior objects (e.g., accessing storage via 'E' key). (**COMPLETE**) (Modified `Game.handleInputInteractions`, added checks for interactable objects in 'Interior' state).
+4.  **NEXT:** Refine rendering in `InteriorRenderer` to draw actual tiles/objects based on `vehicle.gridTiles` / `vehicle.gridObjects` when the player is inside (not building).
 5.  Synchronization improvements for multi-player building inside the same vehicle (e.g., visual locking of cells being modified).
 6.  Refine tile/object selection UI in `BaseBuildingUI` (e.g., better presentation, categories).
 7.  Add tile placement functionality (`place_tile` tool).
-
 

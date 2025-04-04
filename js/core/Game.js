@@ -144,13 +144,13 @@ export default class Game {
                  health: vehicleConfig.health,
                  maxHealth: vehicleConfig.health,
                  modules: [],
-                 // Add default grid properties for the new vehicle
-                 gridWidth: 10, // Default
-                 gridHeight: 10, // Default
+                 // Add default grid properties for the new vehicle using config if available
+                 gridWidth: vehicleConfig.gridWidth || 12, // Default from config
+                 gridHeight: vehicleConfig.gridHeight || 10, // Default from config
                  gridTiles: {},
                  gridObjects: {},
-                 doorLocation: { x: 5, y: 9 }, // Centered bottom
-                 pilotSeatLocation: { x: 5, y: 1 } // Centered top
+                 doorLocation: vehicleConfig.doorLocation || { x: 6, y: 9 }, // Default from config
+                 pilotSeatLocation: vehicleConfig.pilotSeatLocation || { x: 6, y: 1 } // Default from config
              };
             
              this.debug.log(`Sending updateRoomState for vehicle:`, testVehicleState);
@@ -311,6 +311,7 @@ export default class Game {
         const player = this.player;
         const playerState = player.playerState;
         let transitionMade = false; // Flag to apply cooldown only if interaction happens
+        let interactionMade = false; // Flag for general interaction
 
         this.debug.log(`Handling 'E' press. Player state: ${playerState}, Coords: (${player.x.toFixed(0)}, ${player.y.toFixed(0)}), Grid Coords: (${player.gridX.toFixed(1)}, ${player.gridY.toFixed(1)})`);
 
@@ -342,6 +343,7 @@ export default class Game {
                 player.speed = 0;
                 player._stateChanged = true; // Mark state changed for network sync
                 transitionMade = true;
+                interactionMade = true; // Considered an interaction
             }
         } else if (playerState === 'Interior') {
             const vehicle = this.entities.get(player.currentVehicleId);
@@ -355,44 +357,81 @@ export default class Game {
                 return;
             }
 
-            // Check if player is near the door grid coordinates
-            const doorX = vehicle.doorLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
-            const doorY = vehicle.doorLocation?.y ?? vehicle.gridHeight - 1;
-            const isNearDoor = Math.abs(player.gridX - doorX) < 0.6 && Math.abs(player.gridY - doorY) < 0.6; // Use tolerance
+             // --- Check for Object Interaction FIRST ---
+             const cellX = Math.floor(player.gridX);
+             const cellY = Math.floor(player.gridY);
+             const cellKey = `${cellX},${cellY}`;
+             const objectId = vehicle.gridObjects?.[cellKey];
+             const objectConfig = objectId ? this.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectId) : null;
 
-            // Check if player is near the pilot seat grid coordinates
-            const pilotX = vehicle.pilotSeatLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
-            const pilotY = vehicle.pilotSeatLocation?.y ?? 1;
-            const isNearPilotSeat = Math.abs(player.gridX - pilotX) < 0.6 && Math.abs(player.gridY - pilotY) < 0.6;
+             if (objectConfig && objectConfig.interactable) {
+                 this.debug.log(`Interacting with object '${objectConfig.name}' at (${cellX}, ${cellY})`);
+                 // Implement interaction logic based on object type
+                 switch (objectConfig.id) {
+                     case 'storage_small':
+                         // Placeholder: Log and notify
+                         // Later: Open a storage UI panel specific to this object
+                         this.ui.showNotification(`Accessed ${objectConfig.name}. (Storage UI not implemented)`, 'info');
+                         this.debug.log(`[INTERACTION] Player ${player.id} interacted with small storage.`);
+                         break;
+                     case 'console_basic':
+                         this.ui.showNotification(`Used ${objectConfig.name}. (Functionality not implemented)`, 'info');
+                         this.debug.log(`[INTERACTION] Player ${player.id} interacted with basic console.`);
+                         break;
+                     case 'bed_simple':
+                         this.ui.showNotification(`Rested on ${objectConfig.name}. (Healing/saving not implemented)`, 'info');
+                         this.debug.log(`[INTERACTION] Player ${player.id} interacted with simple cot.`);
+                         break;
+                     default:
+                         this.ui.showNotification(`Interacted with ${objectConfig.name}.`, 'info');
+                         this.debug.log(`[INTERACTION] Player ${player.id} interacted with unhandled object: ${objectConfig.id}`);
+                 }
+                 interactionMade = true; // Object interaction occurred
+             }
 
-            if (isNearDoor) {
-                this.debug.log(`Transitioning to Overworld from vehicle ${vehicle.id}`);
-                player.playerState = 'Overworld';
-                // Place player slightly outside the vehicle
-                const exitOffset = vehicle.size ? vehicle.size / 2 + player.size / 2 + 5 : 20;
-                player.x = vehicle.x + Math.cos(vehicle.angle) * exitOffset;
-                player.y = vehicle.y + Math.sin(vehicle.angle) * exitOffset;
-                player.currentVehicleId = null;
-                player._stateChanged = true;
-                transitionMade = true;
-            } else if (isNearPilotSeat && vehicle.driver !== player.id) { // Can only pilot if not already driving
-                this.debug.log(`Transitioning to Piloting vehicle ${vehicle.id}`);
-                player.playerState = 'Piloting';
-                // Set vehicle driver (this marks vehicle state changed implicitly)
-                if (vehicle.setDriver) vehicle.setDriver(player.id);
-                 else vehicle.driver = player.id; // Direct set if method missing
-                 vehicle._stateChanged = true; // Mark vehicle changed
-                // Update room state for vehicle driver
-                this.network.updateRoomState({
-                    vehicles: {
-                        [vehicle.id]: { driver: player.id }
-                    }
-                });
-                player._stateChanged = true;
-                transitionMade = true;
-            } else {
-                 this.debug.log(`'E' pressed in Interior at (${player.gridX.toFixed(1)}, ${player.gridY.toFixed(1)}). No action.`);
-            }
+
+            // --- If NO object interaction, check for Door/Pilot Seat ---
+            if (!interactionMade) {
+                 const doorX = vehicle.doorLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
+                 const doorY = vehicle.doorLocation?.y ?? vehicle.gridHeight - 1;
+                 const isNearDoor = Math.abs(player.gridX - doorX) < 0.6 && Math.abs(player.gridY - doorY) < 0.6; // Use tolerance
+
+                 const pilotX = vehicle.pilotSeatLocation?.x ?? Math.floor(vehicle.gridWidth / 2);
+                 const pilotY = vehicle.pilotSeatLocation?.y ?? 1;
+                 const isNearPilotSeat = Math.abs(player.gridX - pilotX) < 0.6 && Math.abs(player.gridY - pilotY) < 0.6;
+
+                 if (isNearDoor) {
+                     this.debug.log(`Transitioning to Overworld from vehicle ${vehicle.id}`);
+                     player.playerState = 'Overworld';
+                     // Place player slightly outside the vehicle
+                     const exitOffset = vehicle.size ? vehicle.size / 2 + player.size / 2 + 5 : 20;
+                     player.x = vehicle.x + Math.cos(vehicle.angle) * exitOffset;
+                     player.y = vehicle.y + Math.sin(vehicle.angle) * exitOffset;
+                     player.currentVehicleId = null;
+                     player._stateChanged = true;
+                     transitionMade = true;
+                     interactionMade = true; // Exiting is an interaction
+                 } else if (isNearPilotSeat && vehicle.driver !== player.id) { // Can only pilot if not already driving
+                     this.debug.log(`Transitioning to Piloting vehicle ${vehicle.id}`);
+                     player.playerState = 'Piloting';
+                     // Set vehicle driver (this marks vehicle state changed implicitly)
+                     if (vehicle.setDriver) vehicle.setDriver(player.id);
+                      else vehicle.driver = player.id; // Direct set if method missing
+                      vehicle._stateChanged = true; // Mark vehicle changed
+                     // Update room state for vehicle driver
+                     this.network.updateRoomState({
+                         vehicles: {
+                             [vehicle.id]: { driver: player.id }
+                         }
+                     });
+                     player._stateChanged = true;
+                     transitionMade = true;
+                     interactionMade = true; // Piloting is an interaction
+                 } else {
+                      this.debug.log(`'E' pressed in Interior at (${player.gridX.toFixed(1)}, ${player.gridY.toFixed(1)}). No transition/interaction target.`);
+                 }
+            } // End door/pilot check
+
         } else if (playerState === 'Piloting') {
              const vehicle = this.entities.get(player.currentVehicleId);
              if (!vehicle) {
@@ -421,6 +460,7 @@ export default class Game {
              });
              player._stateChanged = true;
              transitionMade = true;
+             interactionMade = true; // Exiting pilot seat is an interaction
         }
         // Add handling for 'Building' state if 'E' should do something here
         // (Currently, closing via Esc is handled by UIManager/BaseBuildingUI)
@@ -431,8 +471,10 @@ export default class Game {
         }
 
 
-        if (transitionMade) {
-            this.lastInteractionTime = currentTime; // Apply cooldown
+        if (interactionMade) { // Apply cooldown if ANY interaction happened
+            this.lastInteractionTime = currentTime;
+        }
+        if (transitionMade) { // Only sync presence if state actually changed
              // Force immediate presence update after state transition
              this.network.updatePresence(player.getNetworkState());
              player.clearStateChanged();
