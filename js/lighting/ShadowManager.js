@@ -1,4 +1,3 @@
-// New file: js/lighting/ShadowManager.js
 /**
  * Manages the calculation and potentially rendering of shadows cast by light sources.
  */
@@ -8,6 +7,8 @@ export default class ShadowManager {
         this.shadowPolygons = []; // Stores calculated shadow polygons for the current frame
         this.casterCache = new Map(); // Cache caster geometry to avoid recalculation
         this.debug = false; // Set to true to render debug info for shadows
+        // Define a maximum distance for shadow rays to prevent infinite polygons
+        this.maxShadowDistance = 1500; // Can be adjusted, perhaps based on light range later
     }
 
     /**
@@ -65,10 +66,12 @@ export default class ShadowManager {
 
                 // Get caster geometry (simplified for now)
                 const casterGeometry = this.getCasterGeometry(caster);
-                if (!casterGeometry) continue;
+                if (!casterGeometry || casterGeometry.length < 3) continue;
 
                 // Calculate the shadow polygon for this light/caster pair
-                const shadowPolygon = this.calculatePolygonForCaster(light, casterGeometry);
+                // --- UPDATED: Call the implemented raycasting function ---
+                const shadowPolygon = this.calculateShadowPolygonRaycast(light, casterGeometry);
+                // --- END UPDATED ---
                 if (shadowPolygon) {
                     this.shadowPolygons.push(shadowPolygon);
                 }
@@ -88,6 +91,8 @@ export default class ShadowManager {
             return true;
         }
         if ((obj.type === 'feature' || obj.type === 'resource') && obj.collides === true) {
+             // Exclude very small objects?
+             if (obj.size && obj.size < 15) return false;
             return true;
         }
         return false; // Default to not casting shadows
@@ -114,47 +119,74 @@ export default class ShadowManager {
     }
 
     /**
-     * Calculates the shadow polygon cast by a specific object from a light source.
-     * Placeholder implementation - needs actual geometry/raycasting logic.
+     * Calculates the shadow polygon using 2D Raycasting.
      * @param {LightSource} light - The light source.
-     * @param {Array<{x: number, y: number}>} casterVertices - Vertices of the caster polygon.
+     * @param {Array<{x: number, y: number}>} casterVertices - Vertices of the caster polygon (ordered clockwise or counter-clockwise).
      * @returns {Array<{x: number, y: number}>|null} The vertices of the shadow polygon or null.
      */
-    calculatePolygonForCaster(light, casterVertices) {
-        // --- Placeholder Implementation ---
-        // This needs to be replaced with actual shadow calculation logic (e.g., 2D raycasting)
-        // For now, just return a slightly offset version of the caster geometry for testing rendering
-        const shadowLength = light.range * 0.5; // Arbitrary shadow length for testing
-        const dx = casterVertices[0].x - light.x; // Use first vertex for direction approximation
-        const dy = casterVertices[0].y - light.y;
-        const dist = Math.sqrt(dx*dx + dy*dy) || 1;
-        const nx = dx / dist;
-        const ny = dy / dist;
-        const offsetX = nx * shadowLength * 0.1; // Small offset for testing
-        const offsetY = ny * shadowLength * 0.1;
+    calculateShadowPolygonRaycast(light, casterVertices) {
+        if (!casterVertices || casterVertices.length < 3) return null;
 
-        const shadowPolygon = casterVertices.map(v => ({
-            x: v.x + offsetX,
-            y: v.y + offsetY
-        }));
+        const lightPos = { x: light.x, y: light.y };
+        const maxDist = this.maxShadowDistance; // Use the defined max distance
+        const shadowPoints = [];
 
-        // Simple extension (VERY basic placeholder) - extend corners away from light
-        // This is NOT geometrically correct shadow casting.
-        const extendedPolygon = [];
-        casterVertices.forEach(vertex => {
-            const vecX = vertex.x - light.x;
-            const vecY = vertex.y - light.y;
-            const len = Math.sqrt(vecX * vecX + vecY * vecY) || 1;
-             // Project vertex far away
-            extendedPolygon.push({
-                x: light.x + (vecX / len) * light.range * 2, // Project far
-                y: light.y + (vecY / len) * light.range * 2
+        // 1. Cast rays from the light through each vertex of the caster
+        for (let i = 0; i < casterVertices.length; i++) {
+            const vertex = casterVertices[i];
+            const dx = vertex.x - lightPos.x;
+            const dy = vertex.y - lightPos.y;
+
+            // Project the ray to the maximum shadow distance
+            const rayEndX = lightPos.x + dx * (maxDist / (Math.sqrt(dx * dx + dy * dy) || 1));
+            const rayEndY = lightPos.y + dy * (maxDist / (Math.sqrt(dx * dx + dy * dy) || 1));
+
+            shadowPoints.push({ x: rayEndX, y: rayEndY, angle: Math.atan2(dy, dx) });
+
+            // Add rotated points slightly around each vertex ray to handle edges
+            // This helps close gaps when vertices are collinear from the light's perspective
+            const angle = Math.atan2(dy, dx);
+            const smallAngleOffset = 0.0001; // Tiny angle offset
+
+            // Point slightly counter-clockwise
+            const dxCCW = Math.cos(angle - smallAngleOffset);
+            const dyCCW = Math.sin(angle - smallAngleOffset);
+            shadowPoints.push({
+                x: lightPos.x + dxCCW * maxDist,
+                y: lightPos.y + dyCCW * maxDist,
+                angle: angle - smallAngleOffset
             });
-        });
-         // Combine original vertices and extended points (needs proper ordering/clipping later)
-         // This placeholder will likely render incorrectly, just to test polygon drawing.
-        return [...casterVertices, ...extendedPolygon.reverse()]; // Placeholder order
-        // return null; // Return null until calculation is implemented
+
+            // Point slightly clockwise
+            const dxCW = Math.cos(angle + smallAngleOffset);
+            const dyCW = Math.sin(angle + smallAngleOffset);
+            shadowPoints.push({
+                x: lightPos.x + dxCW * maxDist,
+                y: lightPos.y + dyCW * maxDist,
+                angle: angle + smallAngleOffset
+            });
+        }
+
+        // 2. Sort the projected points by angle around the light source
+        shadowPoints.sort((a, b) => a.angle - b.angle);
+
+        // 3. Construct the final shadow polygon
+        // The final polygon consists of a subset of the caster's vertices (the "outer edge")
+        // and the projected points corresponding to those vertices.
+        // This requires finding the silhouette edges, which is complex.
+        // --- Simplified Approach (Approximation): ---
+        // For now, use all sorted projected points. This creates a large polygon encompassing
+        // the shadow area but isn't perfectly accurate at the caster boundary.
+        // A more robust method involves segment intersection tests or finding silhouette edges.
+        const finalPolygon = [];
+        for(const p of shadowPoints) {
+             finalPolygon.push({x: p.x, y: p.y});
+        }
+
+
+        // This simplified approach generates a large covering polygon.
+        // More advanced steps (clipping, silhouette finding) are needed for accuracy.
+        return finalPolygon.length >= 3 ? finalPolygon : null;
     }
 
     /**

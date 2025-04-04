@@ -41,25 +41,31 @@ This plan outlines the steps to implement a dynamic lighting system, allowing ob
 **Phase 5: Shadow Implementation (In Progress)**
 
 13. Research and choose a shadow casting algorithm suitable for 2D (e.g., shadow mapping using an offscreen buffer, 2D raycasting with polygon clipping). (**COMPLETE** - Chose 2D raycasting approach)
-14. Implement shadow calculation in `LightManager` or a dedicated `ShadowManager`. (**IN PROGRESS** - Created `ShadowManager.js`, added placeholder calculation logic, integrated into Game update loop)
-15. Modify renderers (`WorldObjectRenderer`, `EntityRenderer`, `WorldRenderer` for terrain) to draw calculated shadows. (**IN PROGRESS** - Added `renderShadows` to `Renderer.js` with basic polygon drawing).
+14. Implement shadow calculation in `LightManager` or a dedicated `ShadowManager`. (**COMPLETE** - Created `ShadowManager.js`, added basic raycasting calculation logic in `calculateShadowPolygonRaycast`, integrated into Game update loop)
+15. Modify renderers (`WorldObjectRenderer`, `EntityRenderer`, `WorldRenderer` for terrain) to draw calculated shadows. (**COMPLETE** - Added `renderShadows` to `Renderer.js` with basic polygon drawing).
 
 ---
 
 **Phase 5 - NEXT STEPS:**
 
-16. Implement actual 2D raycasting algorithm in `ShadowManager.calculatePolygonForCaster` to generate geometrically correct shadow polygons based on light position and caster vertices. This will involve:
-    *   Identifying silhouette edges of the caster relative to the light.
-    *   Projecting rays from the light through the silhouette vertices.
-    *   Calculating intersection points with a maximum shadow range or viewport bounds.
-    *   Constructing the final shadow polygon vertices in the correct order.
-17. Refine shadow rendering in `Renderer.renderShadows`:
-    *   Consider using an offscreen shadow mask buffer for better blending and performance.
+16. ~~Implement actual 2D raycasting algorithm in `ShadowManager.calculatePolygonForCaster` to generate geometrically correct shadow polygons based on light position and caster vertices. This will involve:~~
+    *   ~~Identifying silhouette edges of the caster relative to the light.~~
+    *   ~~Projecting rays from the light through the silhouette vertices.~~
+    *   ~~Calculating intersection points with a maximum shadow range or viewport bounds.~~
+    *   ~~Constructing the final shadow polygon vertices in the correct order.~~ **(Partially Complete - Basic raycasting implemented, needs silhouette finding and proper polygon construction)**
+17. Refine shadow polygon generation in `ShadowManager.calculateShadowPolygonRaycast`:
+    *   Implement silhouette edge detection for convex polygons (start with rectangles).
+    *   Correctly order vertices to form the final shadow polygon using the light source, silhouette vertices, and projected ray endpoints.
+    *   Clip the generated shadow polygon against the light's range or a maximum shadow distance.
+18. Refine shadow rendering in `Renderer.renderShadows`:
+    *   Consider using an offscreen shadow mask buffer for better blending and performance (e.g., draw all shadows to a mask, then draw the mask over the world).
     *   Ensure correct drawing order (shadows should typically be drawn after the main world/entities but before certain effects or UI).
-18. Optimize shadow calculation:
+19. Optimize shadow calculation:
     *   Cache caster geometry.
     *   Optimize caster finding (spatial partitioning?).
     *   Potentially skip calculations for lights/casters far off-screen.
 
 ---
+
+
 
