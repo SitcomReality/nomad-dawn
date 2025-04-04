@@ -30,8 +30,12 @@ export default class World {
         this.resourceGenerator = new ResourceGenerator(this);
         this.featureGenerator = new FeatureGenerator(this);
 
-        // Resource deposits - maintained for network sync
-        this.resources = {}; // Holds the state of specific resource nodes (e.g., collected)
+        // Resource state overrides from network
+        // Map<string, null | { amount: number, ...otherState }>
+        // resourceId -> null means collected/removed
+        // resourceId -> object means state override (e.g., reduced amount)
+        // If resourceId is not present, it uses the generated state.
+        this.resourceOverrides = {};
     }
 
     async initialize() {
@@ -95,12 +99,13 @@ export default class World {
     syncFromNetworkState(roomState) {
         // Update world state from network
         if (roomState.resources) {
-             // Directly update the `resources` state from the network
+             // Directly update the `resourceOverrides` state from the network
              // This object now represents the *overrides* to the generated state
              // (e.g., { "resource-id-1": null, "resource-id-2": { amount: 30 } })
              // A null value means it's collected/removed.
-             this.resources = roomState.resources || {};
+             this.resourceOverrides = roomState.resources || {};
              // TODO: We might need to trigger a visual update if a resource visible on screen gets updated.
+             // This will be handled more formally in Phase 6 (WorldObjectManager)
         }
 
         if (roomState.worldObjects) {
@@ -113,10 +118,16 @@ export default class World {
         }
     }
 
+    /**
+     * Checks if a resource is considered active based on network overrides.
+     * If the resource ID exists as a key in `this.resourceOverrides` and its value is null,
+     * it means it has been collected/removed according to the network state.
+     * If the ID is not present, it defaults to active (using generated state).
+     * @param {string} resourceId - The ID of the resource to check.
+     * @returns {boolean} True if the resource is active, false otherwise.
+     */
     isResourceActive(resourceId) {
-        // If the resource ID exists as a key in `this.resources` and its value is null,
-        // it means it has been collected/removed according to the network state.
-        return !(this.resources[resourceId] === null);
+        return !(this.resourceOverrides[resourceId] === null);
     }
 
     findResourceById(resourceId) {
@@ -126,6 +137,16 @@ export default class World {
             if (chunk && chunk.resources) {
                 const found = chunk.resources.find(r => r.id === resourceId);
                 if (found) {
+                    // Apply overrides if they exist
+                    const override = this.resourceOverrides[resourceId];
+                    if (override === null) {
+                        // If null override, it's collected, so return null
+                        return null;
+                    } else if (override) {
+                        // Apply other state overrides (e.g., amount)
+                        return { ...found, ...override };
+                    }
+                    // No override, return the found resource
                     return found;
                 }
             }
