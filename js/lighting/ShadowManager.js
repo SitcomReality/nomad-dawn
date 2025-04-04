@@ -4,7 +4,9 @@
 export default class ShadowManager {
     constructor(game) {
         this.game = game;
-        this.shadowPolygons = []; // Stores calculated shadow polygons for the current frame
+        // --- MODIFIED: Store structured shadow data ---
+        this.shadowData = []; // Stores { polygon, caster, light } objects
+        // --- END MODIFIED ---
         // --- Caster Geometry Cache ---
         this.casterCache = new Map(); // Cache caster geometry to avoid recalculation
         this.cacheInvalidationFrame = 0; // Frame counter to manage cache invalidation
@@ -17,7 +19,9 @@ export default class ShadowManager {
      * Calculates shadows for all relevant lights and casters in the current view.
      */
     calculateShadows() {
-        this.shadowPolygons = [];
+        // --- MODIFIED: Clear structured shadow data ---
+        this.shadowData = [];
+        // --- END MODIFIED ---
         if (!this.game.lightManager || !this.game.entities || !this.game.worldObjectManager) {
             return; // Required systems not available
         }
@@ -80,7 +84,9 @@ export default class ShadowManager {
 
                 const shadowPolygon = this.calculateShadowPolygonRaycast(light, casterGeometry);
                 if (shadowPolygon) {
-                    this.shadowPolygons.push(shadowPolygon);
+                    // --- MODIFIED: Store structured data ---
+                    this.shadowData.push({ polygon: shadowPolygon, caster: caster, light: light });
+                    // --- END MODIFIED ---
                 }
             }
         }
@@ -263,11 +269,13 @@ export default class ShadowManager {
     }
 
     /**
-     * Returns the calculated shadow polygons for the current frame.
-     * @returns {Array<Array<{x: number, y: number}>>} An array of shadow polygons.
+     * Returns the calculated shadow data for the current frame.
+     * @returns {Array<{polygon: Array<{x: number, y: number}>, caster: Object, light: LightSource}>} An array of shadow data objects.
      */
-    getShadowPolygons() {
-        return this.shadowPolygons;
+    getShadowData() {
+        // --- MODIFIED: Return structured shadow data ---
+        return this.shadowData;
+        // --- END MODIFIED ---
     }
 
      // Optional cache cleanup

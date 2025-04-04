@@ -161,26 +161,85 @@ export default class Renderer {
     }
 
     renderShadows() {
-        // --- UPDATED: Render shadows to the offscreen mask ---
+        // --- UPDATED: Render shadows with gradient based on distance ---
         if (!this.game.shadowManager || !this.shadowMaskCtx || !this.shadowMaskCanvas) return;
 
-        const shadowPolygons = this.game.shadowManager.getShadowPolygons();
+        const shadowData = this.game.shadowManager.getShadowData(); // Get structured data
         const smCtx = this.shadowMaskCtx;
+        const cameraZoom = this.camera.zoom;
 
         // 1. Clear the mask (fill with white for multiply blend mode)
         smCtx.fillStyle = 'white'; // Fully lit
         smCtx.fillRect(0, 0, this.shadowMaskCanvas.width, this.shadowMaskCanvas.height);
 
         // 2. Draw shadow polygons onto the mask
-        if (shadowPolygons.length > 0) {
-             smCtx.fillStyle = 'rgba(0, 0, 0, 1)'; // Draw shadows as solid black
-             // Optional: Could use a grey value for softer shadows, e.g., 'rgba(50, 50, 50, 1)'
-
-            for (const polygon of shadowPolygons) {
-                if (!polygon || polygon.length < 3) continue;
+        if (shadowData.length > 0) {
+            for (const data of shadowData) {
+                const { polygon, caster, light } = data;
+                if (!polygon || polygon.length < 3 || !caster || !light) continue;
 
                 const screenPolygon = polygon.map(p => this.worldToScreen(p.x, p.y));
+                const screenCasterPos = this.worldToScreen(caster.x, caster.y);
+                const screenCasterRadius = (caster.size / 2 || 10) * cameraZoom;
 
+                // Calculate max shadow distance from caster center in screen space
+                let maxShadowScreenDistSq = 0;
+                for (const p of screenPolygon) {
+                    const dx = p.x - screenCasterPos.x;
+                    const dy = p.y - screenCasterPos.y;
+                    maxShadowScreenDistSq = Math.max(maxShadowScreenDistSq, dx * dx + dy * dy);
+                }
+                const maxShadowScreenDist = Math.max(screenCasterRadius + 1, Math.sqrt(maxShadowScreenDistSq)); // Ensure radius is at least caster radius
+
+                // Calculate light-caster distance in world space
+                const lightCasterDist = Math.sqrt((light.x - caster.x)**2 + (light.y - caster.y)**2);
+
+                // Determine shadow base opacity based on distance
+                const minOpacity = 0.05; // Minimum opacity for distant lights
+                const maxOpacity = 0.75; // Maximum opacity for close lights (less than 1 for softer look)
+                let baseOpacity = maxOpacity;
+                if (light.range > 0) {
+                    baseOpacity = Math.max(minOpacity, maxOpacity * (1.0 - (lightCasterDist / (light.range * 1.5)))); // Fade faster
+                }
+                baseOpacity = Math.min(maxOpacity, Math.max(minOpacity, baseOpacity));
+
+                // Determine the shade value (0=black, 255=white)
+                // Use a slightly lighter shade than pure black for softer effect
+                 const baseShade = 60; // Base dark color (instead of 0)
+                 const shadeValue = Math.floor(baseShade + (255 - baseShade) * (1 - baseOpacity));
+
+                // Create radial gradient (centered on caster)
+                // Starts slightly inside the caster radius, extends to max shadow extent
+                const gradientRadiusStart = screenCasterRadius * 0.8;
+                const gradientRadiusEnd = maxShadowScreenDist;
+
+                // Avoid creating gradient if start/end radii are too close or invalid
+                if (gradientRadiusEnd <= gradientRadiusStart) {
+                    continue;
+                }
+
+                let gradient = null;
+                try {
+                     gradient = smCtx.createRadialGradient(
+                        screenCasterPos.x, screenCasterPos.y, gradientRadiusStart,
+                        screenCasterPos.x, screenCasterPos.y, gradientRadiusEnd
+                    );
+
+                    // Add color stops (for multiply blend mode)
+                    // Darker near caster (lower shadeValue), white at the edge
+                    gradient.addColorStop(0, `rgb(${shadeValue}, ${shadeValue}, ${shadeValue})`);
+                    gradient.addColorStop(1, 'rgb(255, 255, 255)'); // White means no effect at the edge
+
+                } catch (e) {
+                     // Catch potential errors like invalid radius in createRadialGradient
+                     console.error("Error creating shadow gradient:", e, {
+                         x: screenCasterPos.x, y: screenCasterPos.y, r0: gradientRadiusStart, r1: gradientRadiusEnd
+                     });
+                     continue; // Skip rendering this shadow if gradient fails
+                }
+
+                // Draw the polygon using the gradient
+                smCtx.fillStyle = gradient;
                 smCtx.beginPath();
                 smCtx.moveTo(screenPolygon[0].x, screenPolygon[0].y);
                 for (let i = 1; i < screenPolygon.length; i++) {
@@ -191,9 +250,12 @@ export default class Renderer {
 
                  // Debug rendering on the mask (optional)
                  if (this.game.shadowManager.debug) {
-                     smCtx.strokeStyle = 'rgba(255, 0, 255, 1)'; // Magenta border
+                     smCtx.strokeStyle = `rgba(255, 0, 255, ${baseOpacity})`; // Magenta border, opacity indicates calculated base
                      smCtx.lineWidth = 1;
                      smCtx.stroke();
+                     smCtx.fillStyle = 'magenta';
+                     smCtx.font = '8px monospace';
+                     smCtx.fillText(baseOpacity.toFixed(2), screenCasterPos.x, screenCasterPos.y);
                  }
             }
         }
