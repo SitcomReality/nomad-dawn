@@ -20,7 +20,7 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
     *   Update `syncVehiclesFromNetwork` to handle new vehicle grid properties.
     *   Ensure `syncFromNetworkPresence` handles the new `playerState` properties for remote players.
 
-**Phase 2: Interior Rendering & Movement (Current)**
+**Phase 2: Interior Rendering & Movement (COMPLETE)**
 
 1.  **`InteriorRenderer.js` (COMPLETE):**
     *   Create this new file.
@@ -35,15 +35,15 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
 4.  **`Player.js` (COMPLETE):**
     *   Refine `update` logic for 'Interior' state movement. Add basic collision detection against grid boundaries (`gridWidth`, `gridHeight`). (Collision added previously).
 
-**Phase 3: Interior Building Mode (Next Steps)**
+**Phase 3: Interior Building Mode (Current)**
 
-1.  **`VehicleBuildingRenderer.js` (TODO):**
+1.  **`VehicleBuildingRenderer.js` (COMPLETE):**
     *   Create this new file.
     *   Responsible for rendering the vehicle grid *specifically for the building UI*.
     *   Render grid cells, existing tiles/objects.
     *   Add visual cues for placing/removing objects (hover effects, placement previews).
-    *   Needs methods like `show()`, `hide()`, `update(vehicle)`.
-2.  **`VehicleBuildingManager.js` (TODO):**
+    *   Needs methods like `show()`, `hide()`, `setVehicle(vehicle)`.
+2.  **`VehicleBuildingManager.js` (TODO - Next Step):**
     *   Create this new file.
     *   Handles the logic for the building UI.
     *   Manages tool selection (place tile, place object, remove).
@@ -53,6 +53,7 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
     *   Modify `show`/`hide` to potentially instantiate/destroy or show/hide the `VehicleBuildingRenderer` and `VehicleBuildingManager`.
     *   Connect UI elements (tool selection buttons) to the `VehicleBuildingManager`.
     *   Change the `playerState` to 'Building' when this UI is opened.
+    *   Ensure the `vehicle-preview-canvas` element exists and pass its ID to `VehicleBuildingRenderer`.
 4.  **`Game.js` (TODO):**
     *   Handle the 'Building' `playerState` in the `update` and `render` loops (prevent player movement, potentially call `vehicleBuildingManager.update`).
     *   Ensure 'E'/'Esc' interactions correctly exit the 'Building' state.
@@ -64,4 +65,5 @@ This plan outlines the steps to implement the vehicle interior grid system, allo
 *   Implement interactions with interior objects.
 *   Refine rendering in `InteriorRenderer` to draw actual tiles/objects based on `vehicle.gridTiles` / `vehicle.gridObjects`.
 *   Synchronization improvements for multi-player building inside the same vehicle.
+*   Integrate `VehicleBuildingRenderer` drawing into `BaseBuildingUI`.
 
