@@ -7,7 +7,7 @@ import NetworkManager from './NetworkManager.js';
 import ResourceManager from './ResourceManager.js';
 import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
-import Vehicle from '../entities/Vehicle.js'; // Needed for collision checks
+import Vehicle from '../entities/Vehicle.js'; // Needed for collision checks and initial spawn
 
 export default class Game {
     constructor(options) {
@@ -79,6 +79,9 @@ export default class Game {
             }
             
             // Network handlers are now set up inside network.initialize()
+
+            // Add initial test vehicle if none exists in room state
+            this.addInitialTestVehicle();
             
             return true;
         } catch (error) {
@@ -89,6 +92,53 @@ export default class Game {
             // Potentially force guest mode on catastrophic failure? Or just halt.
             // For now, halt by re-throwing.
             throw error; 
+        }
+    }
+
+    // Function to add the initial test vehicle if needed
+    addInitialTestVehicle() {
+         // Guests cannot add vehicles
+        if (this.isGuestMode || !this.network || !this.network.room) {
+            return;
+        }
+
+        const currentVehicles = this.network.room.roomState?.vehicles;
+        const testVehicleId = 'vehicle-test-hauler-initial';
+        
+        // Check if the room state already has vehicles or the specific test vehicle
+        if (!currentVehicles || Object.keys(currentVehicles).length === 0 || !currentVehicles[testVehicleId]) {
+             this.debug.log(`Attempting to add initial test vehicle (${testVehicleId})...`);
+            
+             // Find the config for the 'hauler' vehicle
+             const vehicleConfig = this.config?.VEHICLE_TYPES.find(v => v.id === 'hauler');
+             if (!vehicleConfig) {
+                 this.debug.error("Could not find 'hauler' vehicle config to spawn test vehicle.");
+                 return;
+             }
+            
+             // Define the vehicle state
+             const testVehicleState = {
+                 id: testVehicleId,
+                 type: 'vehicle',
+                 vehicleType: 'hauler',
+                 owner: null, // No owner initially
+                 x: 50,       // Position near origin
+                 y: 50,
+                 angle: 0,
+                 health: vehicleConfig.health,
+                 maxHealth: vehicleConfig.health,
+                 modules: []
+             };
+            
+             // Send the update to the room state
+             this.network.updateRoomState({
+                 vehicles: {
+                     [testVehicleId]: testVehicleState
+                 }
+             });
+             this.debug.log(`Initial test vehicle added to room state.`);
+        } else {
+             // this.debug.log(`Initial test vehicle (${testVehicleId}) already exists in room state or other vehicles present.`);
         }
     }
 

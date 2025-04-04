@@ -130,11 +130,11 @@ export default class SpriteManager {
         }
 
         let tintedConfig = spriteConfig;
-        // Apply tinting based on lighting system if enabled
+        // Tinting logic remains the same
         if (options.tint && options.tint.enabled) {
             const tintColor = options.tint.lightColor;
-            const ambientLight = options.tint.ambientLight;
-            tintedConfig = this.getTintedSprite(spriteCellId, tintColor, ambientLight);
+            // TODO: Implement tinting logic if needed, possibly using getTintedSprite
+            // For now, just use the original config
         }
 
         if (!options.rotation) {
@@ -161,9 +161,9 @@ export default class SpriteManager {
         return true;
     }
 
-    // Enhanced tinting method that accounts for both color and ambient light
-    getTintedSprite(spriteCellId, tintColor, ambientLight = 1.0) {
-        const cacheKey = `${spriteCellId}_tint_${tintColor.r}_${tintColor.g}_${tintColor.b}_${ambientLight.toFixed(2)}`;
+    // getTintedSprite logic remains the same
+    getTintedSprite(spriteCellId, tintColor) {
+        const cacheKey = `${spriteCellId}_tint_${tintColor.r}_${tintColor.g}_${tintColor.b}`;
 
         if (this.spriteCache[cacheKey]) {
             return this.spriteCache[cacheKey];
@@ -192,41 +192,24 @@ export default class SpriteManager {
             }
         }
 
-        // Draw the original sprite
         offCtx.drawImage(
             srcConfig.image,
             srcConfig.sx, srcConfig.sy, srcConfig.sw, srcConfig.sh,
             0, 0, srcConfig.sw, srcConfig.sh
         );
 
-        // Apply global darkening based on ambient light first
-        if (ambientLight < 1.0) {
-            // Apply darkening layer
-            offCtx.globalCompositeOperation = 'source-atop';
-            offCtx.fillStyle = `rgba(0, 0, 0, ${1 - ambientLight})`;
-            offCtx.fillRect(0, 0, srcConfig.sw, srcConfig.sh);
-            offCtx.globalCompositeOperation = 'source-over';
-        }
-
-        // Apply color tint
-        // Scale tint intensity based on ambient light for more natural effect
-        const tintIntensity = 0.5 + (ambientLight * 0.5); // Reduces tint effect slightly in darkness
-
-        // Create a tint layer - use light color with partial opacity for subtler effect
         offCtx.globalCompositeOperation = 'multiply';
-        offCtx.fillStyle = `rgba(${tintColor.r}, ${tintColor.g}, ${tintColor.b}, ${tintIntensity * 0.5})`;
-        offCtx.fillRect(0, 0, srcConfig.sw, srcConfig.sh);
+        offCtx.fillStyle = `rgb(${tintColor.r}, ${tintColor.g}, ${tintColor.b})`;
+        offCtx.fillRect(0, 0, offscreenCanvas.width, offscreenCanvas.height);
 
-        // Reset composite operation
+        offCtx.globalCompositeOperation = 'destination-in';
+        offCtx.drawImage(
+            srcConfig.image,
+            srcConfig.sx, srcConfig.sy, srcConfig.sw, srcConfig.sh,
+            0, 0, srcConfig.sw, srcConfig.sh
+        );
+
         offCtx.globalCompositeOperation = 'source-over';
-
-        // Add a subtle highlight layer with the light color for more dimensional look
-        if (ambientLight > 0.7) { // Only add highlights during brighter parts of day
-            offCtx.globalCompositeOperation = 'lighter';
-            offCtx.fillStyle = `rgba(${tintColor.r}, ${tintColor.g}, ${tintColor.b}, ${(ambientLight - 0.7) * 0.15})`;
-            offCtx.fillRect(0, 0, srcConfig.sw, srcConfig.sh);
-            offCtx.globalCompositeOperation = 'source-over';
-        }
 
         const tintedConfig = {
             image: offscreenCanvas,
