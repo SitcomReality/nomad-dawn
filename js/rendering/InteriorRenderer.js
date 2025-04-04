@@ -1,5 +1,3 @@
-// New file: js/rendering/InteriorRenderer.js
-
 export default class InteriorRenderer {
     constructor(renderer, game) {
         this.renderer = renderer;
@@ -10,13 +8,14 @@ export default class InteriorRenderer {
         this.colors = {
             background: '#1a1a1a',
             gridLines: 'rgba(255, 255, 255, 0.1)',
-            gridBorder: 'rgba(255, 255, 255, 0.3)',
+            gridBorder: 'rgba(255, 255, 255, 0.4)', // Slightly brighter border
             door: '#f1faee',
             pilotSeat: '#e63946',
             player: '#457b9d',
             defaultTile: '#333',
             defaultObject: '#a8dadc',
-            text: '#f1faee' // Added for object icons
+            text: '#f1faee',
+            errorBg: 'rgba(50, 0, 0, 0.8)', // Dark red for error screen
         };
 
         // Define rendering parameters
@@ -67,31 +66,41 @@ export default class InteriorRenderer {
 
         // --- Draw Grid Tiles ---
         if (vehicle.gridTiles) {
-             for (const cellKey in vehicle.gridTiles) {
-                 const tileTypeId = vehicle.gridTiles[cellKey];
-                 if (!tileTypeId) continue; // Skip null/empty tiles
+            for (const cellKey in vehicle.gridTiles) {
+                const tileTypeId = vehicle.gridTiles[cellKey];
+                if (!tileTypeId) continue; // Skip null/empty tiles
 
-                 const [xStr, yStr] = cellKey.split(',');
-                 const x = parseInt(xStr, 10);
-                 const y = parseInt(yStr, 10);
-                 if (isNaN(x) || isNaN(y)) continue;
+                // Basic validation of cellKey format
+                const parts = cellKey.split(',');
+                if (parts.length !== 2) continue;
+                const x = parseInt(parts[0], 10);
+                const y = parseInt(parts[1], 10);
+                if (isNaN(x) || isNaN(y) || x < 0 || x >= vehicle.gridWidth || y < 0 || y >= vehicle.gridHeight) {
+                    this.game.debug.warn(`[InteriorRenderer] Invalid tile key '${cellKey}' for vehicle ${vehicle.id}`);
+                    continue;
+                }
 
-                 this.drawTile(x, y, tileTypeId, gridStartX, gridStartY, cellPixelSize);
-             }
+                this.drawTile(x, y, tileTypeId, gridStartX, gridStartY, cellPixelSize);
+            }
         }
 
         // --- Draw Grid Objects ---
         if (vehicle.gridObjects) {
             for (const cellKey in vehicle.gridObjects) {
-                 const objectTypeId = vehicle.gridObjects[cellKey];
-                 if (!objectTypeId) continue; // Skip null/empty objects
+                const objectTypeId = vehicle.gridObjects[cellKey];
+                if (!objectTypeId) continue; // Skip null/empty objects
 
-                 const [xStr, yStr] = cellKey.split(',');
-                 const x = parseInt(xStr, 10);
-                 const y = parseInt(yStr, 10);
-                 if (isNaN(x) || isNaN(y)) continue;
+                // Basic validation of cellKey format
+                const parts = cellKey.split(',');
+                if (parts.length !== 2) continue;
+                const x = parseInt(parts[0], 10);
+                const y = parseInt(parts[1], 10);
+                if (isNaN(x) || isNaN(y) || x < 0 || x >= vehicle.gridWidth || y < 0 || y >= vehicle.gridHeight) {
+                    this.game.debug.warn(`[InteriorRenderer] Invalid object key '${cellKey}' for vehicle ${vehicle.id}`);
+                    continue;
+                }
 
-                 this.drawObject(x, y, objectTypeId, gridStartX, gridStartY, cellPixelSize);
+                this.drawObject(x, y, objectTypeId, gridStartX, gridStartY, cellPixelSize);
             }
         }
 
@@ -136,40 +145,46 @@ export default class InteriorRenderer {
     }
 
     drawTile(x, y, tileTypeId, gridStartX, gridStartY, cellPixelSize) {
-         const screenX = gridStartX + x * cellPixelSize;
-         const screenY = gridStartY + y * cellPixelSize;
+        const screenX = gridStartX + x * cellPixelSize;
+        const screenY = gridStartY + y * cellPixelSize;
 
-         // TODO: Look up tile config (color, sprite, etc.) if tiles become complex
-         const tileColor = this.colors.defaultTile; // Currently all tiles are the same default
+        // Look up tile config
+        const tileConfig = this.game.config?.INTERIOR_TILE_TYPES?.find(t => t.id === tileTypeId);
+        const tileColor = tileConfig?.color || this.colors.defaultTile;
 
-         this.ctx.fillStyle = tileColor;
-         this.ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
-         // Later: Draw tile sprite if available
+        this.ctx.fillStyle = tileColor;
+        this.ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
+
+        // Draw a subtle border or pattern if needed
+        this.ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
+        this.ctx.lineWidth = 1;
+        this.ctx.strokeRect(screenX + 0.5, screenY + 0.5, cellPixelSize - 1, cellPixelSize - 1);
+
+        // Later: Draw tile sprite if available
     }
 
     drawObject(x, y, objectTypeId, gridStartX, gridStartY, cellPixelSize) {
-         const screenX = gridStartX + x * cellPixelSize;
-         const screenY = gridStartY + y * cellPixelSize;
+        const screenX = gridStartX + x * cellPixelSize;
+        const screenY = gridStartY + y * cellPixelSize;
 
-         // Look up object configuration from game config
-         const objectConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
-         const objectColor = objectConfig?.color || this.colors.defaultObject;
-         const objectIcon = objectConfig?.icon || '?';
+        // Look up object configuration from game config
+        const objectConfig = this.game.config?.INTERIOR_OBJECT_TYPES?.find(o => o.id === objectTypeId);
+        const objectColor = objectConfig?.color || this.colors.defaultObject;
+        const objectIcon = objectConfig?.icon || '?';
 
-         // Draw colored square for the object base
-         this.ctx.fillStyle = objectColor;
-         this.ctx.fillRect(screenX + 1, screenY + 1, cellPixelSize - 2, cellPixelSize - 2); // Slightly inset
+        // Draw colored square for the object base
+        this.ctx.fillStyle = objectColor;
+        this.ctx.fillRect(screenX + 1, screenY + 1, cellPixelSize - 2, cellPixelSize - 2); // Slightly inset
 
-         // Draw Icon/Symbol in the center
-         this.ctx.fillStyle = this.colors.text;
-         this.ctx.font = `bold ${cellPixelSize * 0.6}px monospace`; // Scale icon size with cell size
-         this.ctx.textAlign = 'center';
-         this.ctx.textBaseline = 'middle';
-         this.ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1); // Center icon (+1px vertical adjust)
+        // Draw Icon/Symbol in the center
+        this.ctx.fillStyle = this.colors.text;
+        this.ctx.font = `bold ${cellPixelSize * 0.6}px monospace`; // Scale icon size with cell size
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+        this.ctx.fillText(objectIcon, screenX + cellPixelSize / 2, screenY + cellPixelSize / 2 + 1); // Center icon (+1px vertical adjust)
 
-         // Later: Draw object sprite if available
+        // Later: Draw object sprite if available
     }
-
 
     drawSpecialLocation(location, color, label, gridStartX, gridStartY, cellPixelSize) {
         if (!location || typeof location.x !== 'number' || typeof location.y !== 'number') return;
@@ -196,7 +211,7 @@ export default class InteriorRenderer {
     }
 
     renderError(message) {
-        this.ctx.fillStyle = 'red';
+        this.ctx.fillStyle = this.colors.errorBg;
         this.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
         this.ctx.fillStyle = 'white';
         this.ctx.font = '20px monospace';

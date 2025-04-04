@@ -33,7 +33,9 @@ export default class BuildingToolPanel {
              </div>
              <div id="tile-selection-container" class="hidden">
                   <h4>Placeable Tiles:</h4>
-                  <p>(Tile selection not implemented yet)</p>
+                  <div id="tile-buttons" class="tile-buttons-grid">
+                     <!-- Tile buttons populated by JS -->
+                  </div>
              </div>
          `;
     }
@@ -44,6 +46,7 @@ export default class BuildingToolPanel {
             objectSelectionContainer: this.panelContainer.querySelector('#object-selection-container'),
             objectButtonsContainer: this.panelContainer.querySelector('#object-buttons'),
             tileSelectionContainer: this.panelContainer.querySelector('#tile-selection-container'),
+            tileButtonsContainer: this.panelContainer.querySelector('#tile-buttons'), // Cache tile button container
             // Reference the main tool buttons (which are outside this specific panel's container)
             toolSelectButton: document.getElementById('tool-select'),
             toolPlaceTileButton: document.getElementById('tool-place-tile'),
@@ -78,7 +81,7 @@ export default class BuildingToolPanel {
         if (this.elements.objectButtonsContainer) {
              this.elements.objectButtonsContainer.addEventListener('click', (event) => {
                  const button = event.target.closest('.object-select-button'); // Find the button element
-                 if (button) {
+                 if (button && !button.disabled) { // Check if button is not disabled
                       const objectTypeId = button.dataset.objectTypeId;
                      if (objectTypeId) {
                          this.selectObjectType(objectTypeId);
@@ -86,7 +89,17 @@ export default class BuildingToolPanel {
                  }
              });
         }
-        // Add similar listener for tile buttons when implemented
+        if (this.elements.tileButtonsContainer) {
+            this.elements.tileButtonsContainer.addEventListener('click', (event) => {
+                const button = event.target.closest('.tile-select-button'); // Find the button element
+                if (button && !button.disabled) { // Check if button is not disabled
+                     const tileTypeId = button.dataset.tileTypeId;
+                    if (tileTypeId) {
+                        this.selectTileType(tileTypeId);
+                    }
+                }
+            });
+        }
     }
 
     setActiveVehicle(vehicle) {
@@ -125,7 +138,7 @@ export default class BuildingToolPanel {
               if (toolName === 'select') status = "Click grid to inspect cell.";
               if (toolName === 'remove') status = "Click grid to remove object/tile.";
               if (toolName === 'place_object') status = "Select an object below.";
-              if (toolName === 'place_tile') status = "Select a tile type (Not Impl).";
+              if (toolName === 'place_tile') status = "Select a tile type below.";
               this.elements.toolStatusText.textContent = status;
          }
 
@@ -143,7 +156,19 @@ export default class BuildingToolPanel {
                    this.updateObjectButtonSelectionState(this.buildingManager.selectedObjectType);
               }
          } else if (toolName === 'place_tile') {
-             // Populate tile selection later
+             this.populateTileSelection();
+             // Select the first tile if nothing is selected in the manager yet (or default)
+             if (!this.buildingManager.selectedTileType) {
+                 const firstTileButton = this.elements.tileButtonsContainer?.querySelector('.tile-select-button');
+                 if (firstTileButton && firstTileButton.dataset.tileTypeId) {
+                     this.selectTileType(firstTileButton.dataset.tileTypeId);
+                 } else {
+                     // Fallback to default if no buttons found
+                     this.selectTileType(this.game.config.INTERIOR_TILE_TYPES?.[0]?.id || 'floor_metal');
+                 }
+             } else {
+                  this.updateTileButtonSelectionState(this.buildingManager.selectedTileType);
+             }
          }
     }
 
@@ -167,8 +192,8 @@ export default class BuildingToolPanel {
              button.title = tooltipContent; // Set the detailed tooltip
 
              button.innerHTML = `
-                 <span class="object-icon">${objType.icon || '❓'}</span>
-                 <span class="object-name">${objType.name}</span>
+                 <span class="item-icon">${objType.icon || '❓'}</span>
+                 <span class="item-name">${objType.name}</span>
                  ${this.formatResourceCost(objType.cost)}
              `;
              // Check initial craftability
@@ -178,11 +203,11 @@ export default class BuildingToolPanel {
     }
 
     // NEW: Generate detailed tooltip content
-    generateDetailedTooltip(objConfig) {
-        let tooltip = `${objConfig.name}\n${objConfig.description || 'No description.'}`;
-        if (objConfig.cost && Object.keys(objConfig.cost).length > 0) {
+    generateDetailedTooltip(itemConfig) {
+        let tooltip = `${itemConfig.name}\n${itemConfig.description || 'No description.'}`;
+        if (itemConfig.cost && Object.keys(itemConfig.cost).length > 0) {
             tooltip += `\n\nCost:`;
-            for (const [resource, amount] of Object.entries(objConfig.cost)) {
+            for (const [resource, amount] of Object.entries(itemConfig.cost)) {
                  const playerAmount = this.game.player?.resources[resource] || 0;
                  const resConfig = this.game.config.RESOURCE_TYPES.find(r => r.id === resource);
                  const resName = resConfig?.name || resource;
@@ -194,15 +219,16 @@ export default class BuildingToolPanel {
         return tooltip;
     }
 
-    updateButtonAffordability(button, objConfig) {
-         if (!this.game.player || !objConfig || !objConfig.cost) {
+    // Generic function for checking affordability
+    updateButtonAffordability(button, itemConfig) {
+         if (!this.game.player || !itemConfig || !itemConfig.cost) {
              button.disabled = false;
              button.classList.remove('cannot-afford');
              return;
          }
 
          let canAfford = true;
-         for (const [resource, amount] of Object.entries(objConfig.cost)) {
+         for (const [resource, amount] of Object.entries(itemConfig.cost)) {
              if ((this.game.player.resources[resource] || 0) < amount) {
                  canAfford = false;
                  break;
@@ -226,7 +252,7 @@ export default class BuildingToolPanel {
             const resName = resConfig?.name || resource;
             const resColor = resConfig?.color || '#ccc';
             // Keep the concise colored amount display
-            costHtml += `<span class="${hasEnough ? 'cost-ok' : 'cost-missing'}" style="color:${resColor}; font-size: 0.8em; margin-left: 3px;">${amount}</span>`;
+            costHtml += `<span class="${hasEnough ? 'cost-ok' : 'cost-missing'}" style="color:${resColor}; font-size: 0.8em; margin-left: 3px; display: inline-block; min-width: 1.2em; text-align: right;">${amount}</span>`;
             // Add detailed part to the cost-specific tooltip
             tooltipParts.push(`${amount} ${resName} (Have: ${playerAmount})`);
         }
@@ -250,15 +276,65 @@ export default class BuildingToolPanel {
         }
     }
 
-     updateObjectButtonSelectionState(selectedObjectTypeId) {
-          // Update visual selection state for object buttons
-          const objectButtons = this.elements.objectButtonsContainer?.querySelectorAll('.object-select-button');
-          objectButtons?.forEach(btn => {
-              btn.classList.toggle('active', btn.dataset.objectTypeId === selectedObjectTypeId);
-          });
-     }
+    updateObjectButtonSelectionState(selectedObjectTypeId) {
+         // Update visual selection state for object buttons
+         const objectButtons = this.elements.objectButtonsContainer?.querySelectorAll('.object-select-button');
+         objectButtons?.forEach(btn => {
+             btn.classList.toggle('active', btn.dataset.objectTypeId === selectedObjectTypeId);
+         });
+    }
 
-    // Update function called by BaseBuildingUI
+    populateTileSelection() {
+        const container = this.elements.tileButtonsContainer;
+        if (!container || !this.game.config?.INTERIOR_TILE_TYPES) {
+            console.error("[BuildingToolPanel] Cannot populate tile selection: container or config missing.");
+            container.innerHTML = '<p>Error loading tiles.</p>';
+            return;
+        }
+
+        container.innerHTML = ''; // Clear previous buttons
+        const availableTiles = this.game.config.INTERIOR_TILE_TYPES;
+
+        availableTiles.forEach(tileType => {
+            const button = document.createElement('button');
+            button.className = 'tile-select-button object-select-button'; // Re-use object button styles
+            button.dataset.tileTypeId = tileType.id;
+            const tooltipContent = this.generateDetailedTooltip(tileType); // Re-use tooltip generator
+            button.title = tooltipContent;
+
+            // Simple tile representation for now
+            const tileIconStyle = `width: 1em; height: 1em; background-color: ${tileType.color || '#888'}; border: 1px solid rgba(255,255,255,0.2); display: inline-block; vertical-align: middle;`;
+
+            button.innerHTML = `
+                 <span class="item-icon" style="${tileIconStyle}"></span>
+                 <span class="item-name">${tileType.name}</span>
+                 ${this.formatResourceCost(tileType.cost)}
+             `;
+            this.updateButtonAffordability(button, tileType); // Check initial craftability
+            container.appendChild(button);
+        });
+    }
+
+    selectTileType(tileTypeId) {
+        if (!this.buildingManager) return;
+        this.buildingManager.setSelectedTileType(tileTypeId);
+        this.updateTileButtonSelectionState(tileTypeId);
+
+        // Update tool status text
+        if (this.elements.toolStatusText && this.buildingManager.selectedTool === 'place_tile') {
+            const selectedTile = this.game.config.INTERIOR_TILE_TYPES.find(t => t.id === tileTypeId);
+            this.elements.toolStatusText.textContent = `Placing: ${selectedTile?.name || tileTypeId}. Click grid.`;
+        }
+    }
+
+    updateTileButtonSelectionState(selectedTileTypeId) {
+         // Update visual selection state for tile buttons
+         const tileButtons = this.elements.tileButtonsContainer?.querySelectorAll('.tile-select-button');
+         tileButtons?.forEach(btn => {
+             btn.classList.toggle('active', btn.dataset.tileTypeId === selectedTileTypeId);
+         });
+    }
+
     update() {
          // Update craftability status of object buttons if the place_object tool is active
          if (this.buildingManager?.selectedTool === 'place_object' && this.elements.objectButtonsContainer) {
@@ -268,24 +344,22 @@ export default class BuildingToolPanel {
                  const objConfig = this.game.config.INTERIOR_OBJECT_TYPES.find(o => o.id === objectTypeId);
                  if (objConfig) {
                      this.updateButtonAffordability(button, objConfig);
-                     // Also update the cost display itself in case resource amounts changed
+                     // Update cost display and tooltip
                      const costElement = button.querySelector('.object-cost');
                      if (costElement) {
-                          // Re-generate cost HTML and tooltip content
-                          const newCostHtmlContent = this.formatResourceCost(objConfig.cost)
+                         const newCostHtmlContent = this.formatResourceCost(objConfig.cost)
                              .replace(/<div class="object-cost"[^>]*>/, '') // Remove opening tag with title
                              .replace('</div>','');
-                          const newCostTooltip = `Cost: ${this.generateDetailedTooltip(objConfig).split('\n\nCost:')[1] || 'Free'}`;
+                         const newCostTooltip = this.generateDetailedTooltip(objConfig).split('\n\nCost:')[1] || 'Free';
 
-                          // Update only if changed
-                          if (costElement.innerHTML !== newCostHtmlContent) {
+                         if (costElement.innerHTML !== newCostHtmlContent) {
                              costElement.innerHTML = newCostHtmlContent;
-                          }
-                          if (costElement.title !== newCostTooltip) {
-                              costElement.title = newCostTooltip;
-                          }
+                         }
+                         if (costElement.title !== newCostTooltip) {
+                             costElement.title = `Cost: ${newCostTooltip}`;
+                         }
                      }
-                     // Update main button tooltip as well if needed (though it might be static content + cost)
+                     // Update main button tooltip as well if needed
                      const newButtonTooltip = this.generateDetailedTooltip(objConfig);
                      if (button.title !== newButtonTooltip) {
                           button.title = newButtonTooltip;
@@ -293,6 +367,36 @@ export default class BuildingToolPanel {
                  }
              });
          }
-         // Update tile button states later
+         // Update tile button affordability if tile tool is active
+         else if (this.buildingManager?.selectedTool === 'place_tile' && this.elements.tileButtonsContainer) {
+             const tileButtons = this.elements.tileButtonsContainer.querySelectorAll('.tile-select-button');
+             tileButtons.forEach(button => {
+                 const tileTypeId = button.dataset.tileTypeId;
+                 const tileConfig = this.game.config.INTERIOR_TILE_TYPES.find(t => t.id === tileTypeId);
+                 if (tileConfig) {
+                     this.updateButtonAffordability(button, tileConfig);
+                     // Update cost display and tooltip
+                     const costElement = button.querySelector('.object-cost'); // Re-uses class
+                     if (costElement) {
+                         const newCostHtmlContent = this.formatResourceCost(tileConfig.cost)
+                             .replace(/<div class="object-cost"[^>]*>/, '')
+                             .replace('</div>','');
+                         const newCostTooltip = this.generateDetailedTooltip(tileConfig).split('\n\nCost:')[1] || 'Free';
+
+                         if (costElement.innerHTML !== newCostHtmlContent) {
+                             costElement.innerHTML = newCostHtmlContent;
+                         }
+                         if (costElement.title !== newCostTooltip) {
+                              costElement.title = `Cost: ${newCostTooltip}`;
+                         }
+                     }
+                     // Update main button tooltip
+                     const newButtonTooltip = this.generateDetailedTooltip(tileConfig);
+                     if (button.title !== newButtonTooltip) {
+                         button.title = newButtonTooltip;
+                     }
+                  }
+              });
+          }
     }
 }

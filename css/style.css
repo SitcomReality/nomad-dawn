@@ -357,6 +357,7 @@ body {
 #tool-info-area {
     flex: 0 0 200px; 
     background-color: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--ui-border);
     padding: 10px;
     border-radius: 4px;
     overflow-y: auto; 
@@ -402,15 +403,17 @@ body {
     width: 100%; 
 }
 
-.object-select-button .object-icon {
-    flex-shrink: 0; 
+.object-select-button .item-icon, 
+.tile-select-button .item-icon {
+    flex-shrink: 0;
     margin-right: 8px;
 }
 
-.object-select-button .object-name {
-    flex-grow: 1; 
-    margin-right: 8px; 
-    white-space: nowrap; 
+.object-select-button .item-name, 
+.tile-select-button .item-name {
+    flex-grow: 1;
+    margin-right: 8px;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
@@ -448,6 +451,7 @@ body {
     color: var(--color-dark);
 }
 .object-select-button:disabled,
+.tile-select-button:disabled,
 .object-select-button.cannot-afford {
     background-color: rgba(80, 80, 80, 0.5);
     color: var(--ui-text-dim);
@@ -458,24 +462,9 @@ body {
     opacity: 0.7;
 }
 
-.object-icon {
-    font-size: 1.2em;
-    width: 20px;
-    text-align: center;
-}
-.object-name {
-    flex-grow: 1; 
-}
-.cost-ok { 
-    color: var(--ui-text); 
-}
-.cost-missing { 
-    color: var(--ui-accent); 
-}
-.cost-free {
-    color: var(--ui-text-dim);
-    font-style: italic;
-    min-height: 1em; 
+#tile-buttons.tile-buttons-grid {
+    display: grid;
+    grid-template-columns: 1fr;
 }
 
 #vehicle-building-canvas-container {

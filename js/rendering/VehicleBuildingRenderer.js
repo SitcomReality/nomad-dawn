@@ -23,8 +23,8 @@ export default class VehicleBuildingRenderer {
             gridBorder: 'rgba(255, 255, 255, 0.3)',
             hoverCell: 'rgba(168, 218, 220, 0.4)', // Light blue transparent
             selectedCell: 'rgba(230, 57, 70, 0.5)', // Red transparent
-            door: '#f1faee',
-            pilotSeat: '#e63946',
+            door: '#457b9d', // Blue
+            pilotSeat: '#e63946', // Red
             defaultTile: '#444',
             defaultObject: '#a8dadc', // Fallback object color
             text: '#f1faee'
@@ -234,17 +234,23 @@ export default class VehicleBuildingRenderer {
     }
 
     drawTile(x, y, tileTypeId) {
-         const ctx = this.ctx;
-         const cellPixelSize = this.cellPixelSize;
-         const screenX = this.gridOffsetX + x * cellPixelSize;
-         const screenY = this.gridOffsetY + y * cellPixelSize;
+        const ctx = this.ctx;
+        const cellPixelSize = this.cellPixelSize;
+        const screenX = this.gridOffsetX + x * cellPixelSize;
+        const screenY = this.gridOffsetY + y * cellPixelSize;
 
-         // TODO: Look up tile config (color, sprite, etc.)
-         const tileColor = this.colors.defaultTile; // Placeholder
+        // Look up tile config
+        const tileConfig = this.game.config?.INTERIOR_TILE_TYPES?.find(t => t.id === tileTypeId);
+        const tileColor = tileConfig?.color || this.colors.defaultTile;
 
-         ctx.fillStyle = tileColor;
-         ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
-         // Later: Draw tile sprite
+        ctx.fillStyle = tileColor;
+        ctx.fillRect(screenX, screenY, cellPixelSize, cellPixelSize);
+
+        // Simple indication - maybe a small border or subtle pattern later?
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(screenX, screenY, cellPixelSize, cellPixelSize);
+        // Later: Draw tile sprite if available
     }
 
     drawObject(x, y, objectTypeId) {
@@ -284,7 +290,7 @@ export default class VehicleBuildingRenderer {
 
         // Draw border and label
         this.ctx.strokeStyle = color;
-        this.ctx.lineWidth = 1;
+        this.ctx.lineWidth = 2; // Make special locations stand out more
         this.ctx.strokeRect(locX, locY, this.cellPixelSize, this.cellPixelSize);
 
         this.ctx.fillStyle = '#000'; // Contrasting label color

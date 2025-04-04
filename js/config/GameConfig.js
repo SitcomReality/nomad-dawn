@@ -212,6 +212,36 @@ export const Config = {
     ],
     // --- END NEW ---
     
+    // --- NEW: Interior Tile Types ---
+    INTERIOR_TILE_TYPES: [
+        {
+            id: 'floor_metal',
+            name: 'Metal Floor Plate',
+            description: 'Basic, durable flooring.',
+            cost: { metal: 2 },
+            color: '#555', // Dark grey base color
+            // spriteCellId: 'tile_metal_floor' // Example for later sprite integration
+        },
+        {
+            id: 'floor_grate',
+            name: 'Grated Floor Panel',
+            description: 'Allows visibility below, less sturdy.',
+            cost: { metal: 3 },
+            color: '#777', // Lighter grey
+            // spriteCellId: 'tile_grate_floor'
+        },
+        {
+            id: 'floor_hazard',
+            name: 'Hazard Stripe Floor',
+            description: 'Marking for potentially dangerous areas.',
+            cost: { metal: 2, energy: 1 }, // Energy for paint/lights?
+            color: '#ffcc00', // Yellow/Black base (represented as yellow here)
+            // spriteCellId: 'tile_hazard_floor'
+        }
+        // Add more tile types like carpet, reinforced plating, etc.
+    ],
+    // --- END NEW ---
+
     // Equipment configuration
     EQUIPMENT_TYPES: [
         {
