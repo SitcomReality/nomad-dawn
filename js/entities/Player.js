@@ -57,6 +57,15 @@ export default class Player {
     }
 
     update(deltaTime, input) {
+        // NEW: If player is inside a vehicle (Interior or Piloting), skip overworld movement update.
+        // Grid movement for 'Interior' state will be handled separately or here if needed.
+        if (this.playerState === 'Interior' || this.playerState === 'Piloting') {
+            // If in 'Interior', handle grid-based movement?
+            // TODO: Implement grid movement logic
+            this.speed = 0; // Ensure player doesn't keep moving in overworld coords
+            return;
+        }
+
         if (!input) return;
 
         // Store previous state to detect changes

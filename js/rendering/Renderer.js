@@ -133,7 +133,17 @@ export default class Renderer {
 
     // Renders entities in the main world view
     renderEntities(entities, localPlayer) {
-        this.entityRenderer.render(entities, localPlayer);
+        // Filter out the player if they are inside a vehicle
+        const filteredEntities = entities.filter(entity => {
+            if (entity.type === 'player' && entity.playerState !== 'Overworld') {
+                return false; // Don't render player entity if not in overworld
+            }
+             if (entity.type === 'vehicle' && entity.driver && this.game.entities.get(entity.driver)?.playerState !== 'Overworld') {
+                 // Potentially hide vehicle if driver is inside? Or keep rendering it. Let's keep rendering it.
+             }
+            return true;
+        });
+        this.entityRenderer.render(filteredEntities, localPlayer);
     }
 
     // Renders the interior view of a vehicle

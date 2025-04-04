@@ -72,11 +72,13 @@ export default class Vehicle {
 
     update(deltaTime, input) {
         // Only allow updates if driven or if it's an AI vehicle (future)
-        // For now, only update if driven AND input is provided
-        if (!this.driver || !input) {
+        // For now, only update if driven AND input is provided AND player is in 'Piloting' state
+        const driverPlayer = this.driver ? this.game.entities.get(this.driver) : null;
+        if (!this.driver || !input || !driverPlayer || driverPlayer.playerState !== 'Piloting') {
+            const wasMoving = this.speed > 0;
             this.speed = 0; 
              // Check if state changed due to stopping
-            if (this._lastNetworkState.speed > 0) {
+            if (wasMoving && this._lastNetworkState.speed > 0) {
                 this._stateChanged = true;
             }
             return;

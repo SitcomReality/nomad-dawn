@@ -21,7 +21,6 @@ class Vehicle {
     }
 
     update() {
-        // Ensure vehicle only moves if driver is set and player.playerState === 'Piloting'
         if (this.driver && game.player.playerState === 'Piloting') {
             // Movement logic
         }
@@ -57,44 +56,43 @@ class Player {
     }
 }
 
-// Game.js
-class Game {
-    constructor() {
-        // ...
-    }
-
-    handlePlayerInput() {
-        // Detect 'E' key press
+// PlayerController.js
+class PlayerController {
+    handleInteractionKeyPress() {
         if (input.isKeyPressed('E')) {
             if (player.playerState === 'Overworld' && player.isNearVehicle()) {
-                // Transition to Interior state
                 player.playerState = 'Interior';
                 player.currentVehicleId = vehicle.id;
                 player.gridX = vehicle.doorLocation.x;
                 player.gridY = vehicle.doorLocation.y;
                 console.log("Transitioning to Interior");
             } else if (player.playerState === 'Interior') {
-                // Check if player is at door location
                 if (player.gridX === vehicle.doorLocation.x && player.gridY === vehicle.doorLocation.y) {
-                    // Transition to Overworld state
                     player.playerState = 'Overworld';
                     player.currentVehicleId = null;
                     console.log("Transitioning to Overworld");
                 } else if (player.gridX === vehicle.pilotSeatLocation.x && player.gridY === vehicle.pilotSeatLocation.y) {
-                    // Transition to Piloting state
                     player.playerState = 'Piloting';
                     vehicle.setDriver(player.id);
                     console.log("Transitioning to Piloting");
                 }
             } else if (player.playerState === 'Piloting') {
-                // Transition to Interior state
                 player.playerState = 'Interior';
                 player.gridX = vehicle.pilotSeatLocation.x;
                 player.gridY = vehicle.pilotSeatLocation.y;
                 vehicle.removeDriver();
                 console.log("Transitioning back to Interior");
+            } else if (player.playerState === 'Overworld' && input.isKeyPressed('B')) {
+                // Transition to Building state
+                player.playerState = 'Building';
             }
         }
+    }
+
+    handleInteriorGridMovement(deltaTime, player) {
+        // Implement grid-based movement using WASD input
+        // Check for collisions with vehicle walls/objects (based on gridTiles/gridObjects)
+        // Update player.gridX, player.gridY and set player._stateChanged = true
     }
 }
 

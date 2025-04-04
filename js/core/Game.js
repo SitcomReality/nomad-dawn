@@ -9,6 +9,7 @@ import { Config } from '../config/GameConfig.js';
 import UIManager from '../ui/UIManager.js';
 import Vehicle from '../entities/Vehicle.js'; // Needed for collision checks and initial spawn
 import CollisionManager from './CollisionManager.js'; // Import the new CollisionManager
+import PlayerController from './PlayerController.js'; // Import PlayerController
 
 export default class Game {
     constructor(options) {
@@ -35,6 +36,8 @@ export default class Game {
         this.ui = new UIManager(this);
         // Initialize CollisionManager
         this.collisions = new CollisionManager(this);
+        // Initialize PlayerController
+        this.playerController = new PlayerController(this); // Instantiate PlayerController
 
         // Make config available to the game
         this.config = Config;
@@ -287,154 +290,14 @@ export default class Game {
         requestAnimationFrame(this.gameLoop);
     }
 
-    handlePlayerInput(deltaTime) {
-         if (!this.player || this.isGuestMode) return;
-
-         const vehicle = this.player.currentVehicleId ? this.entities.get(this.player.currentVehicleId) : null;
-
-         // --- State Transitions Based on Input ---
-         if (this.input.isKeyDown('KeyE')) {
-             // Debounce E key? For now, check state first.
-             this.handleInteractionKeyPress(vehicle);
-         }
-
-         // --- Player/Vehicle Updates Based on State ---
-         switch(this.player.playerState) {
-             case 'Overworld':
-                 // Update player movement if not inside anything
-                 this.player.update(deltaTime, this.input);
-                 break;
-
-             case 'Interior':
-                 // Update player grid movement
-                 this.player.update(deltaTime, this.input); // Player update handles internal grid movement
-                 break;
-
-             case 'Piloting':
-                 // Update vehicle based on input
-                 if (vehicle && vehicle.update) {
-                     vehicle.update(deltaTime, this.input);
-                     // Sync vehicle state if it changed
-                     if (vehicle.hasStateChanged && vehicle.hasStateChanged()) {
-                         this.network.updateRoomState({
-                             vehicles: {
-                                 [vehicle.id]: vehicle.getFullNetworkState() // Send full state when driven
-                             }
-                         });
-                         if (vehicle.clearStateChanged) vehicle.clearStateChanged();
-                     }
-                 }
-                 break;
-            case 'Building':
-                // No direct movement update, BuildingManager handles interactions
-                break;
-         }
-    }
-
-    handleInteractionKeyPress(currentVehicle) {
-        if (!this.player) return;
-
-        switch (this.player.playerState) {
-            case 'Overworld':
-                const nearbyVehicle = this.findPlayerNearbyVehicle(); // Reuse logic from BaseBuildingUI?
-                if (nearbyVehicle) {
-                    this.player.playerState = 'Interior';
-                    this.player.currentVehicleId = nearbyVehicle.id;
-                    // Set player to door location
-                    this.player.gridX = nearbyVehicle.doorLocation?.x ?? 0;
-                    this.player.gridY = nearbyVehicle.doorLocation?.y ?? 0;
-                    this.player._stateChanged = true;
-                    this.debug.log(`Player ${this.player.id} entering vehicle ${nearbyVehicle.id}`);
-                    // Hide UI panels if open
-                    if (this.ui.inventory.isVisible) this.ui.inventory.hide();
-                    if (this.ui.baseBuilding.isVisible) this.ui.baseBuilding.hide(); // Assuming baseBuilding is the old name
-                }
-                break;
-
-            case 'Interior':
-                if (currentVehicle) {
-                    const isAtDoor = this.player.gridX === currentVehicle.doorLocation?.x &&
-                                     this.player.gridY === currentVehicle.doorLocation?.y;
-                    const isAtPilotSeat = this.player.gridX === currentVehicle.pilotSeatLocation?.x &&
-                                          this.player.gridY === currentVehicle.pilotSeatLocation?.y;
-
-                    if (isAtDoor) {
-                        // Exit vehicle
-                        this.player.playerState = 'Overworld';
-                        // Place player slightly outside vehicle
-                        const exitOffset = (currentVehicle.size || 30) / 2 + 10;
-                        this.player.x = currentVehicle.x + Math.cos(currentVehicle.angle + Math.PI) * exitOffset;
-                        this.player.y = currentVehicle.y + Math.sin(currentVehicle.angle + Math.PI) * exitOffset;
-                        this.player.currentVehicleId = null;
-                        this.player._stateChanged = true;
-                        this.debug.log(`Player ${this.player.id} exiting vehicle ${currentVehicle.id}`);
-                    } else if (isAtPilotSeat) {
-                        // Enter piloting state
-                        this.player.playerState = 'Piloting';
-                        currentVehicle.setDriver(this.player.id);
-                        this.network.updateRoomState({
-                            vehicles: {
-                                [currentVehicle.id]: { driver: this.player.id }
-                            }
-                        });
-                        this.player._stateChanged = true;
-                        this.debug.log(`Player ${this.player.id} starts piloting vehicle ${currentVehicle.id}`);
-                    } else {
-                        // Handle interaction with grid objects later
-                        this.debug.log(`Player pressed E at (${this.player.gridX}, ${this.player.gridY}) - no interaction defined.`);
-                    }
-                }
-                break;
-
-            case 'Piloting':
-                 if (currentVehicle) {
-                     // Stop piloting
-                     this.player.playerState = 'Interior';
-                     // Place player back at pilot seat
-                     this.player.gridX = currentVehicle.pilotSeatLocation?.x ?? 0;
-                     this.player.gridY = currentVehicle.pilotSeatLocation?.y ?? 0;
-                     currentVehicle.removeDriver();
-                     this.network.updateRoomState({
-                         vehicles: {
-                             [currentVehicle.id]: { driver: null }
-                         }
-                     });
-                     this.player._stateChanged = true;
-                     this.debug.log(`Player ${this.player.id} stops piloting vehicle ${currentVehicle.id}`);
-                 }
-                 break;
-        }
-         // Consume E key press? Maybe not needed globally.
-    }
-
-     // Helper to find nearby vehicle (similar to BaseBuildingUI)
-     findPlayerNearbyVehicle() {
-         if (!this.player) return null;
-         const vehicles = this.entities.getByType('vehicle');
-         const interactionDistance = 100; // Interaction range
-         let closestVehicle = null;
-         let closestDistanceSq = interactionDistance * interactionDistance;
-
-         for (const vehicle of vehicles) {
-             const dx = vehicle.x - this.player.x;
-             const dy = vehicle.y - this.player.y;
-             const distanceSq = dx * dx + dy * dy;
-             if (distanceSq < closestDistanceSq) {
-                 closestDistanceSq = distanceSq;
-                 closestVehicle = vehicle;
-             }
-         }
-         return closestVehicle;
-     }
-
     update(deltaTime) {
         // --- Update Time of Day ---
         const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 60;
         const timeIncrement = deltaTime / cycleDuration;
         this.timeOfDay = (this.timeOfDay + timeIncrement) % 1; // Keep time between 0 and 1
 
-        // --- Handle Input and State Transitions ---
-        this.handlePlayerInput(deltaTime); // Encapsulated input/state logic
+        // --- Handle Input and State Transitions using PlayerController ---
+        this.playerController.update(deltaTime); // Call PlayerController update
 
         // --- Sync Player Presence ---
         if (this.player && !this.isGuestMode && this.player.hasStateChanged()) {
