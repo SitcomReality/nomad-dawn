@@ -1,4 +1,3 @@
-// New file: js/rendering/WorldObjectRenderer.js
 /**
  * Handles the rendering of individual world objects (features, resources)
  * Extracted from WorldRenderer to manage file length.
@@ -20,7 +19,7 @@ export default class WorldObjectRenderer {
 
         const screenPos = this.renderer.worldToScreen(obj.x, obj.y);
         const baseScreenSize = (obj.size || 10) * this.renderer.camera.zoom; // Base size based on obj.size and zoom
-        
+
         // --- Dynamic Sprite Scaling ---
         // Define a base world size where the sprite is drawn at 1x scale
         const baseWorldSizeFor1xScale = 16; // e.g., an object with size 16 uses the sprite at its native resolution conceptually
@@ -50,7 +49,9 @@ export default class WorldObjectRenderer {
         // Adjust shadow size based on the *base* screen size before the pixel multiplier
         const shadowBaseSize = baseScreenSize;
         const maxShadowDisplacement = shadowBaseSize * 0.75;
-        const baseVerticalOffset = shadowBaseSize * 0.075;
+        // --- MODIFIED: Increased base vertical offset ---
+        const baseVerticalOffset = shadowBaseSize * 0.10; // Increased from 0.075 to lower the shadow
+        // --- END MODIFIED ---
         const additionalVerticalOffset = shadowBaseSize * 0.1 * this.renderer.lightingSystem.shadowVerticalOffsetFactor; // Lower at dawn/dusk
         const shadowX = screenPos.x + this.renderer.lightingSystem.shadowHorizontalOffsetFactor * maxShadowDisplacement;
         const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
@@ -58,8 +59,8 @@ export default class WorldObjectRenderer {
         const baseWidthRadius = shadowBaseSize * 0.3; // Base width radius at noon
         const baseHeightRadius = shadowBaseSize * 0.25; // Base height radius at noon
 
-        const shadowWidthFactor = 1.0 + this.renderer.lightingSystem.shadowVerticalOffsetFactor * 1.5; // Max stretch = 2.5
-        const shadowHeightFactor = 1.0 - this.renderer.lightingSystem.shadowVerticalOffsetFactor * 0.55; // Max squash = 0.45
+        const shadowWidthFactor = this.renderer.lightingSystem.shadowWidthFactor; // Use factor from Renderer
+        const shadowHeightFactor = this.renderer.lightingSystem.shadowHeightFactor; // Use factor from Renderer
 
         const shadowWidth = baseWidthRadius * shadowWidthFactor;
         const shadowHeight = baseHeightRadius * shadowHeightFactor;

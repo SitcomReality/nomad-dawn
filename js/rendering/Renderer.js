@@ -201,10 +201,10 @@ export default class Renderer {
         this.lightingSystem.shadowVerticalOffsetFactor = Math.abs(Math.cos(time * Math.PI));
 
         // Shape Factors (wider at dawn/dusk, circular at noon)
-        // Width factor: Aiming for ~2x wider at extremes compared to noon (1.0)
-        this.lightingSystem.shadowWidthFactor = 1.0 + this.lightingSystem.shadowVerticalOffsetFactor * 1.0; // Increases up to 2.0
-        // Height factor: Squash more at extremes
-        this.lightingSystem.shadowHeightFactor = 1.0 - this.lightingSystem.shadowVerticalOffsetFactor * 0.4; // Decreases down to 0.6
+        // --- MODIFIED: Increased width stretch and height squash ---
+        this.lightingSystem.shadowWidthFactor = 1.0 + this.lightingSystem.shadowVerticalOffsetFactor * 1.5; // Increases width more significantly at extremes
+        this.lightingSystem.shadowHeightFactor = 1.0 - this.lightingSystem.shadowVerticalOffsetFactor * 0.55; // Squashes height more significantly at extremes
+        // --- END MODIFIED ---
 
 
         // --- Ambient Light & Color (Copied from previous implementation, seems fine) ---

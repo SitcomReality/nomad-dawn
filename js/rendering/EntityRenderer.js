@@ -63,7 +63,9 @@ export default class EntityRenderer {
             const shadowAlpha = 0.3 * light.shadowVisibility;
 
             const maxShadowDisplacement = screenSize * 0.75;
-            const baseVerticalOffset = screenSize * 0.075;
+            // --- MODIFIED: Increased base vertical offset ---
+            const baseVerticalOffset = screenSize * 0.10; // Increased from 0.075 to lower the shadow
+            // --- END MODIFIED ---
             const additionalVerticalOffset = screenSize * 0.1 * light.shadowVerticalOffsetFactor;
             const shadowX = screenPos.x + light.shadowHorizontalOffsetFactor * maxShadowDisplacement;
             const shadowY = screenPos.y + baseVerticalOffset + additionalVerticalOffset;
@@ -71,8 +73,8 @@ export default class EntityRenderer {
             const baseWidthRadius = screenSize * 0.3;
             const baseHeightRadius = screenSize * 0.25;
 
-            const shadowWidthFactor = 1.0 + light.shadowVerticalOffsetFactor * 1.5;
-            const shadowHeightFactor = 1.0 - light.shadowVerticalOffsetFactor * 0.55;
+            const shadowWidthFactor = light.shadowWidthFactor; // Use factor from Renderer
+            const shadowHeightFactor = light.shadowHeightFactor; // Use factor from Renderer
 
             const shadowWidth = baseWidthRadius * shadowWidthFactor;
             const shadowHeight = baseHeightRadius * shadowHeightFactor;
