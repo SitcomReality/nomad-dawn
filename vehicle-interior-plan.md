@@ -19,6 +19,14 @@ class Vehicle {
       pilotSeatLocation: this.pilotSeatLocation,
     };
   }
+
+  setDriver(playerId) {
+    // add driver logic
+  }
+
+  removeDriver() {
+    // remove driver logic
+  }
 }
 
 // Player.js
@@ -46,9 +54,43 @@ class Player {
     this.gridY = presence.gridY;
   }
 
+  isNearVehicle() {
+    // implement isNearVehicle logic
+  }
+
   update() {
     if (this.playerState === 'Piloting' || this.playerState === 'Interior') return;
     // overworld movement logic
+  }
+
+  enterVehicle(vehicle) {
+    this.playerState = 'Interior';
+    this.currentVehicleId = vehicle.id;
+    this.gridX = vehicle.doorLocation.x;
+    this.gridY = vehicle.doorLocation.y;
+    console.log('Transitioning to Interior');
+  }
+
+  exitVehicle() {
+    this.playerState = 'Overworld';
+    this.currentVehicleId = null;
+    console.log('Transitioning to Overworld');
+  }
+
+  startPilotingVehicle(vehicle) {
+    this.playerState = 'Piloting';
+    vehicle.setDriver(this.id);
+    game.room.sendUpdate({ vehicles: { [vehicle.id]: { driver: this.id } } });
+    console.log('Transitioning to Piloting');
+  }
+
+  stopPilotingVehicle(vehicle) {
+    this.playerState = 'Interior';
+    this.gridX = vehicle.pilotSeatLocation.x;
+    this.gridY = vehicle.pilotSeatLocation.y;
+    vehicle.removeDriver();
+    game.room.sendUpdate({ vehicles: { [vehicle.id]: { driver: null } } });
+    console.log('Transitioning back to Interior');
   }
 }
 
@@ -80,30 +122,39 @@ class Game {
     // handle player input
     if (input.isKeyPressed('E')) {
       if (player.playerState === 'Overworld' && player.isNearVehicle()) {
-        player.playerState = 'Interior';
-        player.currentVehicleId = vehicle.id;
-        player.gridX = vehicle.doorLocation.x;
-        player.gridY = vehicle.doorLocation.y;
-        console.log('Transitioning to Interior');
+        player.enterVehicle(vehicle);
       } else if (player.playerState === 'Interior') {
         if (player.gridX === vehicle.doorLocation.x && player.gridY === vehicle.doorLocation.y) {
-          player.playerState = 'Overworld';
-          player.currentVehicleId = null;
-          console.log('Transitioning to Overworld');
+          player.exitVehicle();
         } else if (player.gridX === vehicle.pilotSeatLocation.x && player.gridY === vehicle.pilotSeatLocation.y) {
-          player.playerState = 'Piloting';
-          vehicle.setDriver(player.id);
-          game.room.sendUpdate({ vehicles: { [vehicle.id]: { driver: player.id } } });
-          console.log('Transitioning to Piloting');
+          player.startPilotingVehicle(vehicle);
         }
       } else if (player.playerState === 'Piloting') {
-        player.playerState = 'Interior';
-        player.gridX = vehicle.pilotSeatLocation.x;
-        player.gridY = vehicle.pilotSeatLocation.y;
-        vehicle.removeDriver();
-        game.room.sendUpdate({ vehicles: { [vehicle.id]: { driver: null } } });
-        console.log('Transitioning back to Interior');
+        player.stopPilotingVehicle(vehicle);
       }
     }
+  }
+}
+
+// Renderer.js
+class Renderer {
+  render() {
+    if (player.playerState === 'Interior') {
+      // clear screen and draw placeholder message or basic grid representation
+    } else {
+      // render game world
+    }
+  }
+}
+
+// InteriorRenderer.js
+class InteriorRenderer {
+  constructor(vehicle, player) {
+    this.vehicle = vehicle;
+    this.player = player;
+  }
+
+  render() {
+    // draw vehicle's grid (gridTiles), placed objects (gridObjects), and player character at their gridX, gridY position
   }
 }

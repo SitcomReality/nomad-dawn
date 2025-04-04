@@ -57,7 +57,7 @@ export default class Player {
     }
 
     update(deltaTime, input) {
-        if (!input) return;
+        if (!input && this.playerState !== 'Piloting') return; // Need input unless piloting
 
         // Store previous state to detect changes
         const prevState = {
@@ -73,7 +73,7 @@ export default class Player {
         } else if (this.playerState === 'Interior') {
             this.updateInteriorMovement(deltaTime, input);
         } else if (this.playerState === 'Piloting') {
-            // No player movement, vehicle moves instead (handled in Game.js)
+            // No direct player movement, vehicle moves instead (handled in Game.js)
             this.speed = 0;
         } else if (this.playerState === 'Building') {
              // Potentially different controls or just no movement
@@ -126,17 +126,43 @@ export default class Player {
     }
 
     updateInteriorMovement(deltaTime, input) {
-        // TODO: Implement grid-based movement based on input
+        // Placeholder for grid-based movement (Step 5)
         // For now, just prevent overworld movement
         this.speed = 0;
 
-        // Placeholder for future grid movement logic:
-        // const direction = input.getMovementDirection();
-        // if (direction changes gridX/gridY) {
-        //    Check grid collisions based on vehicle data
-        //    If valid: update this.gridX, this.gridY
-        //    this._stateChanged = true;
-        // }
+        // Simple example: Immediate movement on key press (replace with proper logic later)
+        const direction = input.getMovementDirection();
+        let moved = false;
+        if (direction.x !== 0 || direction.y !== 0) {
+            let nextGridX = this.gridX;
+            let nextGridY = this.gridY;
+
+            if (direction.x < 0) nextGridX -= 1;
+            if (direction.x > 0) nextGridX += 1;
+            if (direction.y < 0) nextGridY -= 1; // Note: Canvas Y is down, grid Y might be up
+            if (direction.y > 0) nextGridY += 1;
+
+            // TODO: Check grid boundaries and obstacles (Step 5)
+            const vehicle = this.game.entities.get(this.currentVehicleId);
+            if (vehicle &&
+                nextGridX >= 0 && nextGridX < vehicle.gridWidth &&
+                nextGridY >= 0 && nextGridY < vehicle.gridHeight /* && isPassable(nextGridX, nextGridY, vehicle) */ )
+            {
+                this.gridX = nextGridX;
+                this.gridY = nextGridY;
+                moved = true;
+            }
+
+            // Consume input to prevent repeated movement from holding key
+            if (moved) {
+                 if (direction.x < 0) input.keys['KeyA'] = input.keys['ArrowLeft'] = false;
+                 if (direction.x > 0) input.keys['KeyD'] = input.keys['ArrowRight'] = false;
+                 if (direction.y < 0) input.keys['KeyW'] = input.keys['ArrowUp'] = false;
+                 if (direction.y > 0) input.keys['KeyS'] = input.keys['ArrowDown'] = false;
+                 this._stateChanged = true; // Mark state changed due to grid movement
+                 this.game.debug.log(`Player moved to grid (${this.gridX}, ${this.gridY})`);
+            }
+        }
     }
 
     normalizeAngle(angle) {
@@ -149,10 +175,10 @@ export default class Player {
     takeDamage(amount) {
         this.health = Math.max(0, this.health - amount);
         this._stateChanged = true;
-        
+
         // Trigger damage effect
         // this.game.renderer.createEffect('damage', this.x, this.y);
-        
+
         return this.health;
     }
 
@@ -176,13 +202,13 @@ export default class Player {
 
     equipItem(item) {
         if (!item || !item.type || !item.slot) return false;
-        
+
         // Store previous item if any
         const previousItem = this.equipment[item.slot];
-        
+
         // Equip new item
         this.equipment[item.slot] = item;
-        
+
         // Apply equipment effects (e.g., armor increases max health)
         if (item.effect) {
             for (const [stat, value] of Object.entries(item.effect)) {
@@ -192,16 +218,16 @@ export default class Player {
                 // Add other stat effects as needed
             }
         }
-        
+
         this._stateChanged = true;
         return true;
     }
 
     unequipItem(slot) {
         if (!slot || !this.equipment[slot]) return false;
-        
+
         const item = this.equipment[slot];
-        
+
         // Remove equipment effects
         if (item.effect) {
             for (const [stat, value] of Object.entries(item.effect)) {
@@ -212,10 +238,10 @@ export default class Player {
                 // Remove other stat effects as needed
             }
         }
-        
+
         // Clear equipment slot
         this.equipment[slot] = null;
-        
+
         this._stateChanged = true;
         return true;
     }
@@ -245,10 +271,8 @@ export default class Player {
                  }
                 break;
             case 'vehicle':
-                // Example: Enter vehicle on key press (implementation depends on input access)
-                // if (!this.insideVehicle && this.game.input.isKeyDown('KeyE')) {
-                //     this.enterVehicle(other);
-                // }
+                // Interaction is now handled by PlayerActionHandler ('E' key)
+                // We might add passive effects on collision later (e.g., bump damage)
                 break;
             // Add cases for other collidable types (e.g., projectiles, hazards)
             default:
@@ -267,7 +291,8 @@ export default class Player {
 
         // 1. Optimistically add the resource locally for immediate feedback
         //    This will be overwritten/confirmed by the presence update anyway.
-        this.addResource(resource.resourceType, resource.amount);
+        //    No, let's rely on the network confirmation to avoid potential desync if collection fails server-side (if that logic existed)
+        // this.addResource(resource.resourceType, resource.amount); // Removed optimistic update
 
         // 2. Send request to update the *shared* room state, removing the resource
         //    This is the crucial step for synchronization.
@@ -277,13 +302,17 @@ export default class Player {
             }
         });
 
-        // 3. Send an update for *this player's* presence, reflecting the new resource count
-        //    This ensures other players see the updated inventory quickly.
+        // 3. Send a *request* to update *this player's* presence, reflecting the added resource count
+        //    The server/host would ideally validate this and then broadcast the updated presence.
+        //    For pure client-side authority (like current Websim setup), we directly update our own presence.
+        //    Create a temporary new resources object reflecting the change.
+        const newResources = { ...this.resources };
+        newResources[resource.resourceType] = (newResources[resource.resourceType] || 0) + resource.amount;
         this.game.network.updatePresence({
-            resources: this.resources // Send the updated resources object
+            resources: newResources // Send the potential new resources object
         });
-        // Note: _stateChanged will be true because addResource was called,
-        // so the regular presence update might also send this shortly after, which is fine.
+        // NOTE: We don't call addResource locally here anymore. The change will come back via presence update.
+        // this._stateChanged = true; // Flagging state changed here might cause duplicate updates if presence echo is fast.
 
         // 4. Trigger a local visual effect for immediate feedback
         if (this.game.renderer) {
@@ -301,13 +330,12 @@ export default class Player {
         // });
 
         // Local logging
-        this.game.debug.log(`Player ${this.id} collected ${resource.amount} ${resource.resourceType} from ${resource.id}`);
-        this._stateChanged = true; // Ensure state is marked changed after collection attempt
+        this.game.debug.log(`Player ${this.id} requested collection of ${resource.amount} ${resource.resourceType} from ${resource.id}`);
     }
 
-    // --- Modified Enter/Exit Vehicle to use Player State ---
+    // --- State Transition Methods (Step 2 Implementation) ---
     enterVehicle(vehicle) {
-        // Use playerState instead of insideVehicle
+        // Can only enter from Overworld state
         if (!vehicle || this.playerState !== 'Overworld') return false;
 
         this.playerState = 'Interior';
@@ -319,14 +347,14 @@ export default class Player {
         this.vehicleId = vehicle.id; // Keep legacy field synced for now
         this.insideVehicle = true; // Keep legacy field synced
 
-        this._stateChanged = true;
-        this.game.debug.log(`Player ${this.id} entering vehicle ${vehicle.id}. State: ${this.playerState}, Grid Pos: (${this.gridX}, ${this.gridY})`);
+        this._stateChanged = true; // Mark state changed for network sync
+        this.game.debug.log(`Player ${this.id} transitioned to Interior state in vehicle ${vehicle.id}. Grid Pos: (${this.gridX}, ${this.gridY})`);
         return true;
     }
 
     exitVehicle() {
-        // Use playerState instead of insideVehicle
-        if (this.playerState !== 'Interior') return false;
+        // Can only exit from Interior state
+        if (this.playerState !== 'Interior' || !this.currentVehicleId) return false;
 
         const vehicle = this.game.entities.get(this.currentVehicleId);
         if (!vehicle) {
@@ -334,76 +362,101 @@ export default class Player {
              // Force state back to Overworld anyway?
              this.playerState = 'Overworld';
              this.currentVehicleId = null;
-             this.vehicleId = null;
-             this.insideVehicle = false;
+             this.vehicleId = null; // Legacy
+             this.insideVehicle = false; // Legacy
              this._stateChanged = true;
              return false;
         }
 
-        // Check if player is at the door location
+        // Ensure player is at the door location to exit
         if (this.gridX !== vehicle.doorLocation?.x || this.gridY !== vehicle.doorLocation?.y) {
             this.game.ui.showNotification("Must be at the door to exit.", "warn");
+            this.game.debug.log(`Player ${this.id} failed exit: Not at door (Player: ${this.gridX},${this.gridY} | Door: ${vehicle.doorLocation?.x},${vehicle.doorLocation?.y})`);
             return false;
         }
 
-        // Position player outside the vehicle
-        const exitOffset = (vehicle.size || 30) / 2 + this.size / 2 + 5;
-        this.x = vehicle.x + Math.cos(vehicle.angle) * exitOffset;
-        this.y = vehicle.y + Math.sin(vehicle.angle) * exitOffset;
+        // Position player slightly outside the vehicle, based on vehicle angle
+        const exitOffset = (vehicle.size || 30) / 2 + this.size / 2 + 5; // Place just outside radius sum
+        const exitAngle = vehicle.angle !== undefined ? vehicle.angle : 0;
+        this.x = vehicle.x + Math.cos(exitAngle) * exitOffset;
+        this.y = vehicle.y + Math.sin(exitAngle) * exitOffset;
+        this.angle = exitAngle; // Align player angle with vehicle exit angle
 
         // Change state back to Overworld
         this.playerState = 'Overworld';
         this.currentVehicleId = null;
-
         this.vehicleId = null; // Keep legacy field synced
         this.insideVehicle = false; // Keep legacy field synced
 
-        this._stateChanged = true;
-        this.game.debug.log(`Player ${this.id} exiting vehicle ${vehicle.id}. State: ${this.playerState}`);
+        this._stateChanged = true; // Mark state changed for network sync
+        this.game.debug.log(`Player ${this.id} transitioned to Overworld state from vehicle ${vehicle.id}. World Pos: (${this.x.toFixed(0)}, ${this.y.toFixed(0)})`);
         return true;
     }
 
-     // New function to transition to Piloting state
      startPilotingVehicle() {
+         // Can only pilot from Interior state
          if (this.playerState !== 'Interior' || !this.currentVehicleId) return false;
          const vehicle = this.game.entities.get(this.currentVehicleId);
-         if (!vehicle) return false;
+         if (!vehicle) {
+             this.game.debug.warn(`Player ${this.id} trying to pilot, but vehicle ${this.currentVehicleId} not found.`);
+             return false;
+         }
 
          // Check if player is at the pilot seat location
          if (this.gridX !== vehicle.pilotSeatLocation?.x || this.gridY !== vehicle.pilotSeatLocation?.y) {
              this.game.ui.showNotification("Must be at the pilot seat.", "warn");
+             this.game.debug.log(`Player ${this.id} failed pilot: Not at seat (Player: ${this.gridX},${this.gridY} | Seat: ${vehicle.pilotSeatLocation?.x},${vehicle.pilotSeatLocation?.y})`);
              return false;
          }
 
-         this.playerState = 'Piloting';
-         vehicle.setDriver(this.id); // Vehicle now registers the driver
+         // Check if someone else is already driving
+         if (vehicle.driver && vehicle.driver !== this.id) {
+            this.game.ui.showNotification("Pilot seat is occupied.", "warn");
+             this.game.debug.log(`Player ${this.id} failed pilot: Seat occupied by ${vehicle.driver}`);
+            return false;
+         }
 
-         // Send room state update for vehicle driver change
+         this.playerState = 'Piloting';
+         vehicle.setDriver(this.id); // Vehicle registers the driver (sets _stateChanged on vehicle)
+
+         // Send room state update for vehicle driver change *immediately*
          this.game.network.updateRoomState({
-            vehicles: {
+             vehicles: {
                  [vehicle.id]: {
                      driver: this.id
                  }
              }
          });
+         // Also ensure vehicle's local state reflects the change immediately
+         if(vehicle.clearStateChanged) vehicle.clearStateChanged();
 
-         this._stateChanged = true;
-         this.game.debug.log(`Player ${this.id} starts piloting vehicle ${vehicle.id}. State: ${this.playerState}`);
+         this._stateChanged = true; // Mark player state changed for network sync
+         this.game.debug.log(`Player ${this.id} transitioned to Piloting state in vehicle ${vehicle.id}.`);
          return true;
      }
 
-     // New function to transition back from Piloting to Interior
      stopPilotingVehicle() {
+         // Can only stop piloting from Piloting state
          if (this.playerState !== 'Piloting' || !this.currentVehicleId) return false;
          const vehicle = this.game.entities.get(this.currentVehicleId);
-         if (!vehicle) return false; // Should not happen if piloting
+         // Should always find vehicle if piloting, but check anyway
+         if (!vehicle) {
+              this.game.debug.warn(`Player ${this.id} trying to stop piloting, but vehicle ${this.currentVehicleId} not found (this shouldn't happen).`);
+              // Force back to interior?
+              this.playerState = 'Interior';
+              // Guess position near pilot seat
+              this.gridX = vehicle?.pilotSeatLocation?.x ?? 0;
+              this.gridY = vehicle?.pilotSeatLocation?.y ?? 0;
+              this._stateChanged = true;
+              return false;
+         }
 
          this.playerState = 'Interior';
          this.gridX = vehicle.pilotSeatLocation?.x ?? 0; // Position player back at the seat
          this.gridY = vehicle.pilotSeatLocation?.y ?? 0;
-         vehicle.removeDriver(); // Vehicle removes driver
+         vehicle.removeDriver(); // Vehicle removes driver (sets _stateChanged on vehicle)
 
-         // Send room state update for vehicle driver change
+         // Send room state update for vehicle driver change *immediately*
          this.game.network.updateRoomState({
              vehicles: {
                  [vehicle.id]: {
@@ -411,11 +464,16 @@ export default class Player {
                  }
              }
          });
+         // Also ensure vehicle's local state reflects the change immediately
+         if(vehicle.clearStateChanged) vehicle.clearStateChanged();
 
-         this._stateChanged = true;
-         this.game.debug.log(`Player ${this.id} stops piloting vehicle ${vehicle.id}. State: ${this.playerState}`);
+
+         this._stateChanged = true; // Mark player state changed for network sync
+         this.game.debug.log(`Player ${this.id} transitioned back to Interior state from piloting vehicle ${vehicle.id}.`);
          return true;
      }
+    // --- End State Transition Methods ---
+
 
     render(ctx, x, y, size) {
         // Custom rendering for player
@@ -423,12 +481,12 @@ export default class Player {
         const healthPercent = this.health / this.maxHealth;
         const g = Math.floor(255 * healthPercent);
         ctx.fillStyle = `rgb(100, ${g}, 255)`;
-        
+
         // Draw player body
         ctx.beginPath();
         ctx.arc(x, y, size / 2, 0, Math.PI * 2);
         ctx.fill();
-        
+
         // Draw direction indicator
         ctx.strokeStyle = 'white';
         ctx.lineWidth = 2;
@@ -466,27 +524,32 @@ export default class Player {
     // Checks if the current state is significantly different from the last sent state
     hasStateChanged() {
         // Always return true if the internal flag is set
-        if (this._stateChanged) return true; 
+        if (this._stateChanged) return true;
 
         // Fallback: If flag wasn't set, do a quick check just in case
         // (This might not be strictly necessary if _stateChanged is managed perfectly)
         const currentState = this.getNetworkState();
         const lastState = this._lastNetworkState;
 
-        const positionThresholdSq = 1*1; // Use squared distance
-        const dx = currentState.x - lastState.x;
-        const dy = currentState.y - lastState.y;
-        const positionChanged = (dx * dx + dy * dy) > positionThresholdSq;
-            
-        const angleThreshold = 0.1; // Radians
-        const angleChanged = Math.abs(this.normalizeAngle(currentState.angle - lastState.angle)) > angleThreshold;
-        
+        // Don't bother checking position/angle if not in overworld
+        let positionChanged = false;
+        let angleChanged = false;
+        if (currentState.playerState === 'Overworld') {
+            const positionThresholdSq = 1*1; // Use squared distance
+            const dx = currentState.x - lastState.x;
+            const dy = currentState.y - lastState.y;
+            positionChanged = (dx * dx + dy * dy) > positionThresholdSq;
+
+            const angleThreshold = 0.1; // Radians
+            angleChanged = Math.abs(this.normalizeAngle(currentState.angle - lastState.angle)) > angleThreshold;
+        }
+
         const healthChanged = currentState.health !== lastState.health;
-        const vehicleChanged = currentState.vehicleId !== lastState.vehicleId;
-        
+        const vehicleChanged = currentState.vehicleId !== lastState.vehicleId; // Legacy
+
         // More efficient resource check if resources change frequently
         const resourcesChanged = JSON.stringify(currentState.resources) !== JSON.stringify(lastState.resources);
-        
+
         const equipmentChanged = JSON.stringify(currentState.equipment) !== JSON.stringify(lastState.equipment);
 
         // Add checks for new state properties
