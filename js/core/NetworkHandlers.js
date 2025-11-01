@@ -1,1 +1,71 @@
-```javascript\n// New file: js/core/NetworkHandlers.js\nimport { syncVehiclesFromNetwork } from './VehicleSync.js';\n\nexport function setupNetworkHandlers(networkManager) {\n    const game = networkManager.game;\n    if (!networkManager.room) {\n        game.debug.error(\"Network room not available for setting up handlers.\");\n        return;\n    }\n\n    // Presence subscription\n    networkManager.unsubscribePresence = networkManager.subscribePresence((presence) => {\n        try {\n            const peers = networkManager.getPeers();\n            for (const entity of game.entities.getByType('player')) {\n                const peerInfo = peers ? peers[entity.id] : null;\n                const expectedName = peerInfo ? peerInfo.username : `Player ${entity.id.substring(0,4)}`;\n                if (entity.name !== expectedName) entity.name = expectedName;\n            }\n            game.entities.syncFromNetworkPresence(presence, networkManager.clientId);\n        } catch (e) {\n            game.debug.error('Error in presence handler:', e);\n        }\n    });\n\n    // Room state subscription\n    networkManager.unsubscribeRoomState = networkManager.subscribeRoomState((roomState) => {\n        try {\n            if (!networkManager.worldSeedConfirmed && roomState.worldSeed !== undefined && roomState.worldSeed !== null) {\n                networkManager.worldSeed = roomState.worldSeed;\n                networkManager.worldSeedConfirmed = true;\n                game.debug.log(`World seed confirmed via subscription: ${networkManager.worldSeed}`);\n                game.confirmWorldSeed?.(networkManager.worldSeed);\n            }\n\n            if (roomState.resources !== undefined && game.worldObjectManager) {\n                game.worldObjectManager.updateResourceOverrides(roomState.resources);\n            }\n\n            if (game.world?.syncFromNetworkState) {\n                const worldStateOnly = { ...roomState };\n                delete worldStateOnly.resources;\n                game.world.syncFromNetworkState(worldStateOnly);\n            }\n\n            if (roomState.vehicles) {\n                syncVehiclesFromNetwork(networkManager, roomState.vehicles);\n            }\n        } catch (e) {\n            game.debug.error('Error in roomState handler:', e);\n        }\n    });\n\n    // Presence update requests\n    networkManager.unsubscribePresenceRequests = networkManager.subscribePresenceUpdateRequests((updateRequest, fromClientId) => {\n        try {\n            networkManager.handlePresenceUpdateRequest(updateRequest, fromClientId);\n        } catch (e) {\n            game.debug.error('Error in presence update requests handler:', e);\n        }\n    });\n\n    // Message handling\n    networkManager.room.onmessage = (event) => {\n        try {\n            networkManager.handleNetworkEvent(event.data || event);\n        } catch (e) {\n            game.debug.error('Error handling network message:', e);\n        }\n    };\n\n\n```\n\nThe updated code is consistent with the provided plan.\n\n```
+// New file: js/core/NetworkHandlers.js
+import { syncVehiclesFromNetwork } from './VehicleSync.js';
+
+export function setupNetworkHandlers(networkManager) {
+    const game = networkManager.game;
+    if (!networkManager.room) {
+        game.debug.error("Network room not available for setting up handlers.");
+        return;
+    }
+
+    // Presence subscription
+    networkManager.unsubscribePresence = networkManager.subscribePresence((presence) => {
+        try {
+            const peers = networkManager.getPeers();
+            for (const entity of game.entities.getByType('player')) {
+                const peerInfo = peers ? peers[entity.id] : null;
+                const expectedName = peerInfo ? peerInfo.username : `Player ${entity.id.substring(0,4)}`;
+                if (entity.name !== expectedName) entity.name = expectedName;
+            }
+            game.entities.syncFromNetworkPresence(presence, networkManager.clientId);
+        } catch (e) {
+            game.debug.error('Error in presence handler:', e);
+        }
+    });
+
+    // Room state subscription
+    networkManager.unsubscribeRoomState = networkManager.subscribeRoomState((roomState) => {
+        try {
+            if (!networkManager.worldSeedConfirmed && roomState.worldSeed !== undefined && roomState.worldSeed !== null) {
+                networkManager.worldSeed = roomState.worldSeed;
+                networkManager.worldSeedConfirmed = true;
+                game.debug.log(`World seed confirmed via subscription: ${networkManager.worldSeed}`);
+                game.confirmWorldSeed?.(networkManager.worldSeed);
+            }
+
+            if (roomState.resources !== undefined && game.worldObjectManager) {
+                game.worldObjectManager.updateResourceOverrides(roomState.resources);
+            }
+
+            if (game.world?.syncFromNetworkState) {
+                const worldStateOnly = { ...roomState };
+                delete worldStateOnly.resources;
+                game.world.syncFromNetworkState(worldStateOnly);
+            }
+
+            if (roomState.vehicles) {
+                syncVehiclesFromNetwork(networkManager, roomState.vehicles);
+            }
+        } catch (e) {
+            game.debug.error('Error in roomState handler:', e);
+        }
+    });
+
+    // Presence update requests
+    networkManager.unsubscribePresenceRequests = networkManager.subscribePresenceUpdateRequests((updateRequest, fromClientId) => {
+        try {
+            networkManager.handlePresenceUpdateRequest(updateRequest, fromClientId);
+        } catch (e) {
+            game.debug.error('Error in presence update requests handler:', e);
+        }
+    });
+
+    // Message handling
+    networkManager.room.onmessage = (event) => {
+        try {
+            networkManager.handleNetworkEvent(event.data || event);
+        } catch (e) {
+            game.debug.error('Error handling network message:', e);
+        }
+    };
+}
