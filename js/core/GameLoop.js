@@ -1,1 +1,163 @@
-```javascript\nexport default class GameLoop {\n    constructor(game) {\n        this.game = game;\n        this.isRunning = false;\n        this.lastFrameTime = 0;\n        this.deltaTime = 0;\n        this.rawDeltaTime = 0;\n        this.gameLoop = this.gameLoop.bind(this);\n    }\n\n    start() {\n        if (this.isRunning) return;\n        this.isRunning = true;\n        this.lastFrameTime = performance.now();\n        this.game.performance.reset();\n        requestAnimationFrame(this.gameLoop);\n        this.game.debug.log('Game started');\n    }\n\n    stop() {\n        this.isRunning = false;\n        this.game.debug.log('Game stopped');\n        if (this.game.network) this.game.network.disconnect();\n    }\n\n    gameLoop(timestamp) {\n        if (!this.isRunning) return;\n\n        const now = performance.now();\n        const rawDt = (now - this.lastFrameTime) / 1000;\n        this.lastFrameTime = now;\n        this.deltaTime = Math.min(rawDt, 1 / 30);\n        this.rawDeltaTime = rawDt;\n\n        this.game.performance.update(timestamp, this.rawDeltaTime);\n\n        this.game.input.update();\n        this.game.interactions.handleInput(now);\n\n        // Call the game's update/render responsibilities\n        this.gameUpdate(this.deltaTime, timestamp);\n        this.gameRender();\n\n        requestAnimationFrame(this.gameLoop);\n    }\n\n    gameUpdate(deltaTime, timestamp) {\n        const game = this.game;\n\n        // Time of day handling & ambient light\n        if (game.timeAuthority) {\n            const cycleDuration = game.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;\n            const timeIncrement = deltaTime / cycleDuration;\n            game.timeOfDay = (game.timeOfDay + timeIncrement) % 1;\n            if (timestamp - game.lastTimeSync > game.timeSyncInterval) {\n                game.network.updateRoomState({ timeOfDay: game.timeOfDay });\n                game.lastTimeSync = timestamp;\n            }\n        }\n\n        const ambientFactor = Math.cos((game.timeOfDay - 0.5) * Math.PI * 2) * 0.5 + 0.5;\n        const ambientIntensity = Math.max(0.1, ambientFactor);\n        const baseAmbient = { r: 50, g: 50, b: 70 };\n        const dayAmbient = { r: 200, g: 200, b: 220 };\n        const currentAmbient = {\n            r: Math.floor(baseAmbient.r + (dayAmbient.r - baseAmbient.r) * ambientIntensity),\n            g: Math.floor(baseAmbient.g + (dayAmbient.g - baseAmbient.g) * ambientIntensity),\n            b: Math.floor(baseAmbient.b + (dayAmbient.b - baseAmbient.b) * ambientIntensity),\n        };\n        game.lightManager.setGlobalAmbientLight(currentAmbient);\n\n        // World update\n        const cameraCenterX = game.player ? game.player.x : game.renderer?.camera?.x ?? 0;\n        const cameraCenterY = game.player ? game.player.y : game.renderer?.camera?.y ?? 0;\n        game.world?.update(deltaTime, cameraCenterX, cameraCenterY);\n\n        // Player logic\n        if (game.player && !game.isGuestMode) {\n            const playerState = game.player.playerState;\n            switch (playerState) {\n                case 'Overworld':\n                case 'Interior':\n                    game.player.update(deltaTime, game.input);\n                    break;\n                case 'Piloting':\n                    break;\n                case 'Building':\n                    game.ui?.baseBuilding?.buildingManager?.update?.(deltaTime);\n                    break;\n            }\n        }\n\n        // Entities, collisions, shadows, network sync, UI\n        game.entities.update(deltaTime);\n        if (game.player?.playerState === 'Overworld' || game.entities.getByType('vehicle').some(v => v)) {\n            game.collisions.checkCollisions();\n        }\n        game.shadowManager.calculateShadows();\n        game.syncNetworkState?.();\n        game.ui.update();\n    }\n\n    gameRender() {\n        const game = this.game;\n        if (!game.renderer) return;\n\n        game.renderer.lastFrameTime = this.lastFrameTime;\n        game.renderer.clear();\n\n        // Camera target selection\n        let cameraTarget = game.player ? game.player : { x: 0, y: 0 };\n        if (game.player?.playerState === 'Piloting') {\n            cameraTarget = game.entities.get(game.player.currentVehicleId) || cameraTarget;\n        } else if (game.isGuestMode) {\n            const players = game.entities.getByType('player');\n            if (players.length > 0) {\n                let avgX = 0, avgY = 0;\n                players.forEach(p => { avgX += p.x; avgY += p.y; });\n                cameraTarget = { x: avgX / players.length, y: avgY / players.length };\n            } else cameraTarget = { x: 0, y: 0 };\n        }\n\n        // Render modes\n        if (game.player?.playerState === 'Interior') {\n            const vehicle = game.entities.get(game.player.currentVehicleId);\n            if (vehicle && game.renderer.interiorRenderer) {\n                game.renderer.interiorRenderer.render(vehicle, game.player);\n            } else { this.renderErrorState('Interior Render Error'); }\n        } else if (game.player?.playerState === 'Building') {\n            if (game.renderer.baseBuildingRenderer) {\n                game.renderer.ctx.fillStyle = '#151515';\n                game.renderer.ctx.fillRect(0, 0, game.renderer.canvas.width, game.renderer.canvas.height);\n            } else { this.renderErrorState('Building Render Error'); }\n        } else {\n            game.world ? game.renderer.renderWorld(game.world, cameraTarget) : this.renderFallbackBackground();\n            const entitiesToRender = (game.player?.playerState === 'Piloting')\n                ? game.entities.getAll().filter(e => e.id !== game.player.id)\n                : game.entities.getAll();\n            game.renderer.renderEntities(entitiesToRender, game.player);\n            game.renderer.renderShadows();\n            game.renderer.renderEffects();\n        }\n\n        game.renderer.renderUI(game);\n    }\n\n    // Helper passthroughs for compatibility if Game calls them\n    renderErrorState(message) {\n        if (!this.game || !this.game.renderer) return;\n        this.game.renderer.ctx.fillStyle = 'red';\n        this.game.renderer.ctx.fillRect(0, 0, this.game.renderer.canvas.width, this.game.renderer.canvas.height);\n        this.game.renderer.ctx.fillStyle = 'white';\n        this.game.renderer.ctx.font = '20px monospace';\n        this.game.renderer.ctx.textAlign = 'center';\n        this.game.renderer.ctx.fillText(`Error: ${message}`, this.game.renderer.canvas.width / 2, this.game.renderer.canvas.height / 2);\n    }\n\n    renderFallbackBackground() {\n        if (!this.game || !this.game.renderer) return;\n        this.game.renderer.ctx.fillStyle = '#111';\n        this.game.renderer.ctx.fillRect(0, 0, this.game.renderer.canvas.width, this.game.renderer.canvas.height);\n    }\n}\n```\n\n\n```
+export default class GameLoop {
+    constructor(game) {
+        this.game = game;
+        this.isRunning = false;
+        this.lastFrameTime = 0;
+        this.deltaTime = 0;
+        this.rawDeltaTime = 0;
+        this.gameLoop = this.gameLoop.bind(this);
+    }
+
+    start() {
+        if (this.isRunning) return;
+        this.isRunning = true;
+        this.lastFrameTime = performance.now();
+        this.game.performance.reset();
+        requestAnimationFrame(this.gameLoop);
+        this.game.debug.log('Game started');
+    }
+
+    stop() {
+        this.isRunning = false;
+        this.game.debug.log('Game stopped');
+        if (this.game.network) this.game.network.disconnect();
+    }
+
+    gameLoop(timestamp) {
+        if (!this.isRunning) return;
+
+        const now = performance.now();
+        const rawDt = (now - this.lastFrameTime) / 1000;
+        this.lastFrameTime = now;
+        this.deltaTime = Math.min(rawDt, 1 / 30);
+        this.rawDeltaTime = rawDt;
+
+        this.game.performance.update(timestamp, this.rawDeltaTime);
+
+        this.game.input.update();
+        this.game.interactions.handleInput(now);
+
+        // Call the game's update/render responsibilities
+        this.gameUpdate(this.deltaTime, timestamp);
+        this.gameRender();
+
+        requestAnimationFrame(this.gameLoop);
+    }
+
+    gameUpdate(deltaTime, timestamp) {
+        const game = this.game;
+
+        // Time of day handling & ambient light
+        if (game.timeAuthority) {
+            const cycleDuration = game.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
+            const timeIncrement = deltaTime / cycleDuration;
+            game.timeOfDay = (game.timeOfDay + timeIncrement) % 1;
+            if (timestamp - game.lastTimeSync > game.timeSyncInterval) {
+                game.network.updateRoomState({ timeOfDay: game.timeOfDay });
+                game.lastTimeSync = timestamp;
+            }
+        }
+
+        const ambientFactor = Math.cos((game.timeOfDay - 0.5) * Math.PI * 2) * 0.5 + 0.5;
+        const ambientIntensity = Math.max(0.1, ambientFactor);
+        const baseAmbient = { r: 50, g: 50, b: 70 };
+        const dayAmbient = { r: 200, g: 200, b: 220 };
+        const currentAmbient = {
+            r: Math.floor(baseAmbient.r + (dayAmbient.r - baseAmbient.r) * ambientIntensity),
+            g: Math.floor(baseAmbient.g + (dayAmbient.g - baseAmbient.g) * ambientIntensity),
+            b: Math.floor(baseAmbient.b + (dayAmbient.b - baseAmbient.b) * ambientIntensity),
+        };
+        game.lightManager.setGlobalAmbientLight(currentAmbient);
+
+        // World update
+        const cameraCenterX = game.player ? game.player.x : game.renderer?.camera?.x ?? 0;
+        const cameraCenterY = game.player ? game.player.y : game.renderer?.camera?.y ?? 0;
+        game.world?.update(deltaTime, cameraCenterX, cameraCenterY);
+
+        // Player logic
+        if (game.player && !game.isGuestMode) {
+            const playerState = game.player.playerState;
+            switch (playerState) {
+                case 'Overworld':
+                case 'Interior':
+                    game.player.update(deltaTime, game.input);
+                    break;
+                case 'Piloting':
+                    break;
+                case 'Building':
+                    game.ui?.baseBuilding?.buildingManager?.update?.(deltaTime);
+                    break;
+            }
+        }
+
+        // Entities, collisions, shadows, network sync, UI
+        game.entities.update(deltaTime);
+        if (game.player?.playerState === 'Overworld' || game.entities.getByType('vehicle').some(v => v)) {
+            game.collisions.checkCollisions();
+        }
+        game.shadowManager.calculateShadows();
+        game.syncNetworkState?.();
+        game.ui.update();
+    }
+
+    gameRender() {
+        const game = this.game;
+        if (!game.renderer) return;
+
+        game.renderer.lastFrameTime = this.lastFrameTime;
+        game.renderer.clear();
+
+        // Camera target selection
+        let cameraTarget = game.player ? game.player : { x: 0, y: 0 };
+        if (game.player?.playerState === 'Piloting') {
+            cameraTarget = game.entities.get(game.player.currentVehicleId) || cameraTarget;
+        } else if (game.isGuestMode) {
+            const players = game.entities.getByType('player');
+            if (players.length > 0) {
+                let avgX = 0, avgY = 0;
+                players.forEach(p => { avgX += p.x; avgY += p.y; });
+                cameraTarget = { x: avgX / players.length, y: avgY / players.length };
+            } else cameraTarget = { x: 0, y: 0 };
+        }
+
+        // Render modes
+        if (game.player?.playerState === 'Interior') {
+            const vehicle = game.entities.get(game.player.currentVehicleId);
+            if (vehicle && game.renderer.interiorRenderer) {
+                game.renderer.interiorRenderer.render(vehicle, game.player);
+            } else { this.renderErrorState('Interior Render Error'); }
+        } else if (game.player?.playerState === 'Building') {
+            if (game.renderer.baseBuildingRenderer) {
+                game.renderer.ctx.fillStyle = '#151515';
+                game.renderer.ctx.fillRect(0, 0, game.renderer.canvas.width, game.renderer.canvas.height);
+            } else { this.renderErrorState('Building Render Error'); }
+        } else {
+            game.world ? game.renderer.renderWorld(game.world, cameraTarget) : this.renderFallbackBackground();
+            const entitiesToRender = (game.player?.playerState === 'Piloting')
+                ? game.entities.getAll().filter(e => e.id !== game.player.id)
+                : game.entities.getAll();
+            game.renderer.renderEntities(entitiesToRender, game.player);
+            game.renderer.renderShadows();
+            game.renderer.renderEffects();
+        }
+
+        game.renderer.renderUI(game);
+    }
+
+    // Helper passthroughs for compatibility if Game calls them
+    renderErrorState(message) {
+        if (!this.game || !this.game.renderer) return;
+        this.game.renderer.ctx.fillStyle = 'red';
+        this.game.renderer.ctx.fillRect(0, 0, this.game.renderer.canvas.width, this.game.renderer.canvas.height);
+        this.game.renderer.ctx.fillStyle = 'white';
+        this.game.renderer.ctx.font = '20px monospace';
+        this.game.renderer.ctx.textAlign = 'center';
+        this.game.renderer.ctx.fillText(`Error: ${message}`, this.game.renderer.canvas.width / 2, this.game.renderer.canvas.height / 2);
+    }
+
+    renderFallbackBackground() {
+        if (!this.game || !this.game.renderer) return;
+        this.game.renderer.ctx.fillStyle = '#111';
+        this.game.renderer.ctx.fillRect(0, 0, this.game.renderer.canvas.width, this.game.renderer.canvas.height);
+    }
+}
