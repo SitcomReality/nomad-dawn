@@ -14,6 +14,7 @@ import PerformanceMonitor from './PerformanceMonitor.js';
 import WorldObjectManager from '../world/WorldObjectManager.js';
 import LightManager from '../lighting/LightManager.js';
 import ShadowManager from '../lighting/ShadowManager.js'; // NEW: Import ShadowManager
+import GameLoop from './GameLoop.js'; // NEW: Import GameLoop
 
 // Make Player class globally accessible for EntityManager remote player creation
 window.Player = Player;
@@ -66,7 +67,8 @@ export default class Game {
         this.worldSeedConfirmed = false;
 
         // Bind game loop to maintain this context
-        this.gameLoop = this.gameLoop.bind(this);
+        // Initialize the game loop controller (handles timing, update/render loop)
+        this.loop = new GameLoop(this);
     }
 
     async initializeNetwork() {
@@ -280,214 +282,9 @@ export default class Game {
         }
     }
 
-    start() {
-        if (!this.isRunning) {
-            this.isRunning = true;
-            this.lastFrameTime = performance.now();
-            this.performance.reset();
-            requestAnimationFrame(this.gameLoop);
-            this.debug.log('Game started');
-        }
-    }
-
-    stop() {
-        this.isRunning = false;
-        this.debug.log('Game stopped');
-        if (this.network) {
-            this.network.disconnect();
-        }
-    }
-
-    gameLoop(timestamp) {
-        if (!this.isRunning) return;
-
-        const now = performance.now();
-        const rawDt = (now - this.lastFrameTime) / 1000;
-        this.lastFrameTime = now;
-        this.deltaTime = Math.min(rawDt, 1 / 30); // Cap delta time at 30 FPS equivalent
-        this.rawDeltaTime = rawDt;
-
-        this.performance.update(timestamp, this.rawDeltaTime);
-
-        this.input.update();
-        this.interactions.handleInput(now);
-
-        this.update(this.deltaTime, timestamp);
-
-        this.render();
-
-        requestAnimationFrame(this.gameLoop);
-    }
-
-    update(deltaTime, timestamp) {
-        // Update Time of Day
-        if (this.timeAuthority) {
-            const cycleDuration = this.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
-            const timeIncrement = deltaTime / cycleDuration;
-            this.timeOfDay = (this.timeOfDay + timeIncrement) % 1;
-
-            if (timestamp - this.lastTimeSync > this.timeSyncInterval) {
-                this.network.updateRoomState({ timeOfDay: this.timeOfDay });
-                this.lastTimeSync = timestamp;
-            }
-        }
-        // Calculate Ambient Light based on Time of Day
-        const ambientFactor = Math.cos((this.timeOfDay - 0.5) * Math.PI * 2) * 0.5 + 0.5; // 0 at midnight, 1 at noon
-        const ambientIntensity = Math.max(0.1, ambientFactor); // Min ambient brightness
-        const baseAmbient = { r: 50, g: 50, b: 70 }; // Base night color
-        const dayAmbient = { r: 200, g: 200, b: 220 }; // Brighter day color
-        const currentAmbient = {
-            r: Math.floor(baseAmbient.r + (dayAmbient.r - baseAmbient.r) * ambientIntensity),
-            g: Math.floor(baseAmbient.g + (dayAmbient.g - baseAmbient.g) * ambientIntensity),
-            b: Math.floor(baseAmbient.b + (dayAmbient.b - baseAmbient.b) * ambientIntensity),
-        };
-        this.lightManager.setGlobalAmbientLight(currentAmbient);
-
-        // Update World Chunks based on camera position
-        const cameraCenterX = this.player ? this.player.x : this.renderer?.camera?.x ?? 0; // Fallback to camera position if no player
-        const cameraCenterY = this.player ? this.player.y : this.renderer?.camera?.y ?? 0;
-        this.world?.update(deltaTime, cameraCenterX, cameraCenterY);
-
-        // Update Local Player Logic
-        if (this.player && !this.isGuestMode) {
-            const vehicle = this.player.currentVehicleId ? this.entities.get(this.player.currentVehicleId) : null;
-            const playerState = this.player.playerState;
-            switch (playerState) {
-                case 'Overworld':
-                case 'Interior':
-                    this.player.update(deltaTime, this.input);
-                    break;
-                case 'Piloting':
-                    // Vehicle movement is handled in the main entity loop below
-                    break;
-                case 'Building':
-                    this.ui?.baseBuilding?.buildingManager?.update?.(deltaTime);
-                    break;
-            }
-        }
-
-        // Update All Entities (including remote players, vehicles)
-        this.entities.update(deltaTime); // EntityManager now handles owned light updates
-
-        // Collision Detection (only in Overworld)
-        if (this.player?.playerState === 'Overworld' || this.entities.getByType('vehicle').some(v => v)) {
-            this.collisions.checkCollisions();
-        }
-
-        // --- NEW: Calculate Shadows ---
-        this.shadowManager.calculateShadows();
-        // --- END NEW ---
-
-        // Sync Network State
-        this.syncNetworkState();
-
-        // Update UI
-        this.ui.update();
-    }
-
-    syncNetworkState() {
-        // Sync local player presence if changed
-        if (this.player && !this.isGuestMode && this.player.hasStateChanged()) {
-            this.network.updatePresence(this.player.getNetworkState());
-            this.player.clearStateChanged();
-        }
-
-        // Sync vehicle state if changed (handled by the entity that owns the change, e.g., driver or building manager)
-        // Check all vehicles for changes (could be optimized)
-        for (const entity of this.entities.getByType('vehicle')) {
-            if (entity.hasStateChanged?.()) {
-                // Send full state less often, minimal state more often?
-                // For now, just send minimal state if changed
-                const updateData = entity.getMinimalNetworkState();
-                this.network.updateRoomState({
-                    vehicles: { [entity.id]: updateData }
-                });
-                entity.clearStateChanged?.();
-            }
-        }
-    }
-
-    render() {
-        if (!this.renderer) return;
-
-        this.renderer.lastFrameTime = this.lastFrameTime; // Used for EffectRenderer delta
-        this.renderer.clear();
-
-        // Determine camera target
-        let cameraTarget = this.player ? this.player : { x: 0, y: 0 }; // Default to player or origin
-        if (this.player?.playerState === 'Piloting') {
-            cameraTarget = this.entities.get(this.player.currentVehicleId) || cameraTarget; // Follow vehicle if piloting
-        } else if (this.isGuestMode) {
-            // Guest mode: Allow camera panning? For now, center on 0,0 or average player position?
-            // Let's center on 0,0 if no players, or average if players exist
-            const players = this.entities.getByType('player');
-            if (players.length > 0) {
-                let avgX = 0, avgY = 0;
-                players.forEach(p => { avgX += p.x; avgY += p.y; });
-                cameraTarget = { x: avgX / players.length, y: avgY / players.length };
-            } else {
-                cameraTarget = { x: 0, y: 0 }; // Default for guest with no players
-            }
-        }
-
-        // Render based on player state
-        if (this.player?.playerState === 'Interior') {
-            const vehicle = this.entities.get(this.player.currentVehicleId);
-            if (vehicle && this.renderer.interiorRenderer) {
-                this.renderer.interiorRenderer.render(vehicle, this.player);
-            } else { this.renderErrorState('Interior Render Error'); }
-        } else if (this.player?.playerState === 'Building') {
-            // Building UI is mostly DOM, but has its own canvas renderer
-            if (this.renderer.baseBuildingRenderer) { // Check if renderer exists
-                // Need to ensure the renderer is correctly referenced/instantiated if used here
-                // Assuming BaseBuildingUI handles its own rendering calls for now.
-                // We might just need a background color.
-                this.renderer.ctx.fillStyle = '#151515';
-                this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-            } else { this.renderErrorState('Building Render Error'); }
-        } else {
-            // Default: Render Overworld / Piloting / Guest View
-            this.world ? this.renderer.renderWorld(this.world, cameraTarget) : this.renderFallbackBackground();
-
-            const entitiesToRender = (this.player?.playerState === 'Piloting')
-                ? this.entities.getAll().filter(e => e.id !== this.player.id) // Don't render player marker when piloting
-                : this.entities.getAll();
-            // Pass localPlayer ref for highlighting etc.
-            this.renderer.renderEntities(entitiesToRender, this.player);
-
-            // --- NEW: Render Shadows ---
-            this.renderer.renderShadows();
-            // --- END NEW ---
-
-            this.renderer.renderEffects();
-        }
-
-        // Render UI on top (always rendered)
-        this.renderer.renderUI(this);
-        // Debug info is rendered via PerformanceMonitor -> UIRenderer.renderDebugInfo
-    }
-
-    renderErrorState(message) {
-        this.renderer.ctx.fillStyle = 'red';
-        this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-        this.renderer.ctx.fillStyle = 'white';
-        this.renderer.ctx.font = '20px monospace';
-        this.renderer.ctx.textAlign = 'center';
-        this.renderer.ctx.fillText(`Error: ${message}`, this.renderer.canvas.width / 2, this.renderer.canvas.height / 2);
-    }
-
-    renderFallbackBackground() {
-        this.renderer.ctx.fillStyle = '#111';
-        this.renderer.ctx.fillRect(0, 0, this.renderer.canvas.width, this.renderer.canvas.height);
-    }
-
-    pauseSimulation() {
-        // Placeholder -Pausing complex in multiplayer
-        this.debug.log("Simulation Paused (Input Disabled)");
-    }
-
-    resumeSimulation() {
-        // Placeholder
-        this.debug.log("Simulation Resumed");
-    }
+    // Delegated control methods for the GameLoop
+    start() { this.loop.start(); }
+    stop() { this.loop.stop(); }
+    renderErrorState(message) { return this.loop.renderErrorState(message); } // Keep compatibility
+    renderFallbackBackground() { return this.loop.renderFallbackBackground(); } // Keep compatibility
 }
