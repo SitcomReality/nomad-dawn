@@ -294,67 +294,49 @@ export default class VehicleBuildingManager {
     }
 
     sendNetworkUpdates() {
-        const updatesToSend = {};
-        let hasUpdates = false;
-        const sentPendingKeys = new Set(); // Track keys added to pending in this batch
-
+        // In single-player, apply queued changes directly to local vehicle state
         for (const vehicleId in this.networkUpdateQueue) {
             if (!this.networkUpdateQueue[vehicleId]) continue;
-            if (!this.pendingModifications[vehicleId]) {
-                 this.pendingModifications[vehicleId] = new Set();
-            }
 
-            const vehicleUpdates = {};
-            let vehicleHasUpdates = false;
+            const vehicle = this.game.entities.get(vehicleId);
+            if (!vehicle) continue;
 
-            // Tiles
             const tilesData = this.networkUpdateQueue[vehicleId].gridTiles;
-            if (tilesData && Object.keys(tilesData).length > 0) {
-                vehicleUpdates.gridTiles = { ...tilesData };
-                vehicleHasUpdates = true;
-                // --- NEW: Add tile keys to pending list ---
-                Object.keys(tilesData).forEach(cellKey => {
-                     const pendingKey = `${cellKey}:gridTiles`;
-                     this.pendingModifications[vehicleId].add(pendingKey);
-                     sentPendingKeys.add(`${vehicleId}:${pendingKey}`);
-                });
-                 // --- END NEW ---
+            if (tilesData) {
+                if (!vehicle.gridTiles) vehicle.gridTiles = {};
+                for (const cellKey of Object.keys(tilesData)) {
+                    if (tilesData[cellKey] === null) {
+                        delete vehicle.gridTiles[cellKey];
+                    } else {
+                        vehicle.gridTiles[cellKey] = tilesData[cellKey];
+                    }
+                }
             }
 
-            // Objects
             const objectsData = this.networkUpdateQueue[vehicleId].gridObjects;
-            if (objectsData && Object.keys(objectsData).length > 0) {
-                vehicleUpdates.gridObjects = { ...objectsData };
-                vehicleHasUpdates = true;
-                 // --- NEW: Add object keys to pending list ---
-                Object.keys(objectsData).forEach(cellKey => {
-                     const pendingKey = `${cellKey}:gridObjects`;
-                     this.pendingModifications[vehicleId].add(pendingKey);
-                     sentPendingKeys.add(`${vehicleId}:${pendingKey}`);
-                });
-                // --- END NEW ---
+            if (objectsData) {
+                if (!vehicle.gridObjects) vehicle.gridObjects = {};
+                for (const cellKey of Object.keys(objectsData)) {
+                    if (objectsData[cellKey] === null) {
+                        delete vehicle.gridObjects[cellKey];
+                    } else {
+                        vehicle.gridObjects[cellKey] = objectsData[cellKey];
+                    }
+                }
             }
 
-            if (vehicleHasUpdates) {
-                updatesToSend[vehicleId] = vehicleUpdates;
-                hasUpdates = true;
-            }
+            vehicle._stateChanged = true;
         }
+
+        // Clear pending modifications (changes are immediately applied)
+        this.pendingModifications = {};
 
         this.networkUpdateQueue = {};
         this.networkUpdateTimeout = null;
 
-        if (!hasUpdates) {
-            return;
-        }
-
-        // --- REMOVED: VehicleBuildingManager.sendNetworkUpdates debug log ---
-        this.game.network.updateRoomState({
-            vehicles: updatesToSend
-        });
-        // Trigger immediate UI update to show pending state
+        // Trigger immediate UI update
         if (this.uiManager?.baseBuilding?.isVisible) {
-             this.uiManager.baseBuilding.update();
+            this.uiManager.baseBuilding.update();
         }
     }
 

@@ -25,7 +25,6 @@ export default class PerformanceMonitor {
             // Update debug stats
             if (this.game.debug) {
                  const memoryUsage = performance.memory ? `${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : 'N/A';
-                 const networkState = this.game.network ? (this.game.network.connected ? 'Connected' : 'Disconnected') : 'N/A';
                  const player = this.game.player;
                  let playerPos = 'N/A';
                  if (player) {
@@ -36,12 +35,12 @@ export default class PerformanceMonitor {
                          case 'Overworld': playerPos = `Overworld (${Math.floor(player.x)}, ${Math.floor(player.y)})`; break;
                          default: playerPos = `Unknown State (${Math.floor(player.x)}, ${Math.floor(player.y)})`; break;
                      }
-                 } else if (this.game.isGuestMode) {
-                     playerPos = 'Guest Mode';
+                 } else {
+                     playerPos = 'N/A';
                  }
 
-                 const playerStateStr = player ? player.playerState : (this.game.isGuestMode ? 'Guest' : 'N/A');
-                 const clientId = this.game.network ? (this.game.network.clientId ? this.game.network.clientId.substring(0, 8) : (this.game.isGuestMode ? 'Guest' : 'None')) : 'N/A';
+                 const playerStateStr = player ? player.playerState : 'N/A';
+                 const clientId = this.game.network?.clientId ? this.game.network.clientId.substring(0, 8) : 'N/A';
                  const timeOfDayStr = this.game.timeOfDay.toFixed(3);
                  const vehiclesCount = this.game.entities ? this.game.entities.getByType('vehicle').length : 'N/A';
 
@@ -57,7 +56,6 @@ export default class PerformanceMonitor {
                     PlayerPos: playerPos,
                     Memory: memoryUsage,
                     ActiveChunks: this.game.world ? this.game.world.chunkManager.activeChunkIds.size : 'N/A',
-                    Network: networkState,
                     ClientID: clientId,
                     WOM_Total: womStats.totalObjects ?? 'N/A',
                     WOM_Visible: womStats.lastReturnCount ?? 'N/A',

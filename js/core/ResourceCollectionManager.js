@@ -26,15 +26,13 @@ export default class ResourceCollectionManager {
             return;
         }
 
-        // 1. Optimistically add the resource locally for immediate feedback
+        // 1. Add the resource locally
         player.addResource(resource.resourceType, resource.amount);
 
-        // 2. Send request to update the *shared* room state, removing the resource
-        this.game.network.updateRoomState({
-            resources: {
-                [resource.id]: null // Use null to signify deletion in room state
-            }
-        });
+        // 2. Mark resource as collected in the world object manager
+        if (this.game.worldObjectManager) {
+            this.game.worldObjectManager.updateResourceOverrides({ [resource.id]: null });
+        }
 
         // 3. Trigger a local visual effect for immediate feedback
         if (this.game.renderer) {

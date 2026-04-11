@@ -1,5 +1,0 @@
-- The main game loop and timing/rendering logic were moved to js/core/GameLoop.js.
-- Game.js now creates a GameLoop instance and delegates start/stop calls to it, keeping Game.js focused on initialization and state management.
-- Existing internal calls (e.g., syncNetworkState, renderErrorState) remain in Game for compatibility; GameLoop calls them where needed or provides fallback helpers.
-- No behavioral changes intended; this is a structural refactor to reduce Game.js size and improve modularity.
-

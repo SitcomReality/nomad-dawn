@@ -1,3 +1,5 @@
+import Vehicle from '../entities/Vehicle.js';
+
 export default class InventoryUI {
     constructor(game) {
         this.game = game;
@@ -438,11 +440,7 @@ export default class InventoryUI {
             
             // Update player resources
             this.game.player.resources[this.selectedItem.resourceType] -= amountToDrop;
-            
-            // Sync with network
-            this.game.network.updatePresence({
-                resources: this.game.player.resources
-            });
+            this.game.player._stateChanged = true;
             
             // Create resource in world
             // TODO: Add world resource spawning
@@ -471,38 +469,23 @@ export default class InventoryUI {
         for (const [resource, amount] of Object.entries(vehicleConfig.cost)) {
             this.game.player.resources[resource] -= amount;
         }
-        
-        // Sync resources with network
-        this.game.network.updatePresence({
-            resources: this.game.player.resources
-        });
+        this.game.player._stateChanged = true;
         
         // Create vehicle entity near player position
-        const spawnOffsetDistance = 50; // Distance from player to spawn vehicle
+        const spawnOffsetDistance = 50;
         const spawnAngle = this.game.player.angle;
         const spawnX = this.game.player.x + Math.cos(spawnAngle) * spawnOffsetDistance;
         const spawnY = this.game.player.y + Math.sin(spawnAngle) * spawnOffsetDistance;
         
-        // Create unique ID for vehicle including owner ID for tractability
-        const vehicleId = `vehicle-${blueprintType}-${this.game.player.id}-${Date.now()}`;
+        // Create unique ID for vehicle
+        const vehicleId = `vehicle-${blueprintType}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         
-        // Create vehicle entity (triggers server authority)
-        this.game.network.updateRoomState({
-            vehicles: {
-                [vehicleId]: {
-                    id: vehicleId,
-                    type: 'vehicle',
-                    vehicleType: blueprintType,
-                    owner: this.game.player.id,
-                    x: spawnX,
-                    y: spawnY,
-                    angle: spawnAngle,
-                    health: vehicleConfig.health,
-                    maxHealth: vehicleConfig.health,
-                    modules: []
-                }
-            }
-        });
+        // Create and add vehicle entity locally
+        const vehicle = new Vehicle(vehicleId, vehicleConfig, this.game.player.id, this.game);
+        vehicle.x = spawnX;
+        vehicle.y = spawnY;
+        vehicle.angle = spawnAngle;
+        this.game.entities.add(vehicle);
         
         // Update UI
         this.update();
