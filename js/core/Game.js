@@ -16,10 +16,6 @@ import LightManager from '../lighting/LightManager.js';
 import ShadowManager from '../lighting/ShadowManager.js';
 import GameLoop from './GameLoop.js';
 
-// Make classes globally accessible (used by EntityManager and VehicleSync)
-window.Player = Player;
-window.Vehicle = Vehicle;
-
 export default class Game {
     constructor(options) {
         this.canvas = options.canvas;
@@ -40,7 +36,7 @@ export default class Game {
         this.resources = new ResourceManager();
         this.input = new InputManager(this.canvas);
         this.renderer = new Renderer(this.canvas, this);
-        this.entities = new EntityManager();
+        this.entities = new EntityManager(this);
         this.network = new NetworkManager(this);
         this.ui = new UIManager(this);
         this.collisions = new CollisionManager(this);
@@ -108,7 +104,7 @@ export default class Game {
             return;
         }
 
-        const vehicle = new Vehicle(testVehicleId, vehicleConfig, null);
+        const vehicle = new Vehicle(testVehicleId, vehicleConfig, null, this);
         vehicle.x = 50;
         vehicle.y = 50;
         vehicle.gridTiles = {

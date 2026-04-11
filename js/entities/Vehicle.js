@@ -2,9 +2,10 @@ import MovementController from '../core/MovementController.js';
 import LightSource from '../lighting/LightSource.js'; // Import LightSource
 
 export default class Vehicle {
-    constructor(id, config, owner) {
+    constructor(id, config, owner, game) {
+        this.game = game || this.game;
         if (!config || typeof config !== 'object') {
-             const logger = window.game?.debug || console;
+             const logger = this.game?.debug || console;
              logger.error(`[Vehicle] Invalid config passed to constructor for ID ${id}:`, config);
              config = {
                  id: 'unknown',
@@ -86,7 +87,7 @@ export default class Vehicle {
 
     // --- NEW: Method to create and manage vehicle lights ---
     createVehicleLights() {
-        const game = window.game; // Access global game instance
+        const game = this.game; // Access global game instance
         if (!game?.entities) {
             console.warn(`[Vehicle ${this.id}] Cannot create lights: Game or EntityManager not available.`);
             return;
@@ -157,7 +158,7 @@ export default class Vehicle {
     // --- END NEW ---
 
     update(deltaTime, input) {
-        const driverEntity = this.driver ? window.game?.entities.get(this.driver) : null;
+        const driverEntity = this.driver ? this.game?.entities.get(this.driver) : null;
         const driverState = driverEntity ? driverEntity.playerState : null;
 
         if (!this.driver || !input || driverState !== 'Piloting') {
@@ -248,7 +249,7 @@ export default class Vehicle {
 
     // --- NEW: Handle vehicle destruction ---
     handleDestruction() {
-        const game = window.game;
+        const game = this.game;
         if (!game) return;
 
         game.debug.log(`Vehicle ${this.id} destroyed!`);
@@ -308,7 +309,7 @@ export default class Vehicle {
                 }
             });
         } else {
-            const logger = window.game?.debug || console;
+            const logger = this.game?.debug || console;
             logger.warn(`[Vehicle ${this.id}] Attempted to recalculate stats but this.modules is not an array:`, this.modules);
             this.modules = [];
         }

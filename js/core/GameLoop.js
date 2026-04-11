@@ -104,13 +104,6 @@ export default class GameLoop {
         let cameraTarget = game.player ? game.player : { x: 0, y: 0 };
         if (game.player?.playerState === 'Piloting') {
             cameraTarget = game.entities.get(game.player.currentVehicleId) || cameraTarget;
-        } else if (game.isGuestMode) {
-            const players = game.entities.getByType('player');
-            if (players.length > 0) {
-                let avgX = 0, avgY = 0;
-                players.forEach(p => { avgX += p.x; avgY += p.y; });
-                cameraTarget = { x: avgX / players.length, y: avgY / players.length };
-            } else cameraTarget = { x: 0, y: 0 };
         }
 
         // Render modes

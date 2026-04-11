@@ -1,3 +1,5 @@
+import Vehicle from '../entities/Vehicle.js';
+
 export default class InventoryUI {
     constructor(game) {
         this.game = game;
@@ -479,12 +481,7 @@ export default class InventoryUI {
         const vehicleId = `vehicle-${blueprintType}-${Date.now()}`;
         
         // Create and add vehicle entity locally
-        const Vehicle = window.Vehicle;
-        if (!Vehicle) {
-            console.error('Vehicle class not available');
-            return false;
-        }
-        const vehicle = new Vehicle(vehicleId, vehicleConfig, this.game.player.id);
+        const vehicle = new Vehicle(vehicleId, vehicleConfig, this.game.player.id, this.game);
         vehicle.x = spawnX;
         vehicle.y = spawnY;
         vehicle.angle = spawnAngle;
