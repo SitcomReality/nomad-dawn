@@ -127,6 +127,9 @@ export default class NetworkManager {
      */
     _mergeState(target, source) {
         for (const key of Object.keys(source)) {
+            // Guard against prototype pollution
+            if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
+
             const val = source[key];
             if (val === null) {
                 delete target[key];
