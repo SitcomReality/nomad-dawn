@@ -478,7 +478,7 @@ export default class InventoryUI {
         const spawnY = this.game.player.y + Math.sin(spawnAngle) * spawnOffsetDistance;
         
         // Create unique ID for vehicle
-        const vehicleId = `vehicle-${blueprintType}-${Date.now()}`;
+        const vehicleId = `vehicle-${blueprintType}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         
         // Create and add vehicle entity locally
         const vehicle = new Vehicle(vehicleId, vehicleConfig, this.game.player.id, this.game);

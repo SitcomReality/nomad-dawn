@@ -329,9 +329,7 @@ export default class VehicleBuildingManager {
         }
 
         // Clear pending modifications (changes are immediately applied)
-        for (const vehicleId in this.pendingModifications) {
-            delete this.pendingModifications[vehicleId];
-        }
+        this.pendingModifications = {};
 
         this.networkUpdateQueue = {};
         this.networkUpdateTimeout = null;

@@ -3,7 +3,7 @@ import LightSource from '../lighting/LightSource.js'; // Import LightSource
 
 export default class Vehicle {
     constructor(id, config, owner, game) {
-        this.game = game || this.game;
+        this.game = game || null;
         if (!config || typeof config !== 'object') {
              const logger = this.game?.debug || console;
              logger.error(`[Vehicle] Invalid config passed to constructor for ID ${id}:`, config);
