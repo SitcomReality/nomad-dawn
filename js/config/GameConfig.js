@@ -297,7 +297,7 @@ export const Config = {
     SPRITESHEET_CONFIG: {
         environmental: {
             id: 'env_sprites',
-            url: '/nd_enviro_features_ss.png',
+            url: 'assets/nd_enviro_features_ss.png',
             spriteWidth: 512,
             spriteHeight: 512,
             columns: 4,
@@ -305,7 +305,7 @@ export const Config = {
         },
         interior: {
             id: 'interior_furniture',
-            url: '/Interior-Furniture.png',
+            url: 'assets/Interior-Furniture.png',
             spriteWidth: 32,
             spriteHeight: 32,
             columns: 16,
