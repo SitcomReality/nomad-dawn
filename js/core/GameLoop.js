@@ -47,16 +47,10 @@ export default class GameLoop {
     gameUpdate(deltaTime, timestamp) {
         const game = this.game;
 
-        // Time of day handling & ambient light
-        if (game.timeAuthority) {
-            const cycleDuration = game.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
-            const timeIncrement = deltaTime / cycleDuration;
-            game.timeOfDay = (game.timeOfDay + timeIncrement) % 1;
-            if (timestamp - game.lastTimeSync > game.timeSyncInterval) {
-                game.network.updateRoomState({ timeOfDay: game.timeOfDay });
-                game.lastTimeSync = timestamp;
-            }
-        }
+        // Time of day handling & ambient light (always local in single-player)
+        const cycleDuration = game.config.DAY_NIGHT_CYCLE_DURATION_SECONDS || 90;
+        const timeIncrement = deltaTime / cycleDuration;
+        game.timeOfDay = (game.timeOfDay + timeIncrement) % 1;
 
         const ambientFactor = Math.cos((game.timeOfDay - 0.5) * Math.PI * 2) * 0.5 + 0.5;
         const ambientIntensity = Math.max(0.1, ambientFactor);
@@ -96,7 +90,6 @@ export default class GameLoop {
             game.collisions.checkCollisions();
         }
         game.shadowManager.calculateShadows();
-        game.syncNetworkState?.();
         game.ui.update();
     }
 

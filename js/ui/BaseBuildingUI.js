@@ -145,8 +145,6 @@ export default class BaseBuildingUI {
             this.game.player.playerState = 'Building';
             this.game.player.currentVehicleId = this.activeVehicle.id;
             this.game.player._stateChanged = true;
-            this.game.network.updatePresence(this.game.player.getNetworkState());
-            this.game.player.clearStateChanged();
         }
 
         // Update footer info
@@ -172,8 +170,6 @@ export default class BaseBuildingUI {
             this.game.player.playerState = 'Overworld';
             this.game.player.currentVehicleId = null;
             this.game.player._stateChanged = true;
-            this.game.network.updatePresence(this.game.player.getNetworkState());
-            this.game.player.clearStateChanged();
         }
     }
 

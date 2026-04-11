@@ -256,18 +256,8 @@ export default class Vehicle {
         // Create explosion effect
         game.renderer?.createEffect('explosion', this.x, this.y, { size: this.size * 1.5 });
 
-        // TODO: Drop resources/items from storage or modules
-
-        // Remove associated lights
-        // This is handled by EntityManager.remove calling removeOwnedLights
-
-        // Remove the vehicle entity itself from the network state
-        game.network?.updateRoomState({
-             vehicles: { [this.id]: null } // Use null to signify deletion
-        });
-
-        // Note: Local removal from EntityManager is handled by the network sync process
-        // when it receives the null state for this vehicle ID.
+        // Remove the vehicle entity locally
+        game.entities.remove(this.id);
     }
     // --- END NEW ---
 

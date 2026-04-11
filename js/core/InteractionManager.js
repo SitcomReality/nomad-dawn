@@ -53,12 +53,6 @@ export default class InteractionManager {
 
         if (interactionMade) {
             this.lastInteractionTime = currentTime;
-            // Force immediate presence update if player state changed
-            // Note: Player._stateChanged should be set by the handler functions
-            if (player._stateChanged) {
-                 this.game.network.updatePresence(player.getNetworkState());
-                 player.clearStateChanged();
-            }
         }
     }
 
@@ -169,7 +163,6 @@ export default class InteractionManager {
              vehicle.setDriver?.(player.id); // Use method if exists
              if (!vehicle.setDriver) vehicle.driver = player.id; // Fallback
               vehicle._stateChanged = true;
-             this.game.network.updateRoomState({ vehicles: { [vehicle.id]: { driver: player.id } } });
              player._stateChanged = true;
              return true; // Piloting is an interaction
          }
@@ -196,7 +189,6 @@ export default class InteractionManager {
          vehicle.removeDriver?.(); // Use method if exists
          if (!vehicle.removeDriver) vehicle.driver = null; // Fallback
          vehicle._stateChanged = true;
-         this.game.network.updateRoomState({ vehicles: { [vehicle.id]: { driver: null } } });
          player._stateChanged = true;
         return true; // Exiting pilot seat is an interaction
     }
